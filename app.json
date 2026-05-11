@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "lego_identifier",
+    "name": "Brick ID",
     "slug": "lego_identifier",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,18 +10,42 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#E3000B"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.legoidentifier.brickid",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Brick ID needs camera access to photograph your LEGO pieces for identification.",
+        "NSPhotoLibraryUsageDescription": "Brick ID needs photo library access so you can select existing photos of your pieces."
+      }
     },
     "android": {
+      "package": "com.legoidentifier.brickid",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#E3000B"
       },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
       "edgeToEdgeEnabled": true
     },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Brick ID needs camera access to photograph your LEGO pieces."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Brick ID needs photo library access to use existing photos."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }
