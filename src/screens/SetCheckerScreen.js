@@ -12,7 +12,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { searchSets } from '../services/rebrickable';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function SetCheckerScreen({ navigation }) {
   const [query, setQuery] = useState('');

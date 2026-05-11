@@ -6,7 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function PartFinderScreen({ navigation }) {
   return (

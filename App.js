@@ -24,12 +24,23 @@ import { colors } from './src/constants/theme';
 
 const Stack = createStackNavigator();
 
-export default function App() {
-  const [onboarded, setOnboarded] = useState(null); // null = checking
+const lightHeader = {
+  headerStyle: { backgroundColor: colors.surface, shadowColor: 'transparent', elevation: 0, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTintColor: colors.primary,
+  headerTitleStyle: { fontWeight: '800', color: colors.text, fontSize: 17 },
+  headerBackTitle: '',
+};
 
-  useEffect(() => {
-    isOnboardingComplete().then((done) => setOnboarded(done));
-  }, []);
+const darkHeader = {
+  headerStyle: { backgroundColor: '#111', shadowColor: 'transparent', elevation: 0, borderBottomWidth: 1, borderBottomColor: '#2C2C2E' },
+  headerTintColor: colors.secondary,
+  headerTitleStyle: { fontWeight: '800', color: '#fff', fontSize: 17 },
+  headerBackTitle: '',
+};
+
+export default function App() {
+  const [onboarded, setOnboarded] = useState(null);
+  useEffect(() => { isOnboardingComplete().then(setOnboarded); }, []);
 
   if (onboarded === null) {
     return (
@@ -39,55 +50,24 @@ export default function App() {
     );
   }
 
-  if (!onboarded) {
-    return (
-      <OnboardingScreen onComplete={() => setOnboarded(true)} />
-    );
-  }
+  if (!onboarded) return <OnboardingScreen onComplete={() => setOnboarded(true)} />;
 
   return (
     <NavigationContainer>
-      <StatusBar style="auto" />
-      <Stack.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: colors.primary },
-          headerTintColor: '#fff',
-          headerTitleStyle: { fontWeight: '800' },
-          headerBackTitle: 'Back',
-        }}
-      >
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{ title: 'Brick ID', headerShown: false }}
-        />
+      <StatusBar style="dark" />
+      <Stack.Navigator screenOptions={lightHeader}>
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SetChecker" component={SetCheckerScreen} options={{ title: 'Set Checker' }} />
         <Stack.Screen name="PartFinder" component={PartFinderScreen} options={{ title: 'Part Finder' }} />
         <Stack.Screen name="Camera" component={CameraScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Results" component={ResultsScreen} options={{ title: 'Results' }} />
-        <Stack.Screen
-          name="MultiScan"
-          component={MultiScanScreen}
-          options={{ title: 'Multi-Part Scanner', headerStyle: { backgroundColor: '#1a1a1a' } }}
-        />
-        <Stack.Screen
-          name="MultiResults"
-          component={MultiResultsScreen}
-          options={{ title: 'Scan Results', headerStyle: { backgroundColor: '#1a1a1a' } }}
-        />
-        <Stack.Screen
-          name="SequentialScan"
-          component={SequentialScanScreen}
-          options={{ headerShown: false }}
-        />
+        <Stack.Screen name="MultiScan" component={MultiScanScreen} options={{ ...darkHeader, title: 'Multi-Part Scanner' }} />
+        <Stack.Screen name="MultiResults" component={MultiResultsScreen} options={{ ...darkHeader, title: 'Scan Results' }} />
+        <Stack.Screen name="SequentialScan" component={SequentialScanScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Collection" component={CollectionScreen} options={{ title: 'My Collection' }} />
         <Stack.Screen name="SetProgress" component={SetProgressScreen} options={{ title: 'Set Progress' }} />
         <Stack.Screen name="TrackSet" component={TrackSetScreen} options={{ title: 'Track a Set' }} />
-        <Stack.Screen
-          name="BarcodeScanner"
-          component={BarcodeScannerScreen}
-          options={{ title: 'Scan Barcode', headerStyle: { backgroundColor: '#111' } }}
-        />
+        <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} options={{ ...darkHeader, title: 'Scan Barcode' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Stack.Navigator>
     </NavigationContainer>

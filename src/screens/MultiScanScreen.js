@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
 } from 'react-native';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 const GRID_OPTIONS = [
   { label: '2 × 2', rows: 2, cols: 2, cells: 4, desc: 'Fast · best for 2-4 pieces' },

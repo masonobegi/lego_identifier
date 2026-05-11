@@ -6,7 +6,7 @@ import {
 import { getRebrickableKey, setRebrickableKey, clearApiKey } from '../services/apiKeys';
 import { searchSets } from '../services/rebrickable';
 import { clearCollection as clearCollectionData } from '../services/collection';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function SettingsScreen({ navigation }) {
   const [key, setKey] = useState('');

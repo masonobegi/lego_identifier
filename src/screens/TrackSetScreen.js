@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { searchSets } from '../services/rebrickable';
 import { addTrackedSet, getTrackedSets } from '../services/collection';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function TrackSetScreen({ navigation }) {
   const [query, setQuery] = useState('');

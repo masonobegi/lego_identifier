@@ -3,81 +3,70 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, ScrollView, Linking, ActivityIndicator, Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { setRebrickableKey, markOnboardingComplete } from '../services/apiKeys';
 import { searchSets } from '../services/rebrickable';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography, gradients } from '../constants/theme';
+
+const FEATURES = [
+  { icon: 'camera-outline', color: colors.primary, bg: colors.errorLight, title: 'Scan Parts', desc: 'Point your camera at any piece to identify it instantly' },
+  { icon: 'layers-outline', color: '#7C3AED', bg: '#EDE9FE', title: 'Track Collection', desc: 'Build an inventory of every piece you own' },
+  { icon: 'trophy-outline', color: colors.success, bg: colors.successLight, title: 'Set Progress', desc: 'See exactly how close you are to completing your sets' },
+  { icon: 'construct-outline', color: colors.secondary, bg: colors.warningLight, title: 'Find Builds', desc: 'Discover which sets you can already build from your parts' },
+];
 
 export default function OnboardingScreen({ onComplete }) {
   const [key, setKey] = useState('');
   const [testing, setTesting] = useState(false);
-  const [step, setStep] = useState(1); // 1 = welcome, 2 = api key, 3 = done
+  const [step, setStep] = useState(1);
 
   async function handleTestAndSave() {
-    if (!key.trim()) {
-      Alert.alert('Enter your key', 'Paste your Rebrickable API key first.');
-      return;
-    }
+    if (!key.trim()) { Alert.alert('Enter your key', 'Paste your Rebrickable API key first.'); return; }
     setTesting(true);
     try {
-      // Temporarily save key so rebrickable.js picks it up for the test
       await setRebrickableKey(key.trim());
-      await searchSets('Technic'); // test call
+      await searchSets('Technic');
       setStep(3);
     } catch (e) {
-      await setRebrickableKey(''); // revert on failure
-      Alert.alert(
-        'Key not working',
-        e?.response?.status === 401
-          ? 'That key was rejected. Double-check you copied the full key from Rebrickable.'
-          : 'Could not connect. Check your internet and try again.'
-      );
-    } finally {
-      setTesting(false);
-    }
+      await setRebrickableKey('');
+      Alert.alert('Key not working', e?.response?.status === 401
+        ? 'That key was rejected. Double-check you copied it correctly.'
+        : 'Could not connect. Check your internet and try again.');
+    } finally { setTesting(false); }
   }
 
-  async function handleSkip() {
-    await markOnboardingComplete();
-    onComplete();
-  }
-
-  async function handleFinish() {
-    await markOnboardingComplete();
-    onComplete();
-  }
+  async function finish() { await markOnboardingComplete(); onComplete(); }
 
   if (step === 1) {
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.logo}>🧱</Text>
-          <Text style={styles.title}>Welcome to Brick ID</Text>
-          <Text style={styles.subtitle}>
-            Identify LEGO parts with your camera, track your collection, and find out which sets you can build.
-          </Text>
+        <LinearGradient colors={gradients.primary} style={styles.heroGrad}>
+          <Text style={styles.heroEmoji}>🧱</Text>
+          <Text style={styles.heroTitle}>Brick ID</Text>
+          <Text style={styles.heroSub}>Your LEGO part identifier</Text>
+        </LinearGradient>
 
-          <View style={styles.featureList}>
-            {[
-              ['📷', 'Scan parts', 'Point your camera at any LEGO piece to identify it'],
-              ['📦', 'Track your collection', 'Build an inventory of every piece you own'],
-              ['🎯', 'Set progress', 'See how close you are to completing your sets'],
-              ['🔬', 'Multi-scan', 'Photograph a pile of pieces and find matching sets'],
-            ].map(([icon, title, desc]) => (
-              <View key={title} style={styles.feature}>
-                <Text style={styles.featureIcon}>{icon}</Text>
-                <View style={styles.featureText}>
-                  <Text style={styles.featureTitle}>{title}</Text>
-                  <Text style={styles.featureDesc}>{desc}</Text>
+        <ScrollView contentContainerStyle={styles.body}>
+          <Text style={styles.bodyTitle}>Everything you need for your collection</Text>
+          <View style={styles.featureGrid}>
+            {FEATURES.map((f) => (
+              <View key={f.title} style={styles.featureCard}>
+                <View style={[styles.featureIconWrap, { backgroundColor: f.bg }]}>
+                  <Ionicons name={f.icon} size={22} color={f.color} />
                 </View>
+                <Text style={styles.featureTitle}>{f.title}</Text>
+                <Text style={styles.featureDesc}>{f.desc}</Text>
               </View>
             ))}
           </View>
 
           <TouchableOpacity style={styles.primaryBtn} onPress={() => setStep(2)}>
-            <Text style={styles.primaryBtnText}>Get Started →</Text>
+            <Text style={styles.primaryBtnText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-            <Text style={styles.skipBtnText}>Skip setup (limited features)</Text>
+          <TouchableOpacity style={styles.skipLink} onPress={finish}>
+            <Text style={styles.skipLinkText}>Skip setup</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -87,69 +76,72 @@ export default function OnboardingScreen({ onComplete }) {
   if (step === 2) {
     return (
       <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.stepLabel}>Step 1 of 1</Text>
-          <Text style={styles.title}>Rebrickable API Key</Text>
-          <Text style={styles.subtitle}>
-            Brick ID uses Rebrickable's free API to look up set data. You need a free API key to use most features.
-          </Text>
-
-          <View style={styles.instructionBox}>
-            <Text style={styles.instructionTitle}>How to get your free key:</Text>
-            <Text style={styles.instruction}>1. Go to rebrickable.com and create a free account</Text>
-            <Text style={styles.instruction}>2. Go to Settings → API</Text>
-            <Text style={styles.instruction}>3. Copy your API key and paste it below</Text>
+        <ScrollView contentContainerStyle={styles.body}>
+          <View style={styles.stepHeader}>
+            <View style={styles.stepIconWrap}>
+              <Ionicons name="key-outline" size={28} color={colors.primary} />
+            </View>
+            <Text style={styles.stepTitle}>Rebrickable API Key</Text>
+            <Text style={styles.stepDesc}>
+              Brick ID uses Rebrickable's free database for set data. It only takes 30 seconds to get a key.
+            </Text>
           </View>
 
-          <TouchableOpacity
-            style={styles.linkBtn}
-            onPress={() => Linking.openURL('https://rebrickable.com/users/login/')}
-          >
-            <Text style={styles.linkBtnText}>Open Rebrickable →</Text>
+          <View style={styles.instructionCard}>
+            {['Go to rebrickable.com and create a free account', 'Open Settings → API', 'Copy your API key and paste it below'].map((step, i) => (
+              <View key={i} style={styles.instructionRow}>
+                <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
+                <Text style={styles.instructionText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+
+          <TouchableOpacity style={styles.openLinkBtn} onPress={() => Linking.openURL('https://rebrickable.com/users/login/')}>
+            <Ionicons name="open-outline" size={16} color={colors.primary} />
+            <Text style={styles.openLinkBtnText}>Open Rebrickable</Text>
           </TouchableOpacity>
 
-          <TextInput
-            style={styles.keyInput}
-            placeholder="Paste your API key here"
-            placeholderTextColor={colors.textSecondary}
-            value={key}
-            onChangeText={setKey}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-          />
+          <View style={styles.inputWrap}>
+            <Ionicons name="key-outline" size={18} color={colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.keyInput}
+              placeholder="Paste your API key here"
+              placeholderTextColor={colors.textTertiary}
+              value={key}
+              onChangeText={setKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
 
           <TouchableOpacity
             style={[styles.primaryBtn, (!key.trim() || testing) && styles.primaryBtnDisabled]}
             onPress={handleTestAndSave}
             disabled={!key.trim() || testing}
           >
-            {testing ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryBtnText}>Test & Save Key</Text>
+            {testing ? <ActivityIndicator color="#fff" /> : (
+              <><Text style={styles.primaryBtnText}>Test & Save Key</Text><Ionicons name="checkmark-circle-outline" size={18} color="#fff" /></>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-            <Text style={styles.skipBtnText}>Skip for now</Text>
+          <TouchableOpacity style={styles.skipLink} onPress={finish}>
+            <Text style={styles.skipLinkText}>Skip for now</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // Step 3: success
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.successBox}>
-        <Text style={styles.successIcon}>✅</Text>
+      <LinearGradient colors={gradients.success} style={styles.successGrad}>
+        <Ionicons name="checkmark-circle" size={72} color="#fff" />
         <Text style={styles.successTitle}>You're all set!</Text>
-        <Text style={styles.successDesc}>
-          Your Rebrickable API key is saved. All features are unlocked.
-        </Text>
-        <TouchableOpacity style={styles.primaryBtn} onPress={handleFinish}>
+        <Text style={styles.successDesc}>API key verified and saved. All features are unlocked.</Text>
+      </LinearGradient>
+      <View style={styles.body}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={finish}>
           <Text style={styles.primaryBtnText}>Start Using Brick ID</Text>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -158,34 +150,49 @@ export default function OnboardingScreen({ onComplete }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  scroll: { padding: spacing.xl, paddingBottom: spacing.xl * 2 },
-  logo: { fontSize: 64, textAlign: 'center', marginBottom: spacing.md },
-  title: { fontSize: 28, fontWeight: '900', color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  subtitle: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 24, marginBottom: spacing.xl },
-  stepLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center', marginBottom: spacing.sm },
-  featureList: { gap: spacing.md, marginBottom: spacing.xl },
-  feature: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, backgroundColor: colors.surface, padding: spacing.md, borderRadius: radius.md },
-  featureIcon: { fontSize: 28 },
-  featureText: { flex: 1 },
-  featureTitle: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 2 },
-  featureDesc: { fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
-  instructionBox: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, borderLeftWidth: 4, borderLeftColor: colors.primary },
-  instructionTitle: { fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
-  instruction: { color: colors.textSecondary, lineHeight: 24, fontSize: 14 },
-  linkBtn: { backgroundColor: '#EEF2FF', borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginBottom: spacing.lg },
-  linkBtnText: { color: '#3B5BDB', fontWeight: '700', fontSize: 14 },
-  keyInput: {
-    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border,
-    borderRadius: radius.md, padding: spacing.md, fontSize: 14,
-    color: colors.text, marginBottom: spacing.lg, fontFamily: 'monospace',
+  heroGrad: { alignItems: 'center', paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },
+  heroEmoji: { fontSize: 56, marginBottom: spacing.sm },
+  heroTitle: { ...typography.display, color: '#fff', marginBottom: spacing.xs },
+  heroSub: { ...typography.body, color: 'rgba(255,255,255,0.75)' },
+  body: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  bodyTitle: { ...typography.h2, textAlign: 'center', marginBottom: spacing.lg, color: colors.text },
+  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.xl },
+  featureCard: {
+    width: '47%', backgroundColor: colors.surface, borderRadius: radius.md,
+    padding: spacing.md, ...shadows.sm,
   },
-  primaryBtn: { backgroundColor: colors.primary, paddingVertical: spacing.md, borderRadius: radius.full, alignItems: 'center', marginBottom: spacing.sm },
-  primaryBtnDisabled: { backgroundColor: '#ccc' },
+  featureIconWrap: { width: 44, height: 44, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  featureTitle: { ...typography.h3, marginBottom: 4 },
+  featureDesc: { ...typography.bodySmall, color: colors.textSecondary },
+  stepHeader: { alignItems: 'center', marginBottom: spacing.lg },
+  stepIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.errorLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  stepTitle: { ...typography.h1, marginBottom: spacing.sm },
+  stepDesc: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+  instructionCard: { backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md, gap: spacing.md, ...shadows.sm },
+  instructionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  stepNum: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 },
+  stepNumText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  instructionText: { flex: 1, ...typography.body, color: colors.text },
+  openLinkBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, justifyContent: 'center', marginBottom: spacing.lg },
+  openLinkBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
+  inputWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border,
+    borderRadius: radius.md, paddingHorizontal: spacing.md, marginBottom: spacing.lg,
+    ...shadows.sm,
+  },
+  inputIcon: { marginRight: spacing.sm },
+  keyInput: { flex: 1, paddingVertical: spacing.md, fontSize: 14, color: colors.text },
+  primaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    backgroundColor: colors.primary, paddingVertical: spacing.md,
+    borderRadius: radius.full, marginBottom: spacing.sm, ...shadows.colored,
+  },
+  primaryBtnDisabled: { backgroundColor: colors.border, ...shadows.sm },
   primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-  skipBtn: { alignItems: 'center', paddingVertical: spacing.sm },
-  skipBtnText: { color: colors.textSecondary, fontSize: 13 },
-  successBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  successIcon: { fontSize: 64 },
-  successTitle: { fontSize: 26, fontWeight: '900', color: colors.text },
-  successDesc: { fontSize: 15, color: colors.textSecondary, textAlign: 'center', lineHeight: 24 },
+  skipLink: { alignItems: 'center', paddingVertical: spacing.sm },
+  skipLinkText: { color: colors.textSecondary, fontSize: 13 },
+  successGrad: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
+  successTitle: { ...typography.h1, color: '#fff' },
+  successDesc: { ...typography.body, color: 'rgba(255,255,255,0.85)', textAlign: 'center' },
 });

@@ -6,7 +6,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { searchSets } from '../services/rebrickable';
 import { addTrackedSet } from '../services/collection';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function BarcodeScannerScreen({ navigation }) {
   const [permission, requestPermission] = useCameraPermissions();

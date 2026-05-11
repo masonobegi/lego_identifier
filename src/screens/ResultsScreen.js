@@ -1,19 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  StyleSheet,
-  SafeAreaView,
-  Image,
-  ActivityIndicator,
-  TouchableOpacity,
-  ScrollView,
+  View, Text, StyleSheet, SafeAreaView, Image,
+  ActivityIndicator, TouchableOpacity, ScrollView, Alert,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { identifyPart } from '../services/brickognize';
-import { getSetInventory, getSetsForPart, getPartDetails } from '../services/rebrickable';
+import { getSetInventory, getSetsForPart } from '../services/rebrickable';
 import { addPartsToCollection, addTrackedSet } from '../services/collection';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function ResultsScreen({ navigation, route }) {
   const { imageUri, mode, setNum, setName } = route.params;
@@ -22,58 +16,31 @@ export default function ResultsScreen({ navigation, route }) {
   const [identifiedPart, setIdentifiedPart] = useState(null);
   const [results, setResults] = useState([]);
   const [matchCount, setMatchCount] = useState(null);
-  const [totalCount, setTotalCount] = useState(null);
   const [addedToCollection, setAddedToCollection] = useState(false);
 
-  useEffect(() => {
-    run();
-  }, []);
+  useEffect(() => { run(); }, []);
 
   async function run() {
     try {
       setStatus('identifying');
       const brickData = await identifyPart(imageUri);
       const items = brickData?.items;
-
-      if (!items || items.length === 0) {
-        setErrorMsg('Could not identify any LEGO parts in that photo. Try a clearer photo with better lighting.');
-        setStatus('error');
-        return;
-      }
-
+      if (!items?.length) { setErrorMsg('No LEGO parts identified. Try better lighting or a cleaner background.'); setStatus('error'); return; }
       const topItem = items[0];
       setIdentifiedPart(topItem);
       setStatus('fetching');
-
       if (mode === 'partFinder') {
-        const sets = await getSetsForPart(topItem.id);
-        setResults(sets);
-      } else if (mode === 'setChecker') {
+        setResults(await getSetsForPart(topItem.id));
+      } else {
         const inventory = await getSetInventory(setNum);
-        setTotalCount(inventory.length);
-
-        // Build a set of part IDs from the inventory for quick lookup
         const inventoryIds = new Set(inventory.map((i) => i.part.part_num));
-
-        // Check each identified item against inventory
-        const matched = items.filter((item) => inventoryIds.has(item.id));
-        const unmatched = items.filter((item) => !inventoryIds.has(item.id));
-
+        const matched = items.filter((i) => inventoryIds.has(i.id));
         setMatchCount(matched.length);
-        setResults([
-          ...matched.map((i) => ({ ...i, inSet: true })),
-          ...unmatched.map((i) => ({ ...i, inSet: false })),
-        ]);
+        setResults([...matched.map((i) => ({ ...i, inSet: true })), ...items.filter((i) => !inventoryIds.has(i.id)).map((i) => ({ ...i, inSet: false }))]);
       }
-
       setStatus('done');
     } catch (e) {
-      console.error(e);
-      setErrorMsg(
-        e?.response?.status === 401
-          ? 'API key error — check your .env file.'
-          : `Something went wrong: ${e.message}`
-      );
+      setErrorMsg(e?.response?.status === 401 ? 'API key error — check Settings.' : `Something went wrong: ${e.message}`);
       setStatus('error');
     }
   }
@@ -81,11 +48,10 @@ export default function ResultsScreen({ navigation, route }) {
   if (status === 'identifying' || status === 'fetching') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={styles.loadingText}>
-            {status === 'identifying' ? 'Identifying parts...' : 'Looking up set data...'}
-          </Text>
+        <View style={styles.center}>
+          <View style={styles.spinnerWrap}><ActivityIndicator size="large" color={colors.primary} /></View>
+          <Text style={styles.loadingTitle}>{status === 'identifying' ? 'Identifying part…' : 'Looking up sets…'}</Text>
+          <Text style={styles.loadingSubtitle}>This takes a few seconds</Text>
         </View>
       </SafeAreaView>
     );
@@ -94,10 +60,10 @@ export default function ResultsScreen({ navigation, route }) {
   if (status === 'error') {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingBox}>
-          <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Couldn't complete scan</Text>
-          <Text style={styles.errorMsg}>{errorMsg}</Text>
+        <View style={styles.center}>
+          <View style={[styles.spinnerWrap, styles.errorWrap]}><Ionicons name="alert-circle-outline" size={36} color={colors.error} /></View>
+          <Text style={styles.errorTitle}>Scan failed</Text>
+          <Text style={styles.errorDesc}>{errorMsg}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.retryBtnText}>Try Again</Text>
           </TouchableOpacity>
@@ -109,101 +75,84 @@ export default function ResultsScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Photo preview */}
-        <Image source={{ uri: imageUri }} style={styles.photoPreview} resizeMode="cover" />
+        <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
 
-        {/* Identified part chip */}
         {identifiedPart && (
-          <View style={styles.identifiedCard}>
-            {identifiedPart.img_url ? (
-              <Image
-                source={{ uri: identifiedPart.img_url }}
-                style={styles.partImg}
-                resizeMode="contain"
-              />
-            ) : null}
-            <View style={styles.identifiedInfo}>
-              <Text style={styles.identifiedLabel}>Identified Part</Text>
-              <Text style={styles.identifiedName}>{identifiedPart.name || identifiedPart.id}</Text>
-              <Text style={styles.identifiedId}>#{identifiedPart.id}</Text>
-              {identifiedPart.score !== undefined && (
-                <Text style={styles.confidence}>
-                  Confidence: {Math.round(identifiedPart.score * 100)}%
-                </Text>
-              )}
-              <TouchableOpacity
-                style={[styles.addCollectionBtn, addedToCollection && styles.addCollectionBtnDone]}
-                onPress={async () => {
-                  await addPartsToCollection([identifiedPart]);
-                  setAddedToCollection(true);
-                }}
-                disabled={addedToCollection}
-              >
-                <Text style={styles.addCollectionBtnText}>
-                  {addedToCollection ? '✓ In Collection' : '+ Add to Collection'}
-                </Text>
-              </TouchableOpacity>
+          <View style={styles.partCard}>
+            <View style={styles.partCardLeft}>
+              {identifiedPart.img_url
+                ? <Image source={{ uri: identifiedPart.img_url }} style={styles.partImg} resizeMode="contain" />
+                : <View style={[styles.partImg, styles.imgPlaceholder]}><Ionicons name="cube-outline" size={28} color={colors.textTertiary} /></View>
+              }
             </View>
+            <View style={styles.partCardInfo}>
+              <Text style={styles.partCardLabel}>Identified Part</Text>
+              <Text style={styles.partCardName}>{identifiedPart.name || identifiedPart.id}</Text>
+              <Text style={styles.partCardId}>#{identifiedPart.id}</Text>
+              {identifiedPart.score !== undefined && (
+                <View style={styles.confidenceRow}>
+                  <View style={[styles.confidenceBar, { width: `${Math.round(identifiedPart.score * 100)}%` }]} />
+                  <Text style={styles.confidenceText}>{Math.round(identifiedPart.score * 100)}% confidence</Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.addBtn, addedToCollection && styles.addBtnDone]}
+              onPress={async () => { await addPartsToCollection([identifiedPart]); setAddedToCollection(true); }}
+              disabled={addedToCollection}
+            >
+              <Ionicons name={addedToCollection ? 'checkmark' : 'add'} size={18} color={addedToCollection ? colors.success : colors.primary} />
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Mode-specific header */}
         {mode === 'setChecker' && (
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{setName}</Text>
-            <Text style={styles.sectionSubtitle}>
-              {matchCount} of {results.length} identified pieces are in this set
-            </Text>
+            <Text style={styles.sectionSub}>{matchCount} of {results.length} pieces matched</Text>
           </View>
         )}
-
         {mode === 'partFinder' && (
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Sets containing this part</Text>
-            <Text style={styles.sectionSubtitle}>{results.length} sets found</Text>
+            <Text style={styles.sectionSub}>{results.length} sets found</Text>
           </View>
         )}
 
-        {/* Results list */}
-        {mode === 'partFinder'
-          ? results.map((set) => <SetCard key={set.set_num} set={set} navigation={navigation} />)
-          : results.map((item) => <PartMatchCard key={item.id} item={item} />)}
-
-        {results.length === 0 && (
-          <Text style={styles.empty}>
-            {mode === 'partFinder'
-              ? 'No sets found for this part.'
-              : 'None of the identified pieces matched this set.'}
-          </Text>
-        )}
+        <View style={styles.resultsList}>
+          {mode === 'partFinder'
+            ? results.map((set) => <SetCard key={set.set_num} set={set} />)
+            : results.map((item) => <PartMatchCard key={item.id} item={item} />)}
+          {results.length === 0 && (
+            <View style={styles.emptyBox}>
+              <Ionicons name="search-outline" size={36} color={colors.textTertiary} />
+              <Text style={styles.emptyText}>{mode === 'partFinder' ? 'No sets found for this part.' : 'None matched this set.'}</Text>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function SetCard({ set, navigation }) {
+function SetCard({ set }) {
   const [tracked, setTracked] = useState(false);
   return (
     <View style={styles.card}>
-      {set.set_img_url ? (
-        <Image source={{ uri: set.set_img_url }} style={styles.cardImg} resizeMode="contain" />
-      ) : (
-        <View style={[styles.cardImg, styles.cardImgPlaceholder]}>
-          <Text style={{ fontSize: 24 }}>🧱</Text>
-        </View>
-      )}
+      {set.set_img_url
+        ? <Image source={{ uri: set.set_img_url }} style={styles.cardImg} resizeMode="contain" />
+        : <View style={[styles.cardImg, styles.imgPlaceholder]}><Ionicons name="cube-outline" size={24} color={colors.textTertiary} /></View>
+      }
       <View style={styles.cardInfo}>
         <Text style={styles.cardName} numberOfLines={2}>{set.name}</Text>
-        <Text style={styles.cardMeta}>#{set.set_num} · {set.year}</Text>
-        <Text style={styles.cardMeta}>{set.num_parts} parts</Text>
+        <Text style={styles.cardMeta}>#{set.set_num} · {set.year} · {set.num_parts} parts</Text>
         <TouchableOpacity
-          style={[styles.addCollectionBtn, tracked && styles.addCollectionBtnDone]}
+          style={[styles.trackChip, tracked && styles.trackChipDone]}
           onPress={async () => { await addTrackedSet(set); setTracked(true); }}
           disabled={tracked}
         >
-          <Text style={styles.addCollectionBtnText}>
-            {tracked ? '✓ Tracked' : '+ Track Set'}
-          </Text>
+          <Ionicons name={tracked ? 'bookmark' : 'bookmark-outline'} size={11} color={tracked ? colors.success : colors.primary} />
+          <Text style={[styles.trackChipText, tracked && styles.trackChipTextDone]}>{tracked ? 'Tracked' : 'Track'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -212,21 +161,17 @@ function SetCard({ set, navigation }) {
 
 function PartMatchCard({ item }) {
   return (
-    <View style={[styles.card, item.inSet ? styles.cardMatch : styles.cardNoMatch]}>
-      {item.img_url ? (
-        <Image source={{ uri: item.img_url }} style={styles.cardImg} resizeMode="contain" />
-      ) : (
-        <View style={[styles.cardImg, styles.cardImgPlaceholder]}>
-          <Text style={{ fontSize: 24 }}>🧱</Text>
-        </View>
-      )}
+    <View style={[styles.card, item.inSet ? styles.cardMatchBorder : styles.cardNoMatchBorder]}>
+      {item.img_url
+        ? <Image source={{ uri: item.img_url }} style={styles.cardImg} resizeMode="contain" />
+        : <View style={[styles.cardImg, styles.imgPlaceholder]}><Ionicons name="cube-outline" size={24} color={colors.textTertiary} /></View>
+      }
       <View style={styles.cardInfo}>
-        <View style={styles.matchBadgeRow}>
-          <View style={[styles.matchBadge, item.inSet ? styles.matchBadgeGreen : styles.matchBadgeRed]}>
-            <Text style={styles.matchBadgeText}>{item.inSet ? '✓ In Set' : '✗ Not in Set'}</Text>
-          </View>
+        <View style={[styles.matchBadge, item.inSet ? styles.matchBadgeGreen : styles.matchBadgeRed]}>
+          <Ionicons name={item.inSet ? 'checkmark-circle' : 'close-circle'} size={12} color="#fff" />
+          <Text style={styles.matchBadgeText}>{item.inSet ? 'In Set' : 'Not in Set'}</Text>
         </View>
-        <Text style={styles.cardName} numberOfLines={2}>{item.name || item.id}</Text>
+        <Text style={styles.cardName} numberOfLines={1}>{item.name || item.id}</Text>
         <Text style={styles.cardMeta}>#{item.id}</Text>
       </View>
     </View>
@@ -234,205 +179,58 @@ function PartMatchCard({ item }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  container: { flex: 1, backgroundColor: colors.background },
+  scroll: { paddingBottom: spacing.xxl },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
+  spinnerWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.errorLight, alignItems: 'center', justifyContent: 'center' },
+  errorWrap: { backgroundColor: colors.errorLight },
+  loadingTitle: { ...typography.h2 },
+  loadingSubtitle: { ...typography.body, color: colors.textSecondary },
+  errorTitle: { ...typography.h2 },
+  errorDesc: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
+  retryBtn: { backgroundColor: colors.primary, paddingVertical: spacing.md, paddingHorizontal: spacing.xl, borderRadius: radius.full },
+  retryBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  photo: { width: '100%', height: 240 },
+  partCard: {
+    flexDirection: 'row', alignItems: 'center', margin: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    borderWidth: 1.5, borderColor: colors.secondary,
+    overflow: 'hidden', ...shadows.md,
   },
-  scroll: {
-    paddingBottom: spacing.xl,
-  },
-  loadingBox: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.md,
-  },
-  loadingText: {
-    color: colors.textSecondary,
-    fontSize: 16,
-    marginTop: spacing.sm,
-  },
-  photoPreview: {
-    width: '100%',
-    height: 220,
-  },
-  identifiedCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    margin: spacing.md,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: colors.secondary,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  partImg: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#f5f5f5',
-  },
-  identifiedInfo: {
-    flex: 1,
-    padding: spacing.md,
-    justifyContent: 'center',
-  },
-  identifiedLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 2,
-  },
-  identifiedName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  identifiedId: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  confidence: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  sectionHeader: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: colors.text,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
+  partCardLeft: { backgroundColor: colors.surface2 },
+  partImg: { width: 80, height: 80 },
+  imgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  partCardInfo: { flex: 1, padding: spacing.md },
+  partCardLabel: { ...typography.label, color: colors.textTertiary, marginBottom: 2 },
+  partCardName: { ...typography.bodySmall, fontWeight: '700', color: colors.text },
+  partCardId: { fontSize: 11, color: colors.textTertiary, marginTop: 1 },
+  confidenceRow: { marginTop: spacing.xs },
+  confidenceBar: { height: 3, backgroundColor: colors.success, borderRadius: 2, marginBottom: 2 },
+  confidenceText: { fontSize: 10, color: colors.textSecondary, fontWeight: '600' },
+  addBtn: { padding: spacing.md, marginRight: spacing.sm },
+  addBtnDone: { opacity: 0.6 },
+  sectionHeader: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  sectionTitle: { ...typography.h3 },
+  sectionSub: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  resultsList: { padding: spacing.md, gap: spacing.sm },
+  emptyBox: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  emptyText: { ...typography.body, color: colors.textSecondary, textAlign: 'center' },
   card: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radius.md,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    borderRadius: radius.md, overflow: 'hidden', ...shadows.sm,
   },
-  cardMatch: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.success,
-  },
-  cardNoMatch: {
-    borderLeftWidth: 4,
-    borderLeftColor: colors.error,
-    opacity: 0.7,
-  },
-  cardImg: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#f0f0f0',
-  },
-  cardImgPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardInfo: {
-    flex: 1,
-    padding: spacing.md,
-    justifyContent: 'center',
-  },
-  cardName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: 2,
-  },
-  cardMeta: {
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-  matchBadgeRow: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  matchBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.full,
-  },
-  matchBadgeGreen: {
-    backgroundColor: colors.success,
-  },
-  matchBadgeRed: {
-    backgroundColor: colors.error,
-  },
-  matchBadgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  empty: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    padding: spacing.xl,
-    lineHeight: 22,
-  },
-  errorIcon: {
-    fontSize: 48,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  errorMsg: {
-    color: colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  retryBtn: {
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-    borderRadius: radius.full,
-    marginTop: spacing.sm,
-  },
-  retryBtnText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  addCollectionBtn: {
-    marginTop: spacing.xs,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-  },
-  addCollectionBtnDone: {
-    borderColor: colors.success,
-    backgroundColor: 'rgba(46,125,50,0.1)',
-  },
-  addCollectionBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.primary,
-  },
+  cardMatchBorder: { borderLeftWidth: 4, borderLeftColor: colors.success },
+  cardNoMatchBorder: { borderLeftWidth: 4, borderLeftColor: colors.error, opacity: 0.75 },
+  cardImg: { width: 80, height: 80, backgroundColor: colors.surface2 },
+  cardInfo: { flex: 1, padding: spacing.md },
+  cardName: { ...typography.bodySmall, fontWeight: '600', marginBottom: 2 },
+  cardMeta: { fontSize: 11, color: colors.textTertiary },
+  matchBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.full, marginBottom: 4 },
+  matchBadgeGreen: { backgroundColor: colors.success },
+  matchBadgeRed: { backgroundColor: colors.error },
+  matchBadgeText: { fontSize: 10, fontWeight: '800', color: '#fff' },
+  trackChip: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs, alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.primary, borderRadius: radius.full, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  trackChipDone: { borderColor: colors.success },
+  trackChipText: { fontSize: 10, fontWeight: '700', color: colors.primary },
+  trackChipTextDone: { color: colors.success },
 });

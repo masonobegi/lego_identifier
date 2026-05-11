@@ -1,123 +1,165 @@
 import React from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView, ScrollView,
 } from 'react-native';
-import { colors, spacing, radius } from '../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+import { colors, spacing, radius, shadows, typography, gradients } from '../constants/theme';
+
+const MODES = [
+  {
+    name: 'SetChecker',
+    icon: 'layers-outline',
+    iconColor: colors.primary,
+    iconBg: colors.errorLight,
+    title: 'Set Checker',
+    desc: 'Pick a set, scan your pieces, see what matches.',
+    accent: colors.primary,
+  },
+  {
+    name: 'PartFinder',
+    icon: 'search-outline',
+    iconColor: '#7C3AED',
+    iconBg: '#EDE9FE',
+    title: 'Part Finder',
+    desc: 'Photograph any piece to find every set it appears in.',
+    accent: '#7C3AED',
+  },
+  {
+    name: 'MultiScan',
+    icon: 'scan-outline',
+    iconColor: colors.secondary,
+    iconBg: colors.warningLight,
+    title: 'Multi-Part Scanner',
+    desc: 'Grid split or sequential — scan a pile and find the best matching sets.',
+    accent: colors.secondary,
+    badge: 'DEV',
+  },
+];
 
 export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('BarcodeScanner')}>
-            <Text style={styles.iconBtnText}>▦</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.title}>Brick ID</Text>
-            <Text style={styles.subtitle}>LEGO Part Identifier</Text>
-          </View>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Collection')}>
-            <Text style={styles.iconBtnText}>📦</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick action row */}
-        <View style={styles.quickRow}>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('BarcodeScanner')}>
-            <Text style={styles.quickBtnText}>Scan Box Barcode</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('TrackSet')}>
-            <Text style={styles.quickBtnText}>Track a Set</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.quickBtnText}>⚙ Settings</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.modeContainer}>
-        <TouchableOpacity
-          style={[styles.modeCard, styles.modeCardRed]}
-          onPress={() => navigation.navigate('SetChecker')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.modeIcon}>🧱</Text>
-          <Text style={styles.modeTitle}>Set Checker</Text>
-          <Text style={styles.modeDesc}>
-            Choose a LEGO set, photograph your pieces, and see which ones match.
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.modeCard, styles.modeCardYellow]}
-          onPress={() => navigation.navigate('PartFinder')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.modeIcon}>🔍</Text>
-          <Text style={[styles.modeTitle, { color: '#111' }]}>Part Finder</Text>
-          <Text style={[styles.modeDesc, { color: 'rgba(0,0,0,0.65)' }]}>
-            Photograph a piece and discover every set it appears in.
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.modeCard, styles.modeCardDark]}
-          onPress={() => navigation.navigate('MultiScan')}
-          activeOpacity={0.85}
-        >
-          <View style={styles.devRow}>
-            <Text style={styles.modeIcon}>🔬</Text>
-            <View style={styles.devBadge}>
-              <Text style={styles.devBadgeText}>DEV</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+        {/* Hero */}
+        <LinearGradient colors={gradients.primary} style={styles.hero} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+          <View style={styles.heroTop}>
+            <TouchableOpacity style={styles.heroIconBtn} onPress={() => navigation.navigate('BarcodeScanner')}>
+              <Ionicons name="barcode-outline" size={22} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.heroBrand}>
+              <Text style={styles.heroTitle}>Brick ID</Text>
             </View>
+            <TouchableOpacity style={styles.heroIconBtn} onPress={() => navigation.navigate('Collection')}>
+              <Ionicons name="layers" size={22} color="#fff" />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.modeTitle}>Multi-Part Scanner</Text>
-          <Text style={styles.modeDesc}>
-            Grid split or sequential scan — finds best matching sets from multiple pieces.
-          </Text>
-        </TouchableOpacity>
-      </View>
+          <Text style={styles.heroSubtitle}>Identify · Track · Build</Text>
 
-      <Text style={styles.hint}>Powered by Brickognize + Rebrickable</Text>
+          {/* Quick actions */}
+          <View style={styles.quickRow}>
+            <QuickBtn icon="barcode-outline" label="Scan Box" onPress={() => navigation.navigate('BarcodeScanner')} />
+            <QuickBtn icon="bookmark-outline" label="Track Set" onPress={() => navigation.navigate('TrackSet')} />
+            <QuickBtn icon="layers-outline" label="Collection" onPress={() => navigation.navigate('Collection')} />
+            <QuickBtn icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
+          </View>
+        </LinearGradient>
+
+        {/* Mode cards */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Scan Modes</Text>
+          {MODES.map((mode) => (
+            <TouchableOpacity
+              key={mode.name}
+              style={styles.modeCard}
+              onPress={() => navigation.navigate(mode.name)}
+              activeOpacity={0.75}
+            >
+              <View style={[styles.modeIconWrap, { backgroundColor: mode.iconBg }]}>
+                <Ionicons name={mode.icon} size={26} color={mode.iconColor} />
+              </View>
+              <View style={styles.modeText}>
+                <View style={styles.modeTitleRow}>
+                  <Text style={styles.modeTitle}>{mode.title}</Text>
+                  {mode.badge && <View style={styles.devBadge}><Text style={styles.devBadgeText}>{mode.badge}</Text></View>}
+                </View>
+                <Text style={styles.modeDesc}>{mode.desc}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.footer}>Powered by Brickognize + Rebrickable</Text>
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function QuickBtn({ icon, label, onPress }) {
+  return (
+    <TouchableOpacity style={styles.quickBtn} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.quickBtnIcon}>
+        <Ionicons name={icon} size={18} color="#fff" />
+      </View>
+      <Text style={styles.quickBtnLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  headerCenter: { alignItems: 'center' },
-  iconBtn: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface,
+  scroll: { paddingBottom: spacing.xxl },
+
+  hero: {
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    borderBottomLeftRadius: radius.xl,
+    borderBottomRightRadius: radius.xl,
+  },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
+  heroBrand: { alignItems: 'center' },
+  heroTitle: { ...typography.display, color: '#fff', letterSpacing: -1.5 },
+  heroSubtitle: { ...typography.caption, color: 'rgba(255,255,255,0.65)', textAlign: 'center', marginBottom: spacing.lg },
+  heroIconBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
   },
-  iconBtnText: { fontSize: 20 },
-  quickRow: { flexDirection: 'row', gap: spacing.xs },
-  quickBtn: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: radius.sm,
-    paddingVertical: spacing.xs, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border,
+
+  quickRow: { flexDirection: 'row', gap: spacing.sm },
+  quickBtn: { flex: 1, alignItems: 'center', gap: spacing.xs },
+  quickBtnIcon: {
+    width: 44, height: 44, borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  quickBtnText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
-  title: { fontSize: 38, fontWeight: '900', color: colors.primary, letterSpacing: -1 },
-  subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
-  modeContainer: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.md, justifyContent: 'center' },
+  quickBtnLabel: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+
+  section: { padding: spacing.lg, gap: spacing.sm },
+  sectionTitle: { ...typography.label, color: colors.textSecondary, marginBottom: spacing.xs },
+
   modeCard: {
-    padding: spacing.xl, borderRadius: radius.lg,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    padding: spacing.md,
+    ...shadows.sm,
   },
-  modeCardRed: { backgroundColor: colors.primary },
-  modeCardYellow: { backgroundColor: colors.secondary },
-  modeCardDark: { backgroundColor: '#1a1a1a', borderWidth: 2, borderColor: colors.secondary },
-  devRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  modeIcon: { fontSize: 40 },
-  devBadge: { backgroundColor: colors.secondary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
-  devBadgeText: { fontSize: 11, fontWeight: '900', color: '#111', letterSpacing: 1 },
-  modeTitle: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: spacing.xs },
-  modeDesc: { fontSize: 15, color: 'rgba(255,255,255,0.75)', lineHeight: 22 },
-  hint: { textAlign: 'center', color: colors.textSecondary, fontSize: 12, paddingBottom: spacing.lg },
+  modeIconWrap: {
+    width: 52, height: 52, borderRadius: radius.sm,
+    alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  },
+  modeText: { flex: 1 },
+  modeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 3 },
+  modeTitle: { ...typography.h3 },
+  modeDesc: { ...typography.bodySmall, color: colors.textSecondary },
+  devBadge: {
+    backgroundColor: colors.warningLight, borderRadius: radius.xs,
+    paddingHorizontal: spacing.xs, paddingVertical: 2,
+  },
+  devBadgeText: { fontSize: 9, fontWeight: '900', color: colors.secondaryDark, letterSpacing: 0.8 },
+
+  footer: { ...typography.caption, color: colors.textTertiary, textAlign: 'center', paddingBottom: spacing.md },
 });
