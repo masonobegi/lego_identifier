@@ -1,16 +1,19 @@
 import axios from 'axios';
+import { getRebrickableKey } from './apiKeys';
 
 const BASE_URL = 'https://rebrickable.com/api/v3/lego';
-// Get a free key at rebrickable.com/api/
-const API_KEY = process.env.EXPO_PUBLIC_REBRICKABLE_KEY || '';
 
-const client = axios.create({
-  baseURL: BASE_URL,
-  headers: { Authorization: `key ${API_KEY}` },
-  timeout: 15000,
-});
+async function getClient() {
+  const key = await getRebrickableKey();
+  return axios.create({
+    baseURL: BASE_URL,
+    headers: { Authorization: `key ${key}` },
+    timeout: 15000,
+  });
+}
 
 export async function searchSets(query) {
+  const client = await getClient();
   const response = await client.get('/sets/', {
     params: { search: query, page_size: 20, ordering: '-year' },
   });
@@ -18,7 +21,7 @@ export async function searchSets(query) {
 }
 
 export async function getSetInventory(setNum) {
-  // setNum format: "75192-1"
+  const client = await getClient();
   const response = await client.get(`/sets/${setNum}/parts/`, {
     params: { page_size: 500 },
   });
@@ -26,11 +29,13 @@ export async function getSetInventory(setNum) {
 }
 
 export async function getPartDetails(partNum) {
+  const client = await getClient();
   const response = await client.get(`/parts/${partNum}/`);
   return response.data;
 }
 
 export async function getSetsForPart(partNum) {
+  const client = await getClient();
   const response = await client.get('/parts/', {
     params: { part_num: partNum, page_size: 1 },
   });

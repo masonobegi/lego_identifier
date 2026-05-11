@@ -1,10 +1,6 @@
 import React from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
+  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
 } from 'react-native';
 import { colors, spacing, radius } from '../constants/theme';
 
@@ -13,13 +9,28 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          <View style={{ width: 44 }} />
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('BarcodeScanner')}>
+            <Text style={styles.iconBtnText}>▦</Text>
+          </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.title}>Brick ID</Text>
             <Text style={styles.subtitle}>LEGO Part Identifier</Text>
           </View>
-          <TouchableOpacity style={styles.collectionBtn} onPress={() => navigation.navigate('Collection')}>
-            <Text style={styles.collectionBtnIcon}>📦</Text>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Collection')}>
+            <Text style={styles.iconBtnText}>📦</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick action row */}
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('BarcodeScanner')}>
+            <Text style={styles.quickBtnText}>Scan Box Barcode</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('TrackSet')}>
+            <Text style={styles.quickBtnText}>Track a Set</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => navigation.navigate('Settings')}>
+            <Text style={styles.quickBtnText}>⚙ Settings</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -62,7 +73,7 @@ export default function HomeScreen({ navigation }) {
           </View>
           <Text style={styles.modeTitle}>Multi-Part Scanner</Text>
           <Text style={styles.modeDesc}>
-            Photograph a pile of pieces. Grid-splits the image and ranks the best matching sets.
+            Grid split or sequential scan — finds best matching sets from multiple pieces.
           </Text>
         </TouchableOpacity>
       </View>
@@ -73,112 +84,40 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
+  container: { flex: 1, backgroundColor: colors.background },
+  header: { paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  headerCenter: { alignItems: 'center' },
+  iconBtn: {
+    width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 4, elevation: 2,
   },
-  header: {
-    paddingTop: spacing.xl,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
+  iconBtnText: { fontSize: 20 },
+  quickRow: { flexDirection: 'row', gap: spacing.xs },
+  quickBtn: {
+    flex: 1, backgroundColor: colors.surface, borderRadius: radius.sm,
+    paddingVertical: spacing.xs, alignItems: 'center',
+    borderWidth: 1, borderColor: colors.border,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerCenter: {
-    alignItems: 'center',
-  },
-  collectionBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  collectionBtnIcon: {
-    fontSize: 22,
-  },
-  title: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: colors.primary,
-    letterSpacing: -1,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  modeContainer: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-    justifyContent: 'center',
-  },
+  quickBtnText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary },
+  title: { fontSize: 38, fontWeight: '900', color: colors.primary, letterSpacing: -1 },
+  subtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 2 },
+  modeContainer: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.md, justifyContent: 'center' },
   modeCard: {
-    padding: spacing.xl,
-    borderRadius: radius.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
+    padding: spacing.xl, borderRadius: radius.lg,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 8, elevation: 4,
   },
-  modeCardRed: {
-    backgroundColor: colors.primary,
-  },
-  modeCardYellow: {
-    backgroundColor: colors.secondary,
-  },
-  modeCardDark: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 2,
-    borderColor: colors.secondary,
-  },
-  devRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  modeIcon: {
-    fontSize: 40,
-  },
-  devBadge: {
-    backgroundColor: colors.secondary,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-  },
-  devBadgeText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#111',
-    letterSpacing: 1,
-  },
-  modeTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#fff',
-    marginBottom: spacing.xs,
-  },
-  modeDesc: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.75)',
-    lineHeight: 22,
-  },
-  hint: {
-    textAlign: 'center',
-    color: colors.textSecondary,
-    fontSize: 12,
-    paddingBottom: spacing.lg,
-  },
+  modeCardRed: { backgroundColor: colors.primary },
+  modeCardYellow: { backgroundColor: colors.secondary },
+  modeCardDark: { backgroundColor: '#1a1a1a', borderWidth: 2, borderColor: colors.secondary },
+  devRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  modeIcon: { fontSize: 40 },
+  devBadge: { backgroundColor: colors.secondary, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
+  devBadgeText: { fontSize: 11, fontWeight: '900', color: '#111', letterSpacing: 1 },
+  modeTitle: { fontSize: 24, fontWeight: '800', color: '#fff', marginBottom: spacing.xs },
+  modeDesc: { fontSize: 15, color: 'rgba(255,255,255,0.75)', lineHeight: 22 },
+  hint: { textAlign: 'center', color: colors.textSecondary, fontSize: 12, paddingBottom: spacing.lg },
 });

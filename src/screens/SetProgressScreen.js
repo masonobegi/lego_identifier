@@ -1,11 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList, Image,
-  ActivityIndicator, TouchableOpacity, Alert,
+  ActivityIndicator, TouchableOpacity, Alert, Share, Linking,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { getSetInventory } from '../services/rebrickable';
 import { getCollection, addTrackedSet, removeTrackedSet, calculateSetProgress } from '../services/collection';
 import { colors, spacing, radius } from '../constants/theme';
+
+function buildBrickLinkXml(missingParts) {
+  const items = missingParts.map((entry) => {
+    const colorId = entry.color?.external_ids?.BrickLink?.ext_ids?.[0] ?? '';
+    return [
+      '  <ITEM>',
+      '    <ITEMTYPE>P</ITEMTYPE>',
+      `    <ITEMID>${entry.part.part_num}</ITEMID>`,
+      colorId ? `    <COLOR>${colorId}</COLOR>` : '',
+      `    <MINQTY>${entry.stillNeed}</MINQTY>`,
+      '    <CONDITION>X</CONDITION>',
+      '  </ITEM>',
+    ].filter(Boolean).join('\n');
+  }).join('\n');
+  return `<INVENTORY>\n${items}\n</INVENTORY>`;
+}
 
 export default function SetProgressScreen({ route, navigation }) {
   const { set } = route.params;
@@ -82,14 +99,45 @@ export default function SetProgressScreen({ route, navigation }) {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.trackBtn, isTracked && styles.trackBtnActive]}
-        onPress={toggleTrack}
-      >
-        <Text style={[styles.trackBtnText, isTracked && styles.trackBtnTextActive]}>
-          {isTracked ? '✓ Tracked' : '+ Track this Set'}
-        </Text>
-      </TouchableOpacity>
+      <View style={styles.actionRow}>
+        <TouchableOpacity
+          style={[styles.trackBtn, isTracked && styles.trackBtnActive, { flex: 1 }]}
+          onPress={toggleTrack}
+        >
+          <Text style={[styles.trackBtnText, isTracked && styles.trackBtnTextActive]}>
+            {isTracked ? '✓ Tracked' : '+ Track this Set'}
+          </Text>
+        </TouchableOpacity>
+
+        {progress.missing.length > 0 && (
+          <TouchableOpacity
+            style={styles.exportBtn}
+            onPress={() => {
+              Alert.alert(
+                'Find Missing Parts',
+                `Export ${progress.missing.length} missing parts for BrickLink`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Copy XML',
+                    onPress: async () => {
+                      const xml = buildBrickLinkXml(progress.missing);
+                      await Clipboard.setStringAsync(xml);
+                      Alert.alert('Copied!', 'Paste into BrickLink → My BrickLink → Wanted List → Upload');
+                    },
+                  },
+                  {
+                    text: 'Open BrickLink',
+                    onPress: () => Linking.openURL('https://www.bricklink.com/v2/wanted/upload.page'),
+                  },
+                ]
+              );
+            }}
+          >
+            <Text style={styles.exportBtnText}>BrickLink →</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* Filter tabs */}
       <View style={styles.filterRow}>
@@ -162,13 +210,22 @@ const styles = StyleSheet.create({
   },
   bigProgressFill: { height: '100%', backgroundColor: colors.success, borderRadius: 5 },
   progressLabel: { fontSize: 13, fontWeight: '600', color: colors.success },
+  actionRow: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: spacing.md, marginVertical: spacing.sm, gap: spacing.sm,
+  },
   trackBtn: {
-    margin: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full,
+    paddingVertical: spacing.sm, borderRadius: radius.full,
     borderWidth: 2, borderColor: colors.primary, alignItems: 'center',
   },
   trackBtnActive: { backgroundColor: colors.primary },
   trackBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
   trackBtnTextActive: { color: '#fff' },
+  exportBtn: {
+    backgroundColor: '#0053A0', paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md, borderRadius: radius.full,
+  },
+  exportBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   filterRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   filterBtn: { flex: 1, paddingVertical: spacing.md, alignItems: 'center' },
   filterBtnActive: { borderBottomWidth: 3, borderBottomColor: colors.primary },

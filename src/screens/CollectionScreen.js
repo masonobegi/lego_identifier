@@ -8,15 +8,18 @@ import {
   getCollection, getTrackedSets, removePartFromCollection,
   updatePartCount, removeTrackedSet, calculateSetProgress,
 } from '../services/collection';
-import { getSetInventory } from '../services/rebrickable';
+import { getSetInventory, getSetsForParts } from '../services/rebrickable';
+import { scoreSetsByParts } from '../services/setScorer';
 import { colors, spacing, radius } from '../constants/theme';
 
 export default function CollectionScreen({ navigation }) {
-  const [tab, setTab] = useState('parts'); // 'parts' | 'sets'
+  const [tab, setTab] = useState('parts'); // 'parts' | 'sets' | 'build'
   const [collection, setCollection] = useState({});
   const [trackedSets, setTrackedSets] = useState([]);
-  const [setProgress, setSetProgress] = useState({}); // setNum -> progress
+  const [setProgress, setSetProgress] = useState({});
   const [loadingProgress, setLoadingProgress] = useState(false);
+  const [canBuildSets, setCanBuildSets] = useState(null); // null=not loaded, []=empty
+  const [loadingCanBuild, setLoadingCanBuild] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -46,6 +49,37 @@ export default function CollectionScreen({ navigation }) {
     );
     setSetProgress(progress);
     setLoadingProgress(false);
+  }
+
+  async function loadCanBuild(col) {
+    const partIds = Object.keys(col);
+    if (partIds.length === 0) {
+      setCanBuildSets([]);
+      return;
+    }
+    setLoadingCanBuild(true);
+    try {
+      // Cap at 30 most recently added parts to stay within rate limits
+      const recent = Object.entries(col)
+        .sort((a, b) => b[1].lastAdded - a[1].lastAdded)
+        .slice(0, 30)
+        .map(([id]) => id);
+
+      const partToSets = await getSetsForParts(recent);
+      const scored = scoreSetsByParts(partToSets);
+      setCanBuildSets(scored.slice(0, 20));
+    } catch (e) {
+      setCanBuildSets([]);
+    } finally {
+      setLoadingCanBuild(false);
+    }
+  }
+
+  function handleTabChange(t) {
+    setTab(t);
+    if (t === 'build' && canBuildSets === null) {
+      loadCanBuild(collection);
+    }
   }
 
   async function handleRemovePart(partId) {
@@ -107,21 +141,23 @@ export default function CollectionScreen({ navigation }) {
 
       {/* Tabs */}
       <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'parts' && styles.tabActive]}
-          onPress={() => setTab('parts')}
-        >
-          <Text style={[styles.tabText, tab === 'parts' && styles.tabTextActive]}>My Parts</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, tab === 'sets' && styles.tabActive]}
-          onPress={() => setTab('sets')}
-        >
-          <Text style={[styles.tabText, tab === 'sets' && styles.tabTextActive]}>Set Progress</Text>
-        </TouchableOpacity>
+        {[
+          { key: 'parts', label: 'My Parts' },
+          { key: 'sets', label: 'Set Progress' },
+          { key: 'build', label: '🔨 Can Build' },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.key}
+            style={[styles.tab, tab === t.key && styles.tabActive]}
+            onPress={() => handleTabChange(t.key)}
+          >
+            <Text style={[styles.tabText, tab === t.key && styles.tabTextActive]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      {tab === 'parts' ? (
+      {/* My Parts */}
+      {tab === 'parts' && (
         <FlatList
           data={parts}
           keyExtractor={([id]) => id}
@@ -163,14 +199,24 @@ export default function CollectionScreen({ navigation }) {
             </View>
           )}
         />
-      ) : (
-        <ScrollView contentContainerStyle={sortedSets.length === 0 ? styles.emptyContainer : styles.list}>
+      )}
+
+      {/* Set Progress */}
+      {tab === 'sets' && (
+        <ScrollView contentContainerStyle={styles.list}>
+          <TouchableOpacity
+            style={styles.addSetBtn}
+            onPress={() => navigation.navigate('TrackSet')}
+          >
+            <Text style={styles.addSetBtnText}>+ Track a New Set</Text>
+          </TouchableOpacity>
+
           {sortedSets.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyIcon}>🎯</Text>
               <Text style={styles.emptyTitle}>No tracked sets</Text>
               <Text style={styles.emptyDesc}>
-                After scanning, tap "Track this Set" on any result to monitor your completion progress.
+                Tap "Track a New Set" above or add sets from scan results.
               </Text>
             </View>
           ) : (
@@ -199,13 +245,11 @@ export default function CollectionScreen({ navigation }) {
                           <View style={styles.progressBarBg}>
                             <View style={[styles.progressBarFill, { width: `${p.pct}%` }]} />
                           </View>
-                          <Text style={styles.progressPct}>{p.owned}/{p.total} parts owned · {p.pct}%</Text>
+                          <Text style={styles.progressPct}>{p.owned}/{p.total} parts · {p.pct}%</Text>
                         </>
                       ) : loadingProgress ? (
                         <Text style={styles.setMeta}>Calculating...</Text>
-                      ) : (
-                        <Text style={styles.setMeta}>Tap to load progress</Text>
-                      )}
+                      ) : null}
                     </View>
                     <TouchableOpacity style={styles.untrackBtn} onPress={() => handleUntrackSet(set.set_num)}>
                       <Text style={styles.untrackBtnText}>✕</Text>
@@ -217,17 +261,76 @@ export default function CollectionScreen({ navigation }) {
           )}
         </ScrollView>
       )}
+
+      {/* Can Build */}
+      {tab === 'build' && (
+        <ScrollView contentContainerStyle={styles.list}>
+          {loadingCanBuild ? (
+            <View style={styles.emptyBox}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.emptyDesc}>Scanning your collection against Rebrickable...</Text>
+            </View>
+          ) : canBuildSets === null || parts.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyIcon}>🔨</Text>
+              <Text style={styles.emptyTitle}>Nothing to check yet</Text>
+              <Text style={styles.emptyDesc}>
+                Add parts to your collection first, then come back to see which sets you can build.
+              </Text>
+            </View>
+          ) : canBuildSets.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyIcon}>🤷</Text>
+              <Text style={styles.emptyTitle}>No matches found</Text>
+              <Text style={styles.emptyDesc}>No sets matched your current collection. Try scanning more parts.</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.canBuildNotice}>
+                <Text style={styles.canBuildNoticeText}>
+                  Based on your {parts.length} unique parts. Tap any set to see exact completion %.
+                </Text>
+                <TouchableOpacity onPress={() => { setCanBuildSets(null); loadCanBuild(collection); }}>
+                  <Text style={styles.refreshText}>Refresh</Text>
+                </TouchableOpacity>
+              </View>
+              {canBuildSets.map((item, i) => (
+                <TouchableOpacity
+                  key={item.set.set_num}
+                  style={styles.setCard}
+                  onPress={() => navigation.navigate('SetProgress', { set: item.set })}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.setCardRow}>
+                    {item.set.set_img_url ? (
+                      <Image source={{ uri: item.set.set_img_url }} style={styles.setImg} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.setImg, styles.setImgPlaceholder]}>
+                        <Text style={{ fontSize: 22 }}>🧱</Text>
+                      </View>
+                    )}
+                    <View style={styles.setInfo}>
+                      {i === 0 && <Text style={styles.bestMatchBadge}>Best Match</Text>}
+                      <Text style={styles.setName} numberOfLines={2}>{item.set.name}</Text>
+                      <Text style={styles.setMeta}>#{item.set.set_num} · {item.set.year} · {item.set.num_parts} parts</Text>
+                      <Text style={styles.matchCount}>
+                        {item.matchedParts} of your parts appear in this set
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  statsBar: {
-    flexDirection: 'row',
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-  },
+  statsBar: { flexDirection: 'row', backgroundColor: colors.primary, paddingVertical: spacing.md },
   stat: { flex: 1, alignItems: 'center' },
   statNum: { fontSize: 22, fontWeight: '900', color: '#fff' },
   statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.75)', marginTop: 2 },
@@ -235,20 +338,23 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   tab: { flex: 1, paddingVertical: spacing.md, alignItems: 'center' },
   tabActive: { borderBottomWidth: 3, borderBottomColor: colors.primary },
-  tabText: { fontSize: 14, fontWeight: '600', color: colors.textSecondary },
+  tabText: { fontSize: 12, fontWeight: '600', color: colors.textSecondary },
   tabTextActive: { color: colors.primary },
-  list: { padding: spacing.md, gap: spacing.sm },
+  list: { padding: spacing.md },
   emptyContainer: { flex: 1 },
-  emptyBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, marginTop: 80 },
+  emptyBox: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl, marginTop: 40 },
   emptyIcon: { fontSize: 52, marginBottom: spacing.md },
   emptyTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
   emptyDesc: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
+  addSetBtn: {
+    borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed',
+    borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginBottom: spacing.md,
+  },
+  addSetBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
   partRow: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    overflow: 'hidden', marginBottom: spacing.sm,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.sm,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
   },
   partImg: { width: 60, height: 60, backgroundColor: '#f0f0f0' },
   partImgPlaceholder: { alignItems: 'center', justifyContent: 'center' },
@@ -256,18 +362,14 @@ const styles = StyleSheet.create({
   partName: { fontSize: 13, fontWeight: '600', color: colors.text },
   partId: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   countControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xs },
-  countBtn: {
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center',
-  },
+  countBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   countBtnText: { fontSize: 16, fontWeight: '700', color: colors.text, lineHeight: 20 },
   countNum: { fontSize: 15, fontWeight: '800', color: colors.text, minWidth: 24, textAlign: 'center' },
   deleteBtn: { padding: spacing.md },
   deleteBtnText: { color: colors.textSecondary, fontSize: 14 },
   setCard: {
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    marginBottom: spacing.sm, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    backgroundColor: colors.surface, borderRadius: radius.md, marginBottom: spacing.sm,
+    overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 4, elevation: 2,
   },
   setCardRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.sm },
@@ -276,12 +378,21 @@ const styles = StyleSheet.create({
   setInfo: { flex: 1, paddingHorizontal: spacing.sm },
   setName: { fontSize: 14, fontWeight: '700', color: colors.text, marginBottom: 2 },
   setMeta: { fontSize: 12, color: colors.textSecondary, marginBottom: spacing.xs },
-  progressBarBg: {
-    height: 6, backgroundColor: colors.border, borderRadius: 3,
-    overflow: 'hidden', marginBottom: 4,
-  },
+  progressBarBg: { height: 6, backgroundColor: colors.border, borderRadius: 3, overflow: 'hidden', marginBottom: 4 },
   progressBarFill: { height: '100%', backgroundColor: colors.success, borderRadius: 3 },
   progressPct: { fontSize: 12, color: colors.success, fontWeight: '600' },
   untrackBtn: { padding: spacing.sm },
   untrackBtnText: { color: colors.textSecondary, fontSize: 14 },
+  canBuildNotice: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: '#EEF9EE', borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md,
+  },
+  canBuildNoticeText: { flex: 1, fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
+  refreshText: { color: colors.primary, fontWeight: '700', fontSize: 13, marginLeft: spacing.sm },
+  bestMatchBadge: {
+    backgroundColor: colors.primary, color: '#fff', fontSize: 10, fontWeight: '900',
+    paddingHorizontal: spacing.xs, paddingVertical: 2, borderRadius: radius.sm,
+    alignSelf: 'flex-start', marginBottom: 4, overflow: 'hidden',
+  },
+  matchCount: { fontSize: 12, color: colors.success, fontWeight: '600' },
 });
