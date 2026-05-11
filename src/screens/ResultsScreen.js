@@ -4,9 +4,11 @@ import {
   ActivityIndicator, TouchableOpacity, ScrollView, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { identifyPart } from '../services/brickognize';
 import { getSetInventory, getSetsForPart } from '../services/rebrickable';
 import { addPartsToCollection, addTrackedSet } from '../services/collection';
+import { addHistoryEntry } from '../services/history';
 import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function ResultsScreen({ navigation, route }) {
@@ -28,16 +30,21 @@ export default function ResultsScreen({ navigation, route }) {
       if (!items?.length) { setErrorMsg('No LEGO parts identified. Try better lighting or a cleaner background.'); setStatus('error'); return; }
       const topItem = items[0];
       setIdentifiedPart(topItem);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStatus('fetching');
+      let finalResults = [];
       if (mode === 'partFinder') {
-        setResults(await getSetsForPart(topItem.id));
+        finalResults = await getSetsForPart(topItem.id);
+        setResults(finalResults);
       } else {
         const inventory = await getSetInventory(setNum);
         const inventoryIds = new Set(inventory.map((i) => i.part.part_num));
         const matched = items.filter((i) => inventoryIds.has(i.id));
         setMatchCount(matched.length);
-        setResults([...matched.map((i) => ({ ...i, inSet: true })), ...items.filter((i) => !inventoryIds.has(i.id)).map((i) => ({ ...i, inSet: false }))]);
+        finalResults = [...matched.map((i) => ({ ...i, inSet: true })), ...items.filter((i) => !inventoryIds.has(i.id)).map((i) => ({ ...i, inSet: false }))];
+        setResults(finalResults);
       }
+      addHistoryEntry({ mode, imageUri, identifiedPart: topItem, setNum, setName, resultCount: finalResults.length });
       setStatus('done');
     } catch (e) {
       setErrorMsg(e?.response?.status === 401 ? 'API key error — check Settings.' : `Something went wrong: ${e.message}`);
@@ -98,7 +105,7 @@ export default function ResultsScreen({ navigation, route }) {
             </View>
             <TouchableOpacity
               style={[styles.addBtn, addedToCollection && styles.addBtnDone]}
-              onPress={async () => { await addPartsToCollection([identifiedPart]); setAddedToCollection(true); }}
+              onPress={async () => { await addPartsToCollection([identifiedPart]); setAddedToCollection(true); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); }}
               disabled={addedToCollection}
             >
               <Ionicons name={addedToCollection ? 'checkmark' : 'add'} size={18} color={addedToCollection ? colors.success : colors.primary} />

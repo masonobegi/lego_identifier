@@ -5,11 +5,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { identifyPart } from '../services/brickognize';
 import { getSetsForParts } from '../services/rebrickable';
 import { splitImageIntoGrid } from '../services/imageGrid';
 import { scoreSetsByParts } from '../services/setScorer';
 import { addPartsToCollection, addTrackedSet } from '../services/collection';
+import { addHistoryEntry } from '../services/history';
 import { colors, spacing, radius, shadows, typography, gradients } from '../constants/theme';
 
 const STEPS = {
@@ -59,7 +61,15 @@ export default function MultiResultsScreen({ navigation, route }) {
       setStep('fetching');
       const scored = scoreSetsByParts(await getSetsForParts(parts.map((p) => p.id)));
       setStep('scoring');
-      setRankedSets(scored.slice(0, 15));
+      const ranked = scored.slice(0, 15);
+      setRankedSets(ranked);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      addHistoryEntry({
+        mode: isSequential ? 'sequential' : 'multiScan',
+        imageUri: imageUri || null,
+        identifiedParts: parts,
+        resultCount: ranked.length,
+      });
       setStep('done');
     } catch (e) {
       setErrorMsg(e?.response?.status === 401 ? 'API key error — check Settings.' : `Something went wrong: ${e.message}`);
@@ -134,7 +144,7 @@ export default function MultiResultsScreen({ navigation, route }) {
         {/* Add to collection */}
         <TouchableOpacity
           style={[styles.collectBtn, addedToCollection && styles.collectBtnDone]}
-          onPress={async () => { await addPartsToCollection(identifiedParts); setAddedToCollection(true); Alert.alert('Added!', `${identifiedParts.length} part(s) saved to your collection.`); }}
+          onPress={async () => { await addPartsToCollection(identifiedParts); setAddedToCollection(true); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); Alert.alert('Added!', `${identifiedParts.length} part(s) saved to your collection.`); }}
           disabled={addedToCollection}
         >
           <Ionicons name={addedToCollection ? 'checkmark-circle' : 'add-circle-outline'} size={18} color={addedToCollection ? colors.success : colors.secondary} />
@@ -142,6 +152,7 @@ export default function MultiResultsScreen({ navigation, route }) {
             {addedToCollection ? `Saved ${identifiedParts.length} parts to Collection` : `Add ${identifiedParts.length} Parts to Collection`}
           </Text>
         </TouchableOpacity>
+
 
         {/* Parts scroll */}
         <View style={styles.section}>

@@ -18,6 +18,7 @@ import SetProgressScreen from './src/screens/SetProgressScreen';
 import TrackSetScreen from './src/screens/TrackSetScreen';
 import BarcodeScannerScreen from './src/screens/BarcodeScannerScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import { isOnboardingComplete } from './src/services/apiKeys';
 import { colors } from './src/constants/theme';
@@ -69,6 +70,7 @@ export default function App() {
         <Stack.Screen name="TrackSet" component={TrackSetScreen} options={{ title: 'Track a Set' }} />
         <Stack.Screen name="BarcodeScanner" component={BarcodeScannerScreen} options={{ ...darkHeader, title: 'Scan Barcode' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen name="History" component={HistoryScreen} options={{ title: 'Recent Scans' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

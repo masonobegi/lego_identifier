@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList, Image,
-  TouchableOpacity, Alert, ActivityIndicator, ScrollView,
+  TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +22,7 @@ const TABS = [
 
 export default function CollectionScreen({ navigation }) {
   const [tab, setTab] = useState('parts');
+  const [partsSearch, setPartsSearch] = useState('');
   const [collection, setCollection] = useState({});
   const [trackedSets, setTrackedSets] = useState([]);
   const [setProgress, setSetProgress] = useState({});
@@ -84,7 +85,13 @@ export default function CollectionScreen({ navigation }) {
     const p = { ...setProgress }; delete p[setNum]; setSetProgress(p);
   }
 
-  const parts = Object.entries(collection).sort((a, b) => b[1].lastAdded - a[1].lastAdded);
+  const allParts = Object.entries(collection).sort((a, b) => b[1].lastAdded - a[1].lastAdded);
+  const parts = partsSearch.trim()
+    ? allParts.filter(([id, entry]) =>
+        entry.part.name?.toLowerCase().includes(partsSearch.toLowerCase()) ||
+        id.toLowerCase().includes(partsSearch.toLowerCase())
+      )
+    : allParts;
   const totalParts = parts.reduce((sum, [, v]) => sum + v.count, 0);
   const sortedSets = [...trackedSets].sort((a, b) => (setProgress[b.set_num]?.pct ?? -1) - (setProgress[a.set_num]?.pct ?? -1));
 
@@ -115,7 +122,32 @@ export default function CollectionScreen({ navigation }) {
           data={parts}
           keyExtractor={([id]) => id}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<EmptyState icon="cube-outline" title="No parts yet" desc='Scan pieces and tap "Add to Collection"' />}
+          ListHeaderComponent={
+            allParts.length > 0 ? (
+              <View style={styles.searchWrap}>
+                <Ionicons name="search-outline" size={16} color={colors.textTertiary} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search parts…"
+                  placeholderTextColor={colors.textTertiary}
+                  value={partsSearch}
+                  onChangeText={setPartsSearch}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                />
+                {partsSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setPartsSearch('')} style={styles.searchClear}>
+                    <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            partsSearch.trim()
+              ? <EmptyState icon="search-outline" title="No matches" desc={`No parts matching "${partsSearch}"`} />
+              : <EmptyState icon="cube-outline" title="No parts yet" desc='Scan pieces and tap "Add to Collection"' />
+          }
           renderItem={({ item: [partId, entry] }) => (
             <View style={styles.partCard}>
               {entry.part.img_url
@@ -262,6 +294,16 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing.xxl },
   center: { alignItems: 'center', paddingTop: spacing.xxl, gap: spacing.md },
   loadingText: { ...typography.body, color: colors.textSecondary },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: spacing.sm, marginBottom: spacing.sm,
+    ...shadows.sm,
+  },
+  searchIcon: { marginRight: spacing.xs },
+  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 14, color: colors.text },
+  searchClear: { padding: spacing.xs },
   addSetBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderWidth: 2, borderColor: colors.primary, borderStyle: 'dashed',

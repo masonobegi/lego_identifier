@@ -6,6 +6,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { identifyPart } from '../services/brickognize';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function SequentialScanScreen({ navigation }) {
@@ -56,6 +57,7 @@ export default function SequentialScanScreen({ navigation }) {
 
   function confirmAdd() {
     if (!lastResult?.part) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const part = lastResult.part;
     // Deduplicate — if already in list, increment notionally (we track just unique for set matching)
     setParts((prev) => {

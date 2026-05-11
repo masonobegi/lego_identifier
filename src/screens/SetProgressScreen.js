@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, FlatList, Image,
-  ActivityIndicator, TouchableOpacity, Alert, Share, Linking,
+  ActivityIndicator, TouchableOpacity, Alert, Share, Linking, Platform,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -57,6 +58,14 @@ export default function SetProgressScreen({ route, navigation }) {
     else { await addTrackedSet(set); setIsTracked(true); }
   }
 
+  async function handleShare() {
+    if (!progress) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const emoji = progress.pct >= 100 ? '🎉' : progress.pct >= 75 ? '🔥' : progress.pct >= 50 ? '💪' : '🧱';
+    const msg = `${emoji} ${set.name} (${set.set_num})\n${progress.pct}% complete — ${progress.owned}/${progress.total} parts\n\nTracking with Brick ID`;
+    await Share.share({ message: msg, title: set.name });
+  }
+
   function handleBrickLink() {
     if (!progress?.missing.length) return;
     Alert.alert('Find Missing Parts', `Export ${progress.missing.length} parts for BrickLink`, [
@@ -101,6 +110,9 @@ export default function SetProgressScreen({ route, navigation }) {
         <TouchableOpacity style={[styles.actionBtn, isTracked && styles.actionBtnActive]} onPress={toggleTrack}>
           <Ionicons name={isTracked ? 'bookmark' : 'bookmark-outline'} size={16} color={isTracked ? '#fff' : colors.primary} />
           <Text style={[styles.actionBtnText, isTracked && styles.actionBtnTextActive]}>{isTracked ? 'Tracked' : 'Track Set'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.shareBtn} onPress={handleShare}>
+          <Ionicons name="share-outline" size={16} color={colors.primary} />
         </TouchableOpacity>
         {progress.missing.length > 0 && (
           <TouchableOpacity style={styles.brickLinkBtn} onPress={handleBrickLink}>
@@ -180,6 +192,11 @@ const styles = StyleSheet.create({
   actionBtnActive: { backgroundColor: colors.primary },
   actionBtnText: { color: colors.primary, fontWeight: '700', fontSize: 14 },
   actionBtnTextActive: { color: '#fff' },
+  shareBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    borderWidth: 1.5, borderColor: colors.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
   brickLinkBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
     backgroundColor: '#0053A0', borderRadius: radius.full, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg,

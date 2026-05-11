@@ -60,7 +60,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.quickRow}>
             <QuickBtn icon="barcode-outline" label="Scan Box" onPress={() => navigation.navigate('BarcodeScanner')} />
             <QuickBtn icon="bookmark-outline" label="Track Set" onPress={() => navigation.navigate('TrackSet')} />
-            <QuickBtn icon="layers-outline" label="Collection" onPress={() => navigation.navigate('Collection')} />
+            <QuickBtn icon="time-outline" label="History" onPress={() => navigation.navigate('History')} />
             <QuickBtn icon="settings-outline" label="Settings" onPress={() => navigation.navigate('Settings')} />
           </View>
         </LinearGradient>

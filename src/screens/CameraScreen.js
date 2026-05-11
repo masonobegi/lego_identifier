@@ -11,14 +11,25 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, shadows, typography } from '../constants/theme';
+
+const FLASH_MODES = ['off', 'on', 'auto'];
+const FLASH_ICONS = { off: 'flash-off-outline', on: 'flash-outline', auto: 'flash-outline' };
 
 export default function CameraScreen({ navigation, route }) {
   const { mode, setNum, setName, gridRows, gridCols } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [flash, setFlash] = useState('off');
   const cameraRef = useRef(null);
+
+  function cycleFlash() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFlash((f) => FLASH_MODES[(FLASH_MODES.indexOf(f) + 1) % FLASH_MODES.length]);
+  }
 
   async function takePicture() {
     if (!cameraRef.current) return;
@@ -103,8 +114,15 @@ export default function CameraScreen({ navigation, route }) {
         </View>
       )}
 
-      <CameraView ref={cameraRef} style={styles.camera} facing="back">
+      <CameraView ref={cameraRef} style={styles.camera} facing="back" flash={flash}>
         <View style={styles.overlay}>
+          {/* Flash toggle */}
+          <TouchableOpacity style={styles.flashBtn} onPress={cycleFlash}>
+            <Ionicons name={FLASH_ICONS[flash]} size={22} color={flash === 'on' ? colors.secondary : '#fff'} />
+            <Text style={[styles.flashLabel, flash === 'on' && { color: colors.secondary }]}>
+              {flash.toUpperCase()}
+            </Text>
+          </TouchableOpacity>
           <View style={styles.frame} />
           <Text style={styles.hint}>
             {mode === 'setChecker'
@@ -118,6 +136,7 @@ export default function CameraScreen({ navigation, route }) {
 
       <View style={styles.controls}>
         <TouchableOpacity style={styles.galleryBtn} onPress={pickFromLibrary}>
+          <Ionicons name="images-outline" size={22} color="#fff" />
           <Text style={styles.galleryBtnText}>Gallery</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.shutterBtn} onPress={takePicture}>
@@ -142,6 +161,22 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     paddingBottom: spacing.lg,
+  },
+  flashBtn: {
+    position: 'absolute',
+    top: spacing.lg,
+    right: spacing.lg,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  flashLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 1,
   },
   frame: {
     position: 'absolute',

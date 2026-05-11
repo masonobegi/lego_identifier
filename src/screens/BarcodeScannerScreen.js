@@ -6,6 +6,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { searchSets } from '../services/rebrickable';
 import { addTrackedSet } from '../services/collection';
+import * as Haptics from 'expo-haptics';
 import { colors, spacing, radius, shadows, typography } from '../constants/theme';
 
 export default function BarcodeScannerScreen({ navigation }) {
@@ -18,6 +19,7 @@ export default function BarcodeScannerScreen({ navigation }) {
 
   async function handleBarcode({ data, type }) {
     if (scanned || searching) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setScanned(true);
     setBarcodeValue(data);
     await lookupBarcode(data);
