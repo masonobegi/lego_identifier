@@ -20,6 +20,7 @@ import BarcodeScannerScreen from './src/screens/BarcodeScannerScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import NetworkBanner from './src/components/NetworkBanner';
 import { isOnboardingComplete } from './src/services/apiKeys';
 import { colors } from './src/constants/theme';
 
@@ -56,6 +57,7 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar style="dark" />
+      <NetworkBanner />
       <Stack.Navigator screenOptions={lightHeader}>
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SetChecker" component={SetCheckerScreen} options={{ title: 'Set Checker' }} />
