@@ -7,6 +7,8 @@ import { StatusBar } from 'expo-status-bar';
 import HomeScreen from './src/screens/HomeScreen';
 import SetCheckerScreen from './src/screens/SetCheckerScreen';
 import PartFinderScreen from './src/screens/PartFinderScreen';
+import MultiScanScreen from './src/screens/MultiScanScreen';
+import MultiResultsScreen from './src/screens/MultiResultsScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
 import { colors } from './src/constants/theme';
@@ -49,6 +51,16 @@ export default function App() {
           name="Results"
           component={ResultsScreen}
           options={{ title: 'Results' }}
+        />
+        <Stack.Screen
+          name="MultiScan"
+          component={MultiScanScreen}
+          options={{ title: 'Multi-Part Scanner', headerStyle: { backgroundColor: '#1a1a1a' } }}
+        />
+        <Stack.Screen
+          name="MultiResults"
+          component={MultiResultsScreen}
+          options={{ title: 'Scan Results', headerStyle: { backgroundColor: '#1a1a1a' } }}
         />
       </Stack.Navigator>
     </NavigationContainer>

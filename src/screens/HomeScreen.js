@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  Image,
 } from 'react-native';
 import { colors, spacing, radius } from '../constants/theme';
 
@@ -36,9 +35,26 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.85}
         >
           <Text style={styles.modeIcon}>🔍</Text>
-          <Text style={styles.modeTitle}>Part Finder</Text>
-          <Text style={styles.modeDesc}>
+          <Text style={[styles.modeTitle, { color: '#111' }]}>Part Finder</Text>
+          <Text style={[styles.modeDesc, { color: 'rgba(0,0,0,0.65)' }]}>
             Photograph a piece and discover every set it appears in.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.modeCard, styles.modeCardDark]}
+          onPress={() => navigation.navigate('MultiScan')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.devRow}>
+            <Text style={styles.modeIcon}>🔬</Text>
+            <View style={styles.devBadge}>
+              <Text style={styles.devBadgeText}>DEV</Text>
+            </View>
+          </View>
+          <Text style={styles.modeTitle}>Multi-Part Scanner</Text>
+          <Text style={styles.modeDesc}>
+            Photograph a pile of pieces. Grid-splits the image and ranks the best matching sets.
           </Text>
         </TouchableOpacity>
       </View>
@@ -90,9 +106,31 @@ const styles = StyleSheet.create({
   modeCardYellow: {
     backgroundColor: colors.secondary,
   },
+  modeCardDark: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 2,
+    borderColor: colors.secondary,
+  },
+  devRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   modeIcon: {
     fontSize: 40,
-    marginBottom: spacing.sm,
+  },
+  devBadge: {
+    backgroundColor: colors.secondary,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+  },
+  devBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#111',
+    letterSpacing: 1,
   },
   modeTitle: {
     fontSize: 24,
@@ -102,7 +140,7 @@ const styles = StyleSheet.create({
   },
   modeDesc: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(255,255,255,0.75)',
     lineHeight: 22,
   },
   hint: {

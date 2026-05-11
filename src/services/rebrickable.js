@@ -41,3 +41,20 @@ export async function getSetsForPart(partNum) {
   });
   return setsResponse.data.results;
 }
+
+// Fetch sets for multiple part IDs in parallel.
+// Returns { partId: [sets] } map — failed lookups are silently skipped.
+export async function getSetsForParts(partIds) {
+  const unique = [...new Set(partIds)];
+  const results = await Promise.allSettled(
+    unique.map(async (id) => ({ id, sets: await getSetsForPart(id) }))
+  );
+
+  const map = {};
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value.sets.length > 0) {
+      map[r.value.id] = r.value.sets;
+    }
+  }
+  return map;
+}

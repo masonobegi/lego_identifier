@@ -14,7 +14,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, radius } from '../constants/theme';
 
 export default function CameraScreen({ navigation, route }) {
-  const { mode, setNum, setName } = route.params || {};
+  const { mode, setNum, setName, gridRows, gridCols } = route.params || {};
   const [permission, requestPermission] = useCameraPermissions();
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -40,7 +40,11 @@ export default function CameraScreen({ navigation, route }) {
     if (!preview) return;
     setLoading(true);
     try {
-      navigation.navigate('Results', { imageUri: preview, mode, setNum, setName });
+      if (mode === 'multiScan') {
+        navigation.navigate('MultiResults', { imageUri: preview, gridRows, gridCols });
+      } else {
+        navigation.navigate('Results', { imageUri: preview, mode, setNum, setName });
+      }
     } finally {
       setLoading(false);
     }
@@ -105,6 +109,8 @@ export default function CameraScreen({ navigation, route }) {
           <Text style={styles.hint}>
             {mode === 'setChecker'
               ? 'Photograph your pile of pieces'
+              : mode === 'multiScan'
+              ? `Spread out your pieces · ${gridRows}×${gridCols} grid`
               : 'Photograph a single LEGO piece'}
           </Text>
         </View>
