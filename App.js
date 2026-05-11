@@ -9,8 +9,11 @@ import SetCheckerScreen from './src/screens/SetCheckerScreen';
 import PartFinderScreen from './src/screens/PartFinderScreen';
 import MultiScanScreen from './src/screens/MultiScanScreen';
 import MultiResultsScreen from './src/screens/MultiResultsScreen';
+import SequentialScanScreen from './src/screens/SequentialScanScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import ResultsScreen from './src/screens/ResultsScreen';
+import CollectionScreen from './src/screens/CollectionScreen';
+import SetProgressScreen from './src/screens/SetProgressScreen';
 import { colors } from './src/constants/theme';
 
 const Stack = createStackNavigator();
@@ -61,6 +64,21 @@ export default function App() {
           name="MultiResults"
           component={MultiResultsScreen}
           options={{ title: 'Scan Results', headerStyle: { backgroundColor: '#1a1a1a' } }}
+        />
+        <Stack.Screen
+          name="SequentialScan"
+          component={SequentialScanScreen}
+          options={{ title: 'Sequential Scan', headerShown: false }}
+        />
+        <Stack.Screen
+          name="Collection"
+          component={CollectionScreen}
+          options={{ title: 'My Collection' }}
+        />
+        <Stack.Screen
+          name="SetProgress"
+          component={SetProgressScreen}
+          options={{ title: 'Set Progress' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,16 +12,18 @@ import {
 } from 'react-native';
 import { identifyPart } from '../services/brickognize';
 import { getSetInventory, getSetsForPart, getPartDetails } from '../services/rebrickable';
+import { addPartsToCollection, addTrackedSet } from '../services/collection';
 import { colors, spacing, radius } from '../constants/theme';
 
 export default function ResultsScreen({ navigation, route }) {
   const { imageUri, mode, setNum, setName } = route.params;
-  const [status, setStatus] = useState('identifying'); // identifying | fetching | done | error
+  const [status, setStatus] = useState('identifying');
   const [errorMsg, setErrorMsg] = useState('');
   const [identifiedPart, setIdentifiedPart] = useState(null);
   const [results, setResults] = useState([]);
   const [matchCount, setMatchCount] = useState(null);
   const [totalCount, setTotalCount] = useState(null);
+  const [addedToCollection, setAddedToCollection] = useState(false);
 
   useEffect(() => {
     run();
@@ -129,6 +131,18 @@ export default function ResultsScreen({ navigation, route }) {
                   Confidence: {Math.round(identifiedPart.score * 100)}%
                 </Text>
               )}
+              <TouchableOpacity
+                style={[styles.addCollectionBtn, addedToCollection && styles.addCollectionBtnDone]}
+                onPress={async () => {
+                  await addPartsToCollection([identifiedPart]);
+                  setAddedToCollection(true);
+                }}
+                disabled={addedToCollection}
+              >
+                <Text style={styles.addCollectionBtnText}>
+                  {addedToCollection ? '✓ In Collection' : '+ Add to Collection'}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -152,7 +166,7 @@ export default function ResultsScreen({ navigation, route }) {
 
         {/* Results list */}
         {mode === 'partFinder'
-          ? results.map((set) => <SetCard key={set.set_num} set={set} />)
+          ? results.map((set) => <SetCard key={set.set_num} set={set} navigation={navigation} />)
           : results.map((item) => <PartMatchCard key={item.id} item={item} />)}
 
         {results.length === 0 && (
@@ -167,7 +181,8 @@ export default function ResultsScreen({ navigation, route }) {
   );
 }
 
-function SetCard({ set }) {
+function SetCard({ set, navigation }) {
+  const [tracked, setTracked] = useState(false);
   return (
     <View style={styles.card}>
       {set.set_img_url ? (
@@ -181,6 +196,15 @@ function SetCard({ set }) {
         <Text style={styles.cardName} numberOfLines={2}>{set.name}</Text>
         <Text style={styles.cardMeta}>#{set.set_num} · {set.year}</Text>
         <Text style={styles.cardMeta}>{set.num_parts} parts</Text>
+        <TouchableOpacity
+          style={[styles.addCollectionBtn, tracked && styles.addCollectionBtnDone]}
+          onPress={async () => { await addTrackedSet(set); setTracked(true); }}
+          disabled={tracked}
+        >
+          <Text style={styles.addCollectionBtnText}>
+            {tracked ? '✓ Tracked' : '+ Track Set'}
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -392,5 +416,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  addCollectionBtn: {
+    marginTop: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  addCollectionBtnDone: {
+    borderColor: colors.success,
+    backgroundColor: 'rgba(46,125,50,0.1)',
+  },
+  addCollectionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

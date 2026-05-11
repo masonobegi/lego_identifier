@@ -12,8 +12,16 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Brick ID</Text>
-        <Text style={styles.subtitle}>LEGO Part Identifier</Text>
+        <View style={styles.headerRow}>
+          <View style={{ width: 44 }} />
+          <View style={styles.headerCenter}>
+            <Text style={styles.title}>Brick ID</Text>
+            <Text style={styles.subtitle}>LEGO Part Identifier</Text>
+          </View>
+          <TouchableOpacity style={styles.collectionBtn} onPress={() => navigation.navigate('Collection')}>
+            <Text style={styles.collectionBtnIcon}>📦</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.modeContainer}>
@@ -70,9 +78,33 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    alignItems: 'center',
     paddingTop: spacing.xl,
     paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerCenter: {
+    alignItems: 'center',
+  },
+  collectionBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  collectionBtnIcon: {
+    fontSize: 22,
   },
   title: {
     fontSize: 42,
