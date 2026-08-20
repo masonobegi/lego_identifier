@@ -16,7 +16,7 @@ export const PLAYER_KEYS = [
 ] as const satisfies readonly (keyof PlayerState)[];
 
 export const CARGO_KEYS = [
-  'x', 'y', 'px', 'py', 'rot', 'rotV', 'hp', 'shake', 'grounded',
+  'x', 'y', 'px', 'py', 'rot', 'rotV', 'hp', 'shake', 'grounded', 'calm',
 ] as const satisfies readonly (keyof CargoState)[];
 
 export const WORLD_KEYS = [
@@ -86,6 +86,7 @@ export function placeAtSpawn(world: World, x: number, y: number): void {
   world.cargo.rotV = 0;
   world.cargo.shake = 0;
   world.cargo.grounded = 0;
+  world.cargo.calm = 0;
 }
 
 export function createWorld(ctx: SimContext): World {
@@ -98,7 +99,7 @@ export function createWorld(ctx: SimContext): World {
     ropeY: new Float64Array(ROPE_NODES),
     ropePX: new Float64Array(ROPE_NODES),
     ropePY: new Float64Array(ROPE_NODES),
-    cargo: { x: 0, y: 0, px: 0, py: 0, rot: 0, rotV: 0, hp: CARGO_HP, shake: 0, grounded: 0 },
+    cargo: { x: 0, y: 0, px: 0, py: 0, rot: 0, rotV: 0, hp: CARGO_HP, shake: 0, grounded: 0, calm: 0 },
     crumble: new Int32Array(level.crumbleTile.length),
     checkpoint: -1,
     spawnX: level.spawnX,

@@ -41,6 +41,8 @@ export interface CargoState {
   hp: number;
   shake: number;
   grounded: number;
+  /** Ticks since the crate last took damage, for self-repair. */
+  calm: number;
 }
 
 /** Presentation-only events emitted by a tick. Rendered, never simulated. */

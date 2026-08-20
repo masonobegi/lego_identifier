@@ -19,7 +19,10 @@ export const PLAYER_H = 32;
 export const PLAYER_HALF_W = PLAYER_W / 2;
 
 /** Player locomotion. */
-export const RUN_SPEED = 205;
+/** Calibrated against the level authoring rules: a jump has to comfortably
+ *  clear a two-tile rise with a two-column gap while carrying the rope's load.
+ *  scripts/calibrate-jump.mjs measures what these actually buy. */
+export const RUN_SPEED = 235;
 export const GROUND_ACCEL = 2600;
 export const AIR_ACCEL = 1500;
 export const GROUND_FRICTION = 2400;
@@ -28,7 +31,7 @@ export const ICE_FRICTION = 130;
 export const ICE_ACCEL = 700;
 
 /** Jumping. */
-export const JUMP_VELOCITY = -560;
+export const JUMP_VELOCITY = -585;
 export const JUMP_CUT = 0.42;
 export const COYOTE_TICKS = 7;
 export const JUMP_BUFFER_TICKS = 8;
@@ -68,9 +71,16 @@ export const CARGO_HP = 100;
 export const CARGO_TETHER = 20;
 export const CARGO_DAMPING = 0.995;
 export const CARGO_BOUNCE = 0.28;
-export const CARGO_IMPACT_MIN = 340;
-export const CARGO_IMPACT_SCALE = 0.085;
+/** Impacts gentler than this do nothing at all. Set high on purpose: at a
+ *  lower threshold the crate accumulated chip damage from ordinary jumping and
+ *  died roughly every ten seconds, which reads as a broken game rather than a
+ *  tense one. Only a real fall should hurt. */
+export const CARGO_IMPACT_MIN = 560;
+export const CARGO_IMPACT_SCALE = 0.06;
 export const CARGO_REPAIR_PER_TICK = 0.55;
+/** Ticks of clean handling before the crate starts patching itself up. */
+export const CARGO_REGEN_DELAY = 90;
+export const CARGO_REGEN = 0.08;
 
 /** Damage, death and respawn. */
 export const RESPAWN_TICKS = 54;
@@ -107,7 +117,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 7;
+export const SIM_VERSION = 8;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

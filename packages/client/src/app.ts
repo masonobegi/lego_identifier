@@ -40,7 +40,7 @@ import {
 } from './settings.js';
 import { load, save } from './storage.js';
 import { Achievements, type AchievementDef } from './achievements.js';
-import { onHostReady, onSteamJoinRequest, setRichPresence, steamName } from './steam.js';
+import { desktopAvailable, hostLocalServer, onHostReady, onSteamJoinRequest, setRichPresence, steamName, stopLocalServer } from './steam.js';
 import { buildScreen, tickPreviews, type ScreenId } from './ui/screens.js';
 
 export const VERSION = '1.0.0';
@@ -93,6 +93,8 @@ export class App {
   private runCounted = false;
   private paused = false;
   private autoNamed = false;
+  /** Port of the server this client started, or 0. */
+  hostedPort = 0;
 
   constructor(canvas: HTMLCanvasElement, overlay: HTMLElement) {
     this.canvas = canvas;
@@ -142,6 +144,7 @@ export class App {
     window.addEventListener('beforeunload', () => {
       this.persist();
       this.net?.leave();
+      this.stopHosting();
     });
     onHostReady(() => {
       const persona = steamName();
@@ -549,6 +552,36 @@ export class App {
           break;
       }
     };
+  }
+
+  /**
+   * Start the bundled matchmaking server inside the desktop shell and point
+   * this client at it. Useful on a LAN, and a real fallback if the public
+   * server is unreachable — the friend connects to this machine's address.
+   */
+  async hostLocally(): Promise<void> {
+    if (!desktopAvailable()) {
+      toast('Only the desktop build can host a server');
+      return;
+    }
+    this.connectingLabel = 'Starting a server on this machine…';
+    this.show('connecting');
+    const result = await hostLocalServer();
+    if (!result) {
+      this.fail('This build could not start a local server.');
+      return;
+    }
+    this.settings.serverUrl = result.url;
+    this.hostedPort = result.port;
+    this.applySettings();
+    toast(`Hosting on port ${result.port}`);
+    this.connect(INTENT_CREATE);
+  }
+
+  stopHosting(): void {
+    if (this.hostedPort === 0) return;
+    stopLocalServer();
+    this.hostedPort = 0;
   }
 
   setReady(value: boolean): void {

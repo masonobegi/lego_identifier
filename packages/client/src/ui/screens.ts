@@ -221,7 +221,19 @@ function onlineScreen(app: App): HTMLElement {
       }),
       button(app, 'Join with a code', 'Your friend already has one open', () => app.show('join'), { icon: '🔑' }),
       button(app, 'Quick match', 'Rope yourself to a stranger', () => app.connect(INTENT_QUICKPLAY), { icon: '🎲' }),
+      desktopAvailable()
+        ? button(app, 'Host from this machine', 'Runs the server here — for a LAN, or when the public one is down', () => void app.hostLocally(), {
+            icon: '🖧',
+          })
+        : null,
     ),
+    app.hostedPort > 0
+      ? h(
+          'div',
+          { class: 'notice', style: { marginTop: '18px' } },
+          `This machine is hosting on port ${app.hostedPort}. Your friend joins by setting their server to your address in Settings.`,
+        )
+      : null,
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );
 }
@@ -779,6 +791,11 @@ function errorScreen(app: App): HTMLElement {
       { class: 'menu' },
       button(app, 'Back to menu', '', () => app.show('title'), { primary: true }),
       button(app, 'Check the server setting', '', () => app.show('settings')),
+      desktopAvailable()
+        ? button(app, 'Host from this machine instead', 'Runs a server here and opens a haul on it', () => void app.hostLocally(), {
+            icon: '🖧',
+          })
+        : null,
     ),
     h(
       'p',

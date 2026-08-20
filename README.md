@@ -48,6 +48,9 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run e2e` | Drives two real browsers through a real match and screenshots it |
 | `npm run build` | Builds core, server and web client |
 | `npm run verify` | Everything above, plus the packaged desktop self-test |
+| `npm run verify:levels` | Proves every tower can actually be climbed |
+| `npm run levels` | Re-generates the chunk library from `tools/gen_chunks.py` |
+| `npm run calibrate` | Measures what a jump can reach, for the level design rules |
 | `npm run art` | Regenerates all store art and installer icons |
 | `npm run steam:config` | Regenerates the Steamworks achievement/stat/depot config |
 | `npm run dist:win` / `dist:linux` / `dist:mac` | Builds the Steam-ready desktop app |
@@ -102,6 +105,10 @@ node packages/server/dist/cli.js --static packages/client/dist   # also serves t
 Environment variables: `PORT`, `HOST`, `HAULMATES_MAX_ROOMS`, `HAULMATES_ROOM_GRACE`,
 `HAULMATES_LOG`. `GET /health` and `GET /stats` are available for monitoring.
 
+Players can point the game at their own server from the Settings screen, and the desktop
+build can host one in-process — *Play online → Host from this machine* starts the bundled
+server inside the game and opens a haul on it, which covers LAN play and outages.
+
 A single small VM handles a few thousand concurrent rooms — each one is two sockets and a
 60 Hz tick over about a kilobyte of state. Players can point the game at their own server
 from the Settings screen, and the desktop build can host one in-process.
@@ -124,20 +131,33 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
 
 Running `npm run verify` exercises, in order:
 
-- **60+ unit and integration tests** — simulation determinism over thousands of ticks,
-  rollback convergence, snapshot round-tripping, physics invariants, level connectivity,
-  protocol encoding, and full online matches against the real server under 25–130 ms
-  latency, jitter, and a simulated connection freeze.
+- **66 unit and integration tests** — simulation determinism over thousands of ticks,
+  rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
+  and full online matches against the real server under 25–130 ms latency, jitter, and a
+  simulated connection freeze.
+- **Proof that the towers can be climbed.** A flood fill over every foothold, using a
+  movement envelope measured from the simulation, finds a route from the spawn to the
+  goal; then every step of that route is re-attempted in the real simulation — both
+  players, the rope, the crate, the moving hazards — by searching launch positions and
+  input timings. This is the check that caught a campaign which was, for its first five
+  chunks, genuinely impossible.
 - **A browser end-to-end run** — two real Chromium clients connect to a real server, host
   and join a room, play a match, and are checked for byte-identical simulation state.
   Screenshots land in `test-results/`.
 - **A packaged desktop self-test** — the built Electron binary is launched headlessly and
   checked for a working renderer, preload bridge and save file.
 
-Not verified here, because it needs a Steam client and a real App ID: achievement
-delivery, rich presence, and the Steam friend-invite flow. That code is written
-defensively — every Steamworks call degrades to a no-op — and the game has been confirmed
-to run correctly with Steam absent.
+What is **not** verified here, stated plainly:
+
+- **Steamworks itself.** Achievement delivery, rich presence and the friend-invite flow
+  need a Steam client and a real App ID. Every Steamworks call is wrapped and degrades to
+  a no-op, and the game has been confirmed to run with Steam entirely absent — but "does
+  not crash without Steam" is not "works with Steam". Test it first.
+- **How it feels.** The automated checks prove the tower can be climbed and that both
+  players see the same world. They cannot tell you whether the jump arc is satisfying or
+  whether the third biome drags. Play it with someone before you price it.
+- **Audio output.** The synth is exercised by the tests and throws no errors, but nothing
+  here listens to it.
 
 ## Licence
 

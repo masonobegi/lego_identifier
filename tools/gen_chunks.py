@@ -1,16 +1,71 @@
 """Authoring tool for HAULMATES chunks.
 
-Chunks are painted on a 40-wide grid with permanent side walls, then emitted as
-TypeScript. Painting beats counting dots by hand: a miscounted row is a broken
-level, and this script asserts the invariants the game relies on.
+Chunks are painted on a 40-wide grid and emitted as TypeScript. Painting beats
+counting dots by hand: a miscounted row is a broken level.
+
+The important thing this file enforces is that **every chunk is climbable, and
+every pair of chunks is climbable across the seam between them**. That is not
+something you can eyeball. The rules, all calibrated against the simulation:
+
+  * Footholds sit 3 rows apart. Anything closer leaves less vertical clearance
+    than the player is tall, and they clip the platform they are jumping to.
+  * Consecutive footholds are never vertically aligned. To climb onto a
+    platform you have to be standing clear of it first, so the lower foothold
+    must extend past the upper one's edge — within two columns of it, one less
+    than a 3 row jump actually crosses (scripts/calibrate-jump.mjs).
+  * Nothing on the route is a bounce pad or a crumbling crate: one throws you
+    off, the other is gone a third of a second after you touch it.
+  * Decoration is painted through `deco()`, which refuses to write into a
+    foothold or the headroom above it. Hazards are placed by eye; the route is
+    placed by rule, and the rule wins.
+  * Every chunk has a landing platform at local row 1 and another at row h-2,
+    horizontally offset from each other. Stacked, those two sit exactly 3 rows
+    apart with clear rows between, so any chunk can follow any other.
+  * `climb()` lays that path automatically as a serpentine up the shaft;
+    chunks then restyle individual platforms and hang hazards around them.
+
+`scripts/verify-levels.mjs` re-derives all of this from the built level data,
+finds a route from the spawn to the goal, and then replays every step of it in
+the real simulation. It fails the build if any tower stops being climbable.
 """
 import io, os, sys
 
 W = 40
-GAP0, GAP1 = 16, 23  # the middle band that must stay open at chunk seams
+# The two shared landings are deliberately *offset* from each other. Stacked,
+# a chunk's top landing and the next chunk's bottom landing must not sit
+# directly above one another: a player cannot rise through a platform, so they
+# need somewhere to stand that is clear of the one they are climbing onto.
+TOP_C0, TOP_C1 = 10, 21
+BOT_C0, BOT_C1 = 18, 29
+LO, HI = 5, 30              # leftmost / rightmost platform start column
+# Footholds are three rows apart, not two. A player is 32px tall and a tile is
+# 24px, so a two row step leaves a single tile of clearance — less than the
+# player — and they clip the underside of the platform they are trying to
+# reach. Three rows leaves two tiles, which fits.
+V_STEP = 3
+# How far to the side of a platform a player may stand and still jump on to it.
+# The measurement says three columns; authoring uses two, so the route always
+# has a column of slack and never needs a frame-perfect launch.
+LAUNCH_REACH = 2
+
+
+def reachable(lower, upper):
+    """Can a player standing on `lower` jump onto `upper` three rows above?
+
+    Only if some column of the lower foothold is clear of the upper one and
+    within LAUNCH_REACH of its edge — you cannot rise through a platform, so
+    standing directly underneath it is useless."""
+    _, a0, a1 = lower
+    _, b0, b1 = upper
+    return any((b0 - LAUNCH_REACH <= x <= b0 - 1) or (b1 + 1 <= x <= b1 + LAUNCH_REACH)
+               for x in range(a0, a1 + 1))
+
 
 class C:
     def __init__(self, cid, biome, diff, h, tags=None, walls=True):
+        assert (h - 9) % V_STEP == 0, (
+            f'{cid}: height {h} does not land the climb path on the top seam '
+            f'(needs h - 9 divisible by {V_STEP})')
         self.id, self.biome, self.diff, self.tags = cid, biome, diff, tags or []
         self.h = h
         self.rows = []
@@ -18,15 +73,41 @@ class C:
             r = ['.'] * W
             if walls:
                 r[0] = r[1] = '#'
-                r[W-2] = r[W-1] = '#'
+                r[W - 2] = r[W - 1] = '#'
             self.rows.append(r)
         self.ents = []
+        self.path = []          # [(row, c0, c1)] bottom-to-top, the guaranteed route
+        self.protected = set()  # cells decoration must never touch
 
+    # ------------------------------------------------------------- painting
     def put(self, r, c, s):
         for k, ch in enumerate(s):
             assert 0 <= c + k < W, f'{self.id}: column overflow at row {r}'
             self.rows[r][c + k] = ch
         return self
+
+    def deco(self, r, c, s):
+        """Paint decoration without ever writing over the climbing route.
+
+        Hazards are positioned by eye; the route is positioned by rule. If the
+        two ever overlap, the rule wins — otherwise a stray spike silently
+        turns a foothold lethal."""
+        for k, ch in enumerate(s):
+            x = c + k
+            if 0 <= x < W and self.rows[r][x] == '.' and (r, x) not in self.protected:
+                self.rows[r][x] = ch
+        return self
+
+    def _protect(self, r, c0, c1):
+        """Reserve a foothold and the space a player stands in above it.
+
+        Without this, a decorative row of ceiling spikes lands in the headroom
+        over a platform and quietly turns the only route through the chunk into
+        a death trap — which is exactly what happened the first time."""
+        for x in range(max(2, c0 - 1), min(W - 2, c1 + 2)):
+            for y in (r, r - 1, r - 2):
+                if 0 <= y < self.h:
+                    self.protected.add((y, x))
 
     def fill(self, r0, r1, c0, c1, ch):
         for r in range(r0, r1 + 1):
@@ -35,7 +116,9 @@ class C:
         return self
 
     def col(self, c, r0, r1, ch):
-        return self.fill(r0, r1, c, c, ch)
+        for r in range(r0, r1 + 1):
+            self.deco(r, c, ch)
+        return self
 
     def saw(self, x, y, r=1, ax=0, ay=0, period=200, phase=0):
         self.ents.append(dict(type='saw', x=x, y=y, r=r, ax=ax, ay=ay, period=period, phase=phase))
@@ -46,27 +129,174 @@ class C:
                               ax=ax, ay=ay, period=period, phase=phase, smooth=smooth))
         return self
 
+    # ------------------------------------------------------------ the climb
+    def climb(self, width=6, step=7, start=15, direction=1, tile='#'):
+        """Lay the guaranteed route: the two seam landings plus a serpentine.
+
+        Built top-down from a platform that can reach the top landing, then
+        stepping down by a little more than one platform width so each foothold
+        sticks out past the one above it. The bottom-most is solved against the
+        bottom landing rather than assumed."""
+        self.put(1, TOP_C0, tile * (TOP_C1 - TOP_C0 + 1))
+        self._protect(1, TOP_C0, TOP_C1)
+        self.put(self.h - 2, BOT_C0, tile * (BOT_C1 - BOT_C0 + 1))
+        self._protect(self.h - 2, BOT_C0, BOT_C1)
+        top_landing = (1, TOP_C0, TOP_C1)
+        bottom_landing = (self.h - 2, BOT_C0, BOT_C1)
+
+        rows = list(range(4, self.h - 4, V_STEP))    # ascending = top to bottom
+        assert rows[-1] == self.h - 5, f'{self.id}: climb rows do not reach the bottom landing'
+
+        # The usable start columns depend on the platform width: a wide one
+        # placed at HI would run straight through the right-hand wall.
+        lo = max(LO, 2)
+        hi = min(HI, W - 3 - (width - 1))
+        assert lo <= hi, f'{self.id}: width {width} leaves no room between the walls'
+
+        # Anchor: a platform beside the top landing, on the requested side.
+        first = TOP_C1 + 1 if direction > 0 else TOP_C0 - width
+        first = max(lo, min(hi, first))
+        assert reachable((rows[0], first, first + width - 1), top_landing), (
+            f'{self.id}: anchor platform cannot reach the top landing')
+
+        cols = [first]
+        d = -direction
+        for _ in rows[1:]:
+            c = cols[-1] + d * step
+            if c > hi or c < lo:
+                d = -d
+                c = max(lo, min(hi, cols[-1] + d * step))
+            cols.append(c)
+
+        # Solve the bottom-most against the fixed bottom landing.
+        wanted = cols[-1]
+        above = (rows[-2], cols[-2], cols[-2] + width - 1) if len(cols) > 1 else top_landing
+        best = None
+        for c in range(lo, hi + 1):
+            here = (rows[-1], c, c + width - 1)
+            if not reachable(here, above):
+                continue
+            if not reachable(bottom_landing, here):
+                continue
+            if best is None or abs(c - wanted) < abs(best - wanted):
+                best = c
+        assert best is not None, f'{self.id}: no valid bottom platform column'
+        cols[-1] = best
+
+        placed = [(r, c, c + width - 1) for r, c in zip(rows, cols)]
+        for r, c0, c1 in placed:
+            self.put(r, c0, tile * (c1 - c0 + 1))
+            self._protect(r, c0, c1)
+
+        # Stored bottom-to-top, the order the route is climbed in.
+        self.path = [bottom_landing] + list(reversed(placed)) + [top_landing]
+        return self
+
+    # Tiles a player can actually come to rest on. A bounce pad throws you
+    # straight back off, and a crumbling crate is gone a third of a second
+    # after you touch it — neither can be the only thing holding the route up.
+    # They still appear everywhere, just never as the sole footing.
+    FOOTING = set('#=i')
+
+    def restyle(self, indices, ch):
+        """Repaint chosen path platforms — ice, crumbling crates, conveyors."""
+        assert ch in self.FOOTING, (
+            f'{self.id}: {ch!r} cannot be stood on, so it cannot be part of the route')
+        for i in indices:
+            r, c0, c1 = self.path[i]
+            self.put(r, c0, ch * (c1 - c0 + 1))
+        return self
+
+    def under(self, index, ch, inset=1):
+        """Hang something (usually spikes) beneath a path platform."""
+        r, c0, c1 = self.path[index]
+        self.put(r + 1, c0 + inset, ch * max(1, (c1 - c0 + 1) - inset * 2))
+        return self
+
+    def beside(self, index, ch, side, gap=2, length=2):
+        """Put something on the wall side of a path platform, out of the route."""
+        r, c0, c1 = self.path[index]
+        if side < 0:
+            c = max(2, c0 - gap - length)
+        else:
+            c = min(W - 2 - length, c1 + gap + 1)
+        self.put(r, c, ch * length)
+        return self
+
+    def wall_spikes(self, row, side, length=3):
+        """Spikes mounted on a side wall, pointing into the shaft."""
+        if side < 0:
+            self.deco(row, 2, '>' * length)
+        else:
+            self.deco(row, W - 2 - length, '<' * length)
+        return self
+
+    def ledge(self, row, c0, width, ch='#', top=None):
+        """A decorative shelf away from the route, optionally capped."""
+        self.deco(row, c0, ch * width)
+        if top:
+            self.deco(row - 1, c0, top * width)
+        return self
+
+    # ----------------------------------------------------------- validation
     def check(self, is_start=False, is_goal=False):
-        """Chunks must stack in any order, so every seam is a guaranteed
-        full-width open band: three clear rows at the top of each chunk meeting
-        three at the bottom of the one above it. Only non-solid markers may
-        appear there."""
         for i, r in enumerate(self.rows):
             assert len(r) == W, f'{self.id}: row {i} is {len(r)} wide'
-        def band(rows, what):
+
+        def clear(rows, what):
             for r in rows:
                 for c in range(2, W - 2):
                     assert self.rows[r][c] in '.!:', (
-                        f'{self.id}: {what} seam blocked at r{r} c{c} '
-                        f'({self.rows[r][c]})')
+                        f'{self.id}: {what} row {r} col {c} must stay clear (found {self.rows[r][c]})')
+
         if not is_goal:
-            band((0, 1, 2), 'top')
+            clear((0, 2), 'top seam')
+            for c in range(TOP_C0, TOP_C1 + 1):
+                assert self.rows[1][c] not in '.!:', f'{self.id}: missing top landing at col {c}'
         if not is_start:
-            band((self.h - 3, self.h - 2, self.h - 1), 'bottom')
+            clear((self.h - 1, self.h - 3), 'bottom seam')
+            for c in range(BOT_C0, BOT_C1 + 1):
+                assert self.rows[self.h - 2][c] not in '.!:', f'{self.id}: missing bottom landing at col {c}'
+            # The seam itself: this chunk's bottom landing has to be climbable
+            # from the top landing of whatever chunk ends up underneath it.
+            launches = [x for x in range(TOP_C0, TOP_C1 + 1)
+                        if (BOT_C0 - LAUNCH_REACH <= x <= BOT_C0 - 1)
+                        or (BOT_C1 + 1 <= x <= BOT_C1 + LAUNCH_REACH)]
+            assert launches, 'the shared seam landings are vertically aligned and cannot be climbed'
+
+        # Consecutive footholds must be within one jump of each other.
+        for (r0, a0, a1), (r1, b0, b1) in zip(self.path, self.path[1:]):
+            up = r0 - r1
+            assert up == V_STEP, (
+                f'{self.id}: {up} row step between footholds at rows {r0} and {r1} '
+                f'(every step must be exactly {V_STEP})')
+            gap = 0 if (b0 <= a1 and b1 >= a0) else (b0 - a1 - 1 if b0 > a1 else a0 - b1 - 1)
+            # There must be somewhere on the lower foothold to stand that is
+            # clear of the upper one and within jumping distance of its edge.
+            launches = [x for x in range(a0, a1 + 1)
+                        if (b0 - LAUNCH_REACH <= x <= b0 - 1) or (b1 + 1 <= x <= b1 + LAUNCH_REACH)]
+            assert launches, (
+                f'{self.id}: no launch column between rows {r0} [{a0}-{a1}] and '
+                f'{r1} [{b0}-{b1}] — the lower platform must stick out past the '
+                f'upper one by 1 to {LAUNCH_REACH} columns')
+            assert gap <= LAUNCH_REACH - 1, (
+                f'{self.id}: {gap} column gap between rows {r0} and {r1}')
+
+        # Every foothold must be made of something you can stand on, and must
+        # stay inside the walls.
+        for r, c0, c1 in self.path:
+            assert 2 <= c0 and c1 <= W - 3, (
+                f'{self.id}: foothold at row {r} spans {c0}-{c1}, outside the walls')
+            for x in range(c0, c1 + 1):
+                assert self.rows[r][x] in self.FOOTING, (
+                    f'{self.id}: foothold at row {r} col {x} is {self.rows[r][x]!r}, '
+                    f'which cannot be stood on')
+
         for e in self.ents:
             assert 0 <= e['y'] < self.h, f"{self.id}: entity y={e['y']} out of range"
         return self
 
+    # ------------------------------------------------------------- emitting
     def emit(self):
         rows = ',\n      '.join("'" + ''.join(r) + "'" for r in self.rows)
         ents = ''
@@ -80,269 +310,173 @@ class C:
         return (f"  {{\n    id: '{self.id}',\n    biome: {self.biome},\n    difficulty: {self.diff},\n"
                 f"{tags}    rows: [\n      {rows},\n    ],\n{ents}  }}")
 
+
 chunks = []
 
 # ===================================================== BIOME 0 — THE YARD ====
-# A scaffolded builder's yard. Wide ledges, generous gaps, nothing that kills
-# you for a mistimed jump. This is where you learn that the rope has opinions.
-c = C('yard_start', 0, 0, 32, tags=['start'])
+# A scaffolded builder's yard. Wide ledges, forgiving gaps, and the first
+# lessons in what the rope does to you.
+c = C('yard_start', 0, 0, 33, tags=['start'])
+c.climb(width=9, step=8, start=15, direction=1)
 c.put(2, 19, '!')
-c.put(5, 9, '####').put(5, 25, '####')
-c.put(8, 5, '#####').put(8, 29, '#####')
-c.put(10, 16, '========')
-c.put(13, 8, '####').put(13, 28, '####')
-c.put(16, 12, '#####').put(16, 23, '#####')
-c.put(19, 4, '######').put(19, 30, '######')
-c.put(21, 15, '======')
-c.put(24, 8, '#####').put(24, 27, '#####')
-c.put(27, 13, '=====').put(27, 22, '=====')
-c.put(28, 19, 'S')
-c.fill(30, 31, 2, 37, '#')
+c.fill(30, 32, 2, 37, '#')
+c.put(29, 19, 'S')
 chunks.append(c.check(is_start=True))
 
-c = C('yard_ladders', 0, 0, 30)
+c = C('yard_ladders', 0, 0, 33)
+c.climb(width=9, step=8, start=18, direction=-1)
 c.put(2, 19, '!')
-c.col(2, 4, 25, '*').col(37, 4, 25, '*')
-c.put(5, 6, '#####').put(5, 29, '#####')
-c.put(8, 14, '=========')
-c.put(11, 5, '######').put(11, 29, '######')
-c.put(14, 16, '#######')
-c.put(17, 6, '#####').put(17, 29, '#####')
-c.put(20, 13, '=====').put(20, 22, '=====')
-c.put(23, 4, '#######').put(23, 29, '#######')
-c.put(26, 9, '#####').put(26, 26, '#####')
+c.col(2, 5, 27, '*').col(37, 5, 27, '*')
+c.restyle([3, 6], '=')
 chunks.append(c.check())
 
-c = C('yard_swing', 0, 1, 30)
+c = C('yard_swing', 0, 1, 33)
+c.climb(width=9, step=8, start=12, direction=1)
 c.put(2, 19, '!')
-c.col(2, 5, 24, '*').col(37, 5, 24, '*')
-c.put(5, 4, '######').put(5, 30, '######')
-c.put(10, 3, '#####').put(10, 32, '#####')
-c.put(9, 6, '^^').put(9, 33, '^^')
-c.put(16, 3, '######').put(16, 31, '######')
-c.put(22, 3, '#####').put(22, 32, '#####')
-c.put(26, 3, '########').put(26, 29, '########')
-c.put(25, 9, '^^').put(25, 30, '^^')
+c.col(2, 6, 24, '*').col(37, 6, 24, '*')
+c.wall_spikes(11, -1, 2).wall_spikes(17, 1, 2)
 chunks.append(c.check())
 
-c = C('yard_crates', 0, 0, 30)
+c = C('yard_crates', 0, 0, 33)
+c.climb(width=9, step=8, start=20, direction=1)
 c.put(2, 19, '!')
-c.put(5, 8, 'xxxx').put(5, 28, 'xxxx')
-c.put(8, 14, 'xxxxxx')
-c.put(11, 5, '#####').put(11, 30, '#####')
-c.put(10, 7, '^^').put(10, 32, '^^')
-c.put(14, 16, 'xxxxxxx')
-c.put(17, 6, '####').put(17, 30, '####')
-c.put(20, 11, 'xxxx').put(20, 25, 'xxxx')
-c.put(23, 4, '######').put(23, 30, '######')
-c.put(22, 6, '^^').put(22, 32, '^^')
-c.put(26, 12, '#####').put(26, 23, '#####')
+c.deco(11, 4, 'xxxx').deco(20, 30, 'xxxx').deco(26, 6, 'xxx')
+c.wall_spikes(14, 1, 3)
 chunks.append(c.check())
 
-c = C('yard_bounce', 0, 1, 30)
+c = C('yard_bounce', 0, 1, 33)
+c.climb(width=9, step=8, start=14, direction=1)
 c.put(2, 19, '!')
-c.put(6, 3, '####').put(6, 33, '####')
-c.put(5, 14, 'vvvvvvvv')
-c.put(11, 8, '#####').put(11, 27, '#####')
-c.put(10, 10, 'oo').put(10, 29, 'oo')
-c.put(16, 16, '########')
-c.put(15, 18, 'oooo')
-c.put(21, 4, '#####').put(21, 31, '#####')
-c.put(20, 6, 'oo').put(20, 33, 'oo')
-c.put(26, 2, '#########').put(26, 29, '#########')
+c.deco(24, 4, 'oooo').deco(15, 32, 'ooo')
+c.deco(5, 14, 'vvvvvvvv')
 chunks.append(c.check())
 
-c = C('yard_saw', 0, 1, 30)
+c = C('yard_saw', 0, 1, 33)
+c.climb(width=9, step=8, start=16, direction=-1)
 c.put(2, 19, '!')
-c.put(6, 2, '#########').put(6, 29, '#########')
-c.saw(x=14, y=9, r=1, ax=12, ay=0, period=190)
-c.put(12, 12, '#############')
-c.put(17, 3, '######').put(17, 31, '######')
-c.saw(x=8, y=20, r=1, ax=0, ay=5, period=150, phase=40)
-c.saw(x=31, y=20, r=1, ax=0, ay=5, period=150, phase=110)
-c.put(22, 14, '#########')
-c.put(26, 2, '########').put(26, 30, '########')
-c.put(25, 4, '^^').put(25, 34, '^^')
+c.saw(x=8, y=13, r=1, ax=22, ay=0, period=200)
+c.saw(x=30, y=22, r=1, ax=-20, ay=0, period=230, phase=60)
+c.wall_spikes(8, -1, 2)
 chunks.append(c.check())
 
 # ================================================== BIOME 1 — THE FOUNDRY ====
-# Heat, moving metal and things that push you toward the heat.
-c = C('foundry_lava', 1, 1, 30)
+# Heat, moving metal, and machinery that pushes you toward the heat.
+c = C('foundry_lava', 1, 1, 33)
+c.climb(width=9, step=8, start=15, direction=1)
 c.put(2, 19, '!')
-c.put(6, 5, '######').put(6, 29, '######')
-c.put(10, 13, '##########')
-c.put(14, 3, '######').put(14, 31, '######')
-c.put(18, 15, '########')
-c.put(22, 4, '########').put(22, 28, '########')
-c.put(26, 2, '#############').put(26, 27, '###########')
-c.put(25, 5, '~~~~~~~~').put(25, 29, '~~~~~~~')
+c.ledge(26, 2, 5, '#', '~').ledge(20, 33, 5, '#', '~').ledge(11, 2, 4, '#', '~')
+c.wall_spikes(23, 1, 2)
 chunks.append(c.check())
 
-c = C('foundry_conveyor', 1, 2, 30)
+c = C('foundry_conveyor', 1, 2, 33)
+c.climb(width=9, step=8, start=17, direction=-1)
 c.put(2, 19, '!')
-c.put(6, 4, 'cccccccc').put(6, 28, 'CCCCCCCC')
-c.put(5, 10, '^').put(5, 29, '^')
-c.put(11, 14, 'CCCCCCCCCC')
-c.put(15, 3, 'cccccccc').put(15, 29, 'CCCCCCCC')
-c.put(20, 12, 'cccccccccccc')
-c.put(24, 4, '######').put(24, 30, '######')
-c.put(26, 2, '###########').put(26, 29, '#########')
-c.put(25, 5, '~~~~~~').put(25, 31, '~~~~~')
+c.deco(23, 4, 'ccccc').deco(14, 30, 'CCCCC')
+c.ledge(24, 32, 5, '#', '~')
 chunks.append(c.check())
 
-c = C('foundry_press', 1, 2, 32)
+c = C('foundry_press', 1, 2, 33)
+c.climb(width=9, step=8, start=14, direction=1)
 c.put(2, 19, '!')
-c.put(7, 2, '##########').put(7, 28, '##########')
-c.mover(x=13, y=5, w=6, h=3, ax=0, ay=6, period=170, deadly=True)
-c.put(13, 14, '############')
-c.mover(x=4, y=16, w=5, h=3, ax=0, ay=5, period=200, phase=60, deadly=True)
-c.mover(x=31, y=16, w=5, h=3, ax=0, ay=5, period=200, phase=140, deadly=True)
-c.put(21, 2, '########').put(21, 30, '########')
-c.put(25, 13, '##########')
-c.put(28, 3, '######').put(28, 31, '######')
-c.put(27, 4, '~~~~').put(27, 33, '~~~')
+c.mover(x=4, y=8, w=4, h=3, ax=0, ay=6, period=170, deadly=True)
+c.mover(x=31, y=17, w=4, h=3, ax=0, ay=6, period=190, phase=70, deadly=True)
+c.ledge(28, 2, 4, '#', '~')
 chunks.append(c.check())
 
-c = C('foundry_saws', 1, 2, 30)
+c = C('foundry_saws', 1, 2, 33)
+c.climb(width=9, step=8, start=19, direction=1)
 c.put(2, 19, '!')
-c.put(6, 2, '#######').put(6, 31, '#######')
-c.saw(x=12, y=8, r=1, ax=0, ay=8, period=160)
-c.saw(x=27, y=8, r=1, ax=0, ay=8, period=160, phase=80)
-c.put(12, 14, '##########')
-c.put(17, 4, '######').put(17, 30, '######')
-c.saw(x=20, y=20, r=1, ax=14, ay=0, period=230, phase=30)
-c.put(22, 2, '######').put(22, 32, '######')
-c.put(26, 12, '#############')
-c.put(25, 14, '^^').put(25, 30, '^^')
+c.saw(x=10, y=9, r=1, ax=0, ay=9, period=160)
+c.saw(x=28, y=15, r=1, ax=0, ay=9, period=160, phase=80)
+c.wall_spikes(20, -1, 2)
 chunks.append(c.check())
 
-c = C('foundry_moving', 1, 2, 32)
+c = C('foundry_moving', 1, 2, 33)
+c.climb(width=9, step=8, start=13, direction=-1)
 c.put(2, 19, '!')
-c.put(7, 3, '######').put(7, 31, '######')
-c.mover(x=10, y=11, w=5, h=1, ax=16, ay=0, period=240)
-c.mover(x=25, y=16, w=5, h=1, ax=-16, ay=0, period=240, phase=120)
-c.put(21, 2, '#####').put(21, 33, '#####')
-c.mover(x=15, y=24, w=6, h=1, ax=0, ay=-7, period=200)
-c.put(28, 2, '###########').put(28, 28, '##########')
-c.put(27, 5, '~~~~~~').put(27, 30, '~~~~~')
+c.mover(x=8, y=12, w=5, h=1, ax=18, ay=0, period=240)
+c.mover(x=26, y=21, w=5, h=1, ax=-16, ay=0, period=240, phase=120)
+c.ledge(27, 33, 4, '#', '~')
 chunks.append(c.check())
 
 # ================================================== BIOME 2 — THE FREEZER ====
-# No friction, no mercy, and a wind that has opinions about where you land.
-c = C('freeze_ice', 2, 2, 30)
+# No friction, no mercy, and a wind with opinions about where you land.
+c = C('freeze_ice', 2, 2, 33)
+c.climb(width=9, step=8, start=16, direction=1)
 c.put(2, 19, '!')
-c.put(6, 3, 'iiiiiiii').put(6, 29, 'iiiiiiii')
-c.put(11, 13, 'iiiiiiiiii')
-c.put(10, 14, '^').put(10, 21, '^')
-c.put(16, 2, 'iiiiiiiii').put(16, 29, 'iiiiiiiii')
-c.put(21, 12, 'iiiiiiiiiiii')
-c.put(26, 2, 'iiiiiii').put(26, 31, 'iiiiiii')
-c.put(25, 4, '^^').put(25, 34, '^^')
+c.restyle([1, 2, 4, 5, 7, 8], 'i')
+c.wall_spikes(19, 1, 3)
 chunks.append(c.check())
 
-c = C('freeze_wind', 2, 2, 32)
+c = C('freeze_wind', 2, 2, 33)
+c.climb(width=9, step=8, start=18, direction=-1)
 c.put(2, 19, '!')
-c.col(6, 5, 28, 'W').col(33, 5, 28, 'W')
-c.put(5, 12, 'vvvvvvvv').put(5, 24, 'vvvv')
-c.put(9, 2, '####').put(9, 34, '####')
-c.put(13, 14, '#########')
-c.put(12, 16, 'vvv')
-c.put(18, 2, '#####').put(18, 33, '#####')
-c.put(23, 13, '##########')
-c.put(28, 2, '########').put(28, 30, '########')
-c.put(27, 4, '^^').put(27, 34, '^^')
+c.col(3, 6, 27, 'W').col(36, 6, 27, 'W')
+c.deco(5, 13, 'vvvvvv').deco(5, 23, 'vvvv')
 chunks.append(c.check())
 
-c = C('freeze_crumble', 2, 3, 30)
+c = C('freeze_crumble', 2, 3, 33)
+c.climb(width=9, step=8, start=15, direction=1)
 c.put(2, 19, '!')
-c.col(2, 5, 25, '*').col(37, 5, 25, '*')
-c.put(5, 8, 'xxxx').put(5, 28, 'xxxx')
-c.put(9, 15, 'xxxxxxxx')
-c.put(13, 4, 'xxxxx').put(13, 31, 'xxxxx')
-c.put(12, 6, '^').put(12, 33, '^')
-c.put(17, 13, 'xxxxxx').put(17, 23, 'xxxxxx')
-c.put(21, 6, 'xxxx').put(21, 30, 'xxxx')
-c.put(26, 12, 'xxxxxxxxxxxx')
-c.put(25, 14, '^^^').put(25, 26, '^^^')
+c.restyle([1, 3, 5, 7], 'i')
+c.deco(9, 4, 'xxxx').deco(18, 30, 'xxxx').deco(24, 6, 'xxx')
+c.col(2, 6, 26, '*').col(37, 6, 26, '*')
+c.wall_spikes(12, -1, 2)
 chunks.append(c.check())
 
-c = C('freeze_saws', 2, 3, 30)
+c = C('freeze_saws', 2, 3, 33)
+c.climb(width=9, step=8, start=20, direction=-1)
 c.put(2, 19, '!')
-c.put(6, 2, 'iiiiiii').put(6, 31, 'iiiiiii')
-c.saw(x=10, y=9, r=1, ax=18, ay=0, period=200)
-c.put(12, 14, 'iiiiiiiiii')
-c.put(17, 3, 'iiiii').put(17, 32, 'iiiii')
-c.saw(x=7, y=19, r=1, ax=0, ay=7, period=140, phase=20)
-c.saw(x=32, y=19, r=1, ax=0, ay=7, period=140, phase=90)
-c.put(22, 15, 'iiiiiiiii')
-c.put(26, 2, 'iiiiiiii').put(26, 30, 'iiiiiiii')
-c.put(25, 5, '^^').put(25, 33, '^^')
+c.restyle([1, 3, 5, 7], 'i')
+c.saw(x=19, y=11, r=1, ax=14, ay=0, period=190)
+c.saw(x=9, y=20, r=1, ax=0, ay=6, period=140, phase=40)
 chunks.append(c.check())
 
-c = C('freeze_pit', 2, 3, 32)
+c = C('freeze_pit', 2, 3, 33)
+c.climb(width=9, step=8, start=12, direction=1)
 c.put(2, 19, '!')
 c.col(2, 5, 28, '*').col(37, 5, 28, '*')
-c.put(5, 3, '#####').put(5, 32, '#####')
-c.put(11, 3, '####').put(11, 33, '####')
-c.put(10, 5, '^').put(10, 35, '^')
-c.put(17, 3, '####').put(17, 33, '####')
-c.put(23, 3, '#####').put(23, 32, '#####')
-c.put(28, 3, '######').put(28, 31, '######')
-c.put(27, 5, '^^').put(27, 33, '^^')
+c.wall_spikes(10, 1, 2).wall_spikes(22, -1, 2)
+c.deco(16, 4, 'xxxx').deco(24, 30, 'xxx')
 chunks.append(c.check())
 
 # ==================================================== BIOME 3 — THE SPIRE ====
 # Everything at once, at the top of the world, with the wind in your teeth.
-c = C('spire_gauntlet', 3, 3, 32)
+c = C('spire_gauntlet', 3, 3, 33)
+c.climb(width=9, step=8, start=17, direction=1)
 c.put(2, 19, '!')
-c.put(6, 2, '######').put(6, 32, '######')
-c.saw(x=19, y=9, r=1, ax=0, ay=6, period=130)
-c.put(11, 6, 'xxxxxx').put(11, 28, 'xxxxxx')
-c.put(15, 14, 'iiiiiiiiii')
-c.col(6, 17, 27, 'W').col(33, 17, 27, 'W')
-c.put(20, 2, '#####').put(20, 33, '#####')
-c.mover(x=14, y=24, w=6, h=1, ax=0, ay=-6, period=170)
-c.put(28, 2, '########').put(28, 30, '########')
-c.put(27, 4, '^^^').put(27, 33, '^^^')
+c.restyle([4], 'i')
+c.deco(12, 4, 'xxxx').deco(22, 30, 'xxx')
+c.saw(x=19, y=16, r=1, ax=0, ay=7, period=130)
+c.col(3, 18, 28, 'W').col(36, 18, 28, 'W')
+c.wall_spikes(9, -1, 2)
 chunks.append(c.check())
 
-c = C('spire_crushers', 3, 3, 32)
+c = C('spire_crushers', 3, 3, 33)
+c.climb(width=9, step=8, start=14, direction=-1)
 c.put(2, 19, '!')
-c.put(7, 2, '#########').put(7, 29, '#########')
-c.mover(x=12, y=4, w=5, h=3, ax=0, ay=7, period=140, deadly=True)
-c.mover(x=23, y=4, w=5, h=3, ax=0, ay=7, period=140, phase=70, deadly=True)
-c.put(14, 13, '##########')
-c.saw(x=8, y=19, r=1, ax=0, ay=6, period=120)
-c.saw(x=31, y=19, r=1, ax=0, ay=6, period=120, phase=60)
-c.put(20, 3, '######').put(20, 31, '######')
-c.put(25, 14, '#########')
-c.put(28, 2, '###########').put(28, 28, '##########')
-c.put(27, 5, '~~~~~').put(27, 30, '~~~~')
+c.mover(x=6, y=7, w=4, h=3, ax=0, ay=7, period=140, deadly=True)
+c.mover(x=29, y=7, w=4, h=3, ax=0, ay=7, period=140, phase=70, deadly=True)
+c.saw(x=19, y=23, r=1, ax=0, ay=5, period=120)
+c.ledge(28, 2, 4, '#', '~').ledge(28, 33, 4, '#', '~')
 chunks.append(c.check())
 
-c = C('spire_final', 3, 3, 32)
+c = C('spire_final', 3, 3, 33)
+c.climb(width=9, step=8, start=21, direction=1)
 c.put(2, 19, '!')
 c.col(2, 5, 28, '*').col(37, 5, 28, '*')
-c.put(6, 4, '####').put(6, 32, '####')
-c.saw(x=20, y=10, r=1, ax=13, ay=0, period=150)
-c.put(12, 6, 'xxxx').put(12, 30, 'xxxx')
-c.put(16, 16, '#######')
-c.put(15, 18, 'ooo')
-c.put(21, 4, 'iiiii').put(21, 31, 'iiiii')
+c.deco(20, 32, 'ooo')
+c.deco(10, 4, 'xxxx').deco(19, 30, 'xxx')
+c.saw(x=8, y=12, r=1, ax=24, ay=0, period=150)
 c.saw(x=19, y=25, r=1, ax=0, ay=4, period=110)
-c.put(28, 3, '######').put(28, 31, '######')
-c.put(27, 5, '^^').put(27, 33, '^^')
+c.wall_spikes(18, 1, 2)
 chunks.append(c.check())
 
 c = C('spire_goal', 3, 0, 24, tags=['goal'])
+c.climb(width=9, step=8, start=15, direction=1)
 c.fill(0, 1, 2, 37, '#')
 c.put(2, 17, 'FFFFFF')
-c.put(3, 14, '############')
-c.put(6, 19, '!')
-c.put(9, 5, '######').put(9, 29, '######')
-c.put(13, 15, '########')
-c.put(17, 4, '#######').put(17, 29, '#######')
-c.put(20, 13, '=====').put(20, 22, '=====')
+c.put(5, 19, '!')
 chunks.append(c.check(is_goal=True))
 
 out = io.StringIO()
@@ -351,11 +485,13 @@ out.write("""import type { ChunkDef } from './level.js';
 /**
  * Hand-authored chunks, generated by tools/gen_chunks.py.
  *
- * Every chunk is exactly 40 tiles wide with solid side walls, and the top and
- * bottom three rows of every chunk are clear across the full interior. That is
- * what lets any chunk stack on any other and still be climbable — the invariant
- * the endless tower generator depends on, and the one the level test suite
- * re-checks on every build.
+ * Every chunk is 40 tiles wide with solid side walls, and carries a landing
+ * platform at local row 1 and another at row h-2. Stacked, those land exactly
+ * three rows apart with clear rows between them, so any chunk can follow any
+ * other and the seam is always jumpable. Inside a chunk the route is a
+ * serpentine whose footholds are never more than three rows and three columns
+ * apart — one jump. `scripts/verify-levels.mjs` re-derives all of this from the
+ * assembled level and fails the build if it stops holding.
  */
 export const CHUNKS: ChunkDef[] = [
 """)
@@ -368,7 +504,6 @@ export const CAMPAIGN_CHUNK_IDS = [
 out.write('\n'.join(f"  '{ch.id}'," for ch in chunks))
 out.write("\n];\n")
 
-dest = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 path = sys.argv[1]
 open(path, 'w').write(out.getvalue())
 print(f'wrote {len(chunks)} chunks, {sum(ch.h for ch in chunks)} rows -> {path}')

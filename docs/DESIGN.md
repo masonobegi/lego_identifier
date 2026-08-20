@@ -65,24 +65,55 @@ already-punishing rope unbearable.
 **Death hitboxes are inset five pixels.** Spikes are smaller than their tile. The rope
 supplies the difficulty; the hazards should not add unfairness on top.
 
+**The crate only cares about real falls.** It originally took damage from any impact above
+340 px/s, which meant ordinary jumping chipped it away and destroyed it roughly every ten
+seconds — a bug that reads as a broken game, not a tense one. The threshold is now 560
+px/s, so a jump costs nothing and a twenty-tile fall costs half the crate, and it slowly
+repairs itself after a stretch of careful handling.
+
 ## Level design rules
 
-Chunks are 40 tiles wide with permanent side walls, and the top and bottom three rows of
-every chunk are clear across the full interior. That invariant means any chunk stacks on
-any other and stays climbable, which is what makes the seeded endless tower possible
-without a generator that can produce impossible geometry. The build fails if an authored
-chunk breaks it.
+These were not obvious, and getting them wrong produced a tower that looked completely
+reasonable and could not be climbed past the fifth platform. They are now enforced by
+`tools/gen_chunks.py` at authoring time and re-derived from the built level data by
+`scripts/verify-levels.mjs` on every build.
+
+**Footholds sit exactly three rows apart.** A tile is 24px and a player is 32px tall, so a
+two-row step leaves a single tile of clearance — less than the player. They clip the
+underside of the platform they are jumping to and the route silently dies.
+
+**Consecutive footholds are never vertically aligned.** You cannot rise through a
+platform, so to climb onto one you must first be standing clear of it. The lower foothold
+has to stick out past the upper one's edge, within two columns of it.
+
+**The route is never made of something you cannot stand on.** Bounce pads throw you
+straight back off; crumbling crates are gone a third of a second after you touch them.
+Both appear all over the levels, but never as the only thing holding the route up.
+
+**Decoration can never touch the route.** Hazards are placed by eye and the route is
+placed by rule, so the painter refuses to write into a foothold or the two rows of
+headroom above it. A single stray ceiling spike in the wrong place is otherwise enough to
+seal a chunk.
+
+**Every chunk carries the same two landing platforms**, one at row 1 and one at row h-2,
+offset from each other horizontally. Stacked, they land three rows apart with clear rows
+between, so any chunk can follow any other — which is what makes the seeded endless tower
+possible without a generator that can produce impossible geometry.
+
+The movement envelope those rules encode is measured, not guessed:
+`scripts/calibrate-jump.mjs` runs the real simulation and reports how far a jump reaches
+for each rise. Authoring then allows one column less than the measurement.
 
 Each chunk carries a checkpoint two rows below its top edge, directly in the path, so
-progress banks automatically without asking players to detour.
-
-Difficulty is a number on each chunk, and the endless tower ramps from 0 to 3 across the
-run while refusing to place the same chunk twice in a row.
+progress banks automatically without asking players to detour. Difficulty is a number on
+each chunk, and the endless tower ramps from 0 to 3 across the run while refusing to place
+the same chunk twice in a row.
 
 ## Modes
 
 **The Long Haul** — twenty authored chunks across four biomes: a builder's yard, a
-foundry, a freezer, and a spire that combines everything. Roughly 14,000 pixels of climb.
+foundry, a freezer, and a spire that combines everything. Around 650 tiles of climb, with
+a checkpoint at the top of every chunk.
 
 **The Gauntlet** — a seeded tower of 3 to 30 floors drawn from the same chunk library. The
 seed is shared, so both players build the same tower from the same twelve bytes.

@@ -29,6 +29,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Prove every tower can be climbed
+        run: npm run verify:levels
+
       - name: Install Chromium for the browser tests
         run: npx playwright install --with-deps chromium
 

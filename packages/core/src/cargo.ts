@@ -6,6 +6,8 @@ import {
   CARGO_HP,
   CARGO_IMPACT_MIN,
   CARGO_IMPACT_SCALE,
+  CARGO_REGEN,
+  CARGO_REGEN_DELAY,
   CARGO_TETHER,
   CARGO_W,
   DT,
@@ -32,6 +34,7 @@ const WIND_STEP = WIND_ACCEL * DT * DT;
 function damage(world: World, amount: number, x: number, y: number): void {
   if (world.cargo.hp <= 0) return;
   world.cargo.hp -= amount;
+  world.cargo.calm = 0;
   world.cargo.shake = Math.min(24, world.cargo.shake + amount * 0.6);
   pushEvent(world, EV_CARGO_HIT, x, y, amount, world.cargo.hp);
   if (world.cargo.hp <= 0) {
@@ -45,6 +48,13 @@ function damage(world: World, amount: number, x: number, y: number): void {
 export function updateCargo(level: Level, world: World): void {
   const c = world.cargo;
   if (c.shake > 0) c.shake *= 0.9;
+
+  // Handle it carefully for a while and the straps get retightened. Without
+  // this, a long climb is a slow accumulation of unavoidable chip damage.
+  if (c.hp > 0 && c.hp < CARGO_HP) {
+    c.calm++;
+    if (c.calm > CARGO_REGEN_DELAY) c.hp = Math.min(CARGO_HP, c.hp + CARGO_REGEN);
+  }
 
   let vx = (c.x - c.px) * CARGO_DAMPING;
   let vy = (c.y - c.py) * CARGO_DAMPING;

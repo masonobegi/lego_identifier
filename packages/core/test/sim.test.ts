@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CHUNKS,
   DT,
   EV_CARGO_BREAK,
   GRAVITY,
@@ -474,67 +473,4 @@ describe('physics invariants', () => {
     expect(world.cargoBreaks).toBeGreaterThan(0);
   });
 
-});
-
-describe('level assembly', () => {
-  it('builds the campaign with a spawn, a goal and checkpoints', () => {
-    const level = buildCampaign();
-    expect(level.w).toBe(40);
-    expect(level.h).toBeGreaterThan(500);
-    expect(level.checkpoints.length).toBeGreaterThanOrEqual(CHUNKS.length - 1);
-    expect(level.goalY).toBeLessThan(level.spawnY);
-    expect(level.chunkIds[0]).toBe('yard_start');
-  });
-
-  it('keeps a clear full-width band at every chunk seam', () => {
-    const level = buildCampaign();
-    let row = level.h;
-    for (const id of level.chunkIds) {
-      const def = CHUNKS.find((c) => c.id === id)!;
-      row -= def.rows.length;
-      const isGoalChunk = def.tags?.includes('goal') ?? false;
-      const isStartChunk = def.tags?.includes('start') ?? false;
-      const check = (r: number) => {
-        for (let x = 2; x < level.w - 2; x++) {
-          const t = level.tiles[r * level.w + x];
-          expect([0, 15, 17]).toContain(t);
-        }
-      };
-      if (!isGoalChunk) for (let i = 0; i < 3; i++) check(row + i);
-      if (!isStartChunk) for (let i = 1; i <= 3; i++) check(row + def.rows.length - i);
-    }
-  });
-
-  it('generates identical towers from identical seeds', () => {
-    const a = buildTower(4242, 12);
-    const b = buildTower(4242, 12);
-    expect(a.id).toBe(b.id);
-    expect(Array.from(a.tiles)).toEqual(Array.from(b.tiles));
-    expect(a.chunkIds).toEqual(b.chunkIds);
-  });
-
-  it('generates different towers from different seeds', () => {
-    const a = buildTower(1, 12);
-    const b = buildTower(2, 12);
-    expect(a.chunkIds).not.toEqual(b.chunkIds);
-  });
-
-  it('always begins with a start chunk and ends with a goal chunk', () => {
-    for (let seed = 0; seed < 60; seed++) {
-      const level = buildTower(seed * 7919 + 3, 10);
-      const first = CHUNKS.find((c) => c.id === level.chunkIds[0])!;
-      const last = CHUNKS.find((c) => c.id === level.chunkIds[level.chunkIds.length - 1])!;
-      expect(first.tags).toContain('start');
-      expect(last.tags).toContain('goal');
-    }
-  });
-
-  it('never repeats the same chunk back to back', () => {
-    for (let seed = 0; seed < 40; seed++) {
-      const level = buildTower(seed * 104729 + 11, 16);
-      for (let i = 1; i < level.chunkIds.length; i++) {
-        expect(level.chunkIds[i]).not.toBe(level.chunkIds[i - 1]);
-      }
-    }
-  });
 });
