@@ -38,13 +38,27 @@ export const ACTION_LABEL: Record<Action, string> = {
 
 export type Bindings = Record<Action, string[]>;
 
+/**
+ * First player on a shared keyboard.
+ *
+ * Deliberately no arrow keys. They used to be here as a convenience, and it
+ * quietly broke the entire couch mode: both players' masks are read from one
+ * `down` set, so every arrow press drove player one as well. Player two
+ * walking left dragged player one left; player two walking left while player
+ * one held D set both direction bits and the cancel rule below froze player
+ * one on the spot. In a game that is two bodies on one rope, the second player
+ * could not move without wrecking the first.
+ *
+ * Solo players still reach for the arrows, so `soloKeyboard` hands them player
+ * two's bindings as well — but only when nobody is sitting in that seat.
+ */
 export const DEFAULT_P1: Bindings = {
-  left: ['KeyA', 'ArrowLeft'],
-  right: ['KeyD', 'ArrowRight'],
-  jump: ['Space', 'KeyW', 'ArrowUp'],
+  left: ['KeyA'],
+  right: ['KeyD'],
+  jump: ['Space', 'KeyW'],
   grip: ['ShiftLeft', 'KeyJ'],
   reel: ['KeyF', 'KeyE'],
-  down: ['KeyS', 'ArrowDown'],
+  down: ['KeyS'],
   emote: ['KeyT'],
   restart: ['KeyR'],
 };
@@ -93,6 +107,12 @@ export class InputManager {
   config: InputConfig;
   /** Gamepad index assigned to each local slot, or -1. */
   pads: number[] = [-1, -1];
+  /**
+   * True when the second seat is not a local human — playing online, or with
+   * the bot. Player one then also answers to player two's keys.
+   */
+  soloKeyboard = false;
+
   /** True while a rebinding prompt is capturing the next key. */
   capture: ((code: string) => void) | null = null;
   lastInputWasPad = false;
@@ -103,6 +123,7 @@ export class InputManager {
       if (!Array.isArray(this.config.p1[a])) this.config.p1[a] = [...DEFAULT_P1[a]];
       if (!Array.isArray(this.config.p2[a])) this.config.p2[a] = [...DEFAULT_P2[a]];
     }
+    this.unalias();
   }
 
   attach(target: Window = window): void {
@@ -176,6 +197,20 @@ export class InputManager {
       }
     }
 
+    // Nobody in the second seat: let player one use those keys too, so the
+    // arrows work for someone playing alone without ever aliasing onto a real
+    // second player.
+    if (slot === 0 && this.soloKeyboard) {
+      for (const action of ACTIONS) {
+        for (const code of this.config.p2[action]) {
+          if (this.down.has(code)) {
+            mask |= ACTION_BIT[action];
+            break;
+          }
+        }
+      }
+    }
+
     const pad = this.padFor(slot);
     if (pad) {
       for (const action of ACTIONS) {
@@ -221,10 +256,51 @@ export class InputManager {
     return false;
   }
 
-  rebind(slot: number, action: Action, code: string): void {
+  /**
+   * Bind a key, refusing anything the other player already holds.
+   *
+   * One `down` set feeds both masks, so a key shared between players is not a
+   * preference — it is one player driving the other. Returns false when the
+   * key was rejected, so the UI can say why.
+   */
+  rebind(slot: number, action: Action, code: string): boolean {
+    if (this.boundToOtherPlayer(slot, code)) return false;
     const bindings = slot === 0 ? this.config.p1 : this.config.p2;
     bindings[action] = [code];
     this.persist();
+    return true;
+  }
+
+  /**
+   * Strip any key player one shares with player two.
+   *
+   * Saved bindings outlive the defaults that created them, so a config written
+   * before the arrow keys were taken off player one would keep aliasing the
+   * two players together forever. Player two wins the key: their layout is the
+   * smaller one and they have nowhere else to go.
+   */
+  private unalias(): void {
+    let stripped = 0;
+    for (const action of ACTIONS) {
+      const kept = this.config.p1[action].filter((code) => !this.boundToOtherPlayer(0, code));
+      if (kept.length !== this.config.p1[action].length) {
+        stripped += this.config.p1[action].length - kept.length;
+        // Never leave an action unbound: fall back to the default, minus
+        // anything player two holds.
+        this.config.p1[action] =
+          kept.length > 0 ? kept : DEFAULT_P1[action].filter((code) => !this.boundToOtherPlayer(0, code));
+      }
+    }
+    if (stripped > 0) this.persist();
+  }
+
+  /** Which action of the other player owns this key, if any. */
+  boundToOtherPlayer(slot: number, code: string): Action | null {
+    const other = slot === 0 ? this.config.p2 : this.config.p1;
+    for (const action of ACTIONS) {
+      if (other[action].includes(code)) return action;
+    }
+    return null;
   }
 
   resetDefaults(): void {

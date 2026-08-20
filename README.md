@@ -67,6 +67,8 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm test` | 60+ unit and integration tests (simulation, netcode, protocol, levels) |
 | `npm run e2e` | Drives two real browsers through a real match and screenshots it |
 | `npm run web` | Bundles the whole game into one self-contained HTML file, then plays it |
+| `npm run verify:server` | Starts the server the way a container does and plays a match against it |
+| `npm run verify:docker` | Builds the image, runs it, plays a match against it (needs Docker) |
 | `npm run build` | Builds core, server and web client |
 | `npm run verify` | Everything above, plus the packaged desktop self-test |
 | `npm run verify:levels` | Proves every tower can actually be climbed |
@@ -106,13 +108,18 @@ ballistics against the tile grid with the body's real box, over every column on 
 because the route only names one cell per ledge and that cell often has a ceiling nine
 pixels above the hauler's head.
 
-Left completely alone — two bots, nobody driving — a pair reaches route cell 72 of 302
-and its second checkpoint in about seven minutes, then loses the crate on a ledge lip and
-resets. Where it stops is a fact about the crate, not the bot: the crate hangs from the
-middle of the rope, climbing shortens the rope, and past a certain lip the yank puts the
-crate into the underside of the ledge you just left. The bot made that measurable for the
-first time. A weaker version of the same run is the regression gate in
-`packages/core/test/bot.test.ts`.
+Left completely alone — two bots, nobody driving — a pair climbs about an eighth of the
+campaign and a third of a generated tower before the crate gives out on a ledge lip and
+sends them back to a checkpoint. Where they stop is a fact about the crate, not the bot:
+it hangs from the middle of the rope, climbing shortens the rope, and past a certain lip
+the yank puts the crate into the underside of the ledge they just left. The bot made that
+measurable for the first time.
+
+Two things it still does badly, measured rather than hidden. It fidgets while it waits —
+about ten direction changes a second as the rope tugs it in and out of its deadzone, down
+from twenty-three before the route cursor was made monotonic, and guarded at eighteen by a
+test. And it cannot use bounce pads or grip walls at all, because the route analysis it
+follows deliberately ignores both as shortcuts.
 
 It is a partner, not a speedrunner, and it will not save you from yourself.
 
@@ -174,25 +181,56 @@ pulls a full snapshot. See [docs/NETCODE.md](docs/NETCODE.md).
 The game needs one server that both players connect to. It is a single Node process with
 no database and no state worth backing up.
 
+**This is the part that is easy to skip and expensive to get wrong.** With no server
+configured, the client falls back to `ws://127.0.0.1:8787` — so a customer who installs
+the game and presses *Play online* is pointed at a matchmaking server on their own machine
+that nobody started. Deploy something, then bake its address into the build.
+
+```bash
+docker compose up --build          # server + web client on http://localhost:8787
+```
+
+or, on a managed host:
+
+```bash
+fly launch --no-deploy --copy-config && fly deploy      # fly.toml is in the repo
+HAULMATES_SERVER=wss://<your-app>.fly.dev npm run dist:win
+```
+
+That second line is the one people forget. `scripts/package-desktop.mjs` writes it into
+`packages/desktop/server.json`, which the shipped app reads on launch; the packaging step
+prints a loud warning if you build a release without it. `HAULMATES_SERVER` in the
+player's own environment still overrides it, so a self-hoster can redirect an installed
+copy.
+
+Without Docker:
+
 ```bash
 npm run build
-node packages/server/dist/cli.js                       # ws://0.0.0.0:8787
+node packages/server/dist/cli.js                                 # ws://0.0.0.0:8787
 node packages/server/dist/cli.js --static packages/client/dist   # also serves the web build
 ```
 
-Environment variables: `PORT`, `HOST`, `HAULMATES_MAX_ROOMS`, `HAULMATES_ROOM_GRACE`,
-`HAULMATES_LOG`. `GET /health` and `GET /stats` are available for monitoring.
+Environment variables: `PORT`, `HOST`, `HAULMATES_STATIC`, `HAULMATES_MAX_ROOMS`,
+`HAULMATES_MAX_CONN_PER_IP`, `HAULMATES_ROOM_GRACE`, `HAULMATES_LOG`. `GET /health` and
+`GET /stats` are available for monitoring; `/health` is what the container and the Fly
+config wait on.
 
-Players can point the game at their own server from the Settings screen, and the desktop
-build can host one in-process — *Play online → Host from this machine* starts the bundled
-server inside the game and opens a haul on it, which covers LAN play and outages.
+Anything public must be `wss://` — browsers refuse a plaintext socket from an `https://`
+page. Every host in `fly.toml`'s comment terminates TLS for you.
 
-A single small VM handles a few thousand concurrent rooms — each one is two sockets and a
-60 Hz tick over about a kilobyte of state. Players can point the game at their own server
-from the Settings screen, and the desktop build can host one in-process.
+A single small VM handles a few thousand concurrent rooms: each is two sockets and a 60 Hz
+tick over about a kilobyte of state. Players can also point the game at their own server
+from the Settings screen, and the desktop build can host one in-process — *Play online →
+Host from this machine* runs the bundled server inside the game, which covers LAN play and
+outages — though over the internet that means port forwarding, since it binds a plain
+port with no relay and no UPnP.
 
-Once you have a server, set `HAULMATES_SERVER=wss://your-host` when building the desktop
-app and it becomes the default for players.
+`npm run verify:server` starts the server the way the container does — separate process,
+configuration from the environment only — then waits on `/health`, plays a real two-player
+match against it, checks the client is served from the same origin, and requires a clean
+exit on `SIGTERM`. `npm run verify:docker` additionally builds and runs the image; it needs
+a Docker daemon, so it is not part of `npm run verify`.
 
 ## Shipping to Steam
 
@@ -209,7 +247,7 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
 
 Running `npm run verify` exercises, in order:
 
-- **77 unit and integration tests** — simulation determinism over thousands of ticks,
+- **90 unit and integration tests** — simulation determinism over thousands of ticks,
   rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
   and full online matches against the real server under 25–130 ms latency, jitter, and a
   simulated connection freeze.
@@ -218,7 +256,14 @@ Running `npm run verify` exercises, in order:
   goal; then every step of that route is re-attempted in the real simulation — both
   players, the rope, the crate, the moving hazards — by searching launch positions and
   input timings. This is the check that caught a campaign which was, for its first five
-  chunks, genuinely impossible.
+  chunks, genuinely impossible. Read it for what it is: each step is attempted from a
+  fresh world with the pair replaced on the ledge, so it certifies two hundred-odd
+  isolated hops and a flood fill, not one continuous run with an accumulating crate.
+- **A deployment check.** `npm run verify:server` starts the server as a container would
+  — separate process, configuration from the environment only, no command line flags —
+  waits on `/health` like an orchestrator, plays a real two-player match against it,
+  confirms the client is served from the same origin, and requires a clean exit on
+  `SIGTERM`. The in-process tests cannot catch a broken entrypoint; this can.
 - **A browser end-to-end run** — two real Chromium clients connect to a real server, host
   and join a room, play a match, and are checked for byte-identical simulation state.
   Screenshots land in `test-results/`.
@@ -238,11 +283,15 @@ What is **not** verified here, stated plainly:
 - **How it feels.** The automated checks prove the tower can be climbed and that both
   players see the same world. They cannot tell you whether the jump arc is satisfying or
   whether the third biome drags. Play it with someone before you price it.
-- **Whether the bot is any fun.** Its progress is measured; its company is not. It also
-  cannot use bounce pads or grip walls, because the route analysis it follows deliberately
-  ignores both, and it will happily stand and wait while you work out what to do.
+- **Whether the bot is any fun.** Its progress is measured; its company is not. See
+  *The bot* for what it demonstrably cannot do.
 - **Audio output.** The synth is exercised by the tests and throws no errors, but nothing
   here listens to it.
+- **The container image.** `Dockerfile`, `docker-compose.yml` and `fly.toml` are written
+  and their contents check out, but they were authored on a machine with no Docker daemon,
+  so the image has never been built. `npm run verify:docker` builds it, runs it, plays a
+  match against it and checks it is not running as root — run that once before you publish
+  an image, and treat the deployment as unproven until you have.
 
 ## Licence
 

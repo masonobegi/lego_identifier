@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   Bot,
+  IN_LEFT,
   IN_RESTART,
+  IN_RIGHT,
   LocalMatch,
   MAX_RISE,
   MODE_GAUNTLET,
@@ -125,6 +127,51 @@ describe('the bot partner', () => {
     }
     expect(grips).toBeGreaterThan(20);
     expect(reels).toBeGreaterThan(20);
+  });
+
+  it('does not vibrate on the spot', () => {
+    // The route cursor used to be re-derived from the body cell on every
+    // grounded tick. Standing between two route cells, a pixel of drift
+    // flipped which one was nearest; the two had launch columns on opposite
+    // sides; and the bot alternated LEFT and RIGHT twenty-nine times a second
+    // without ever falling over or getting anywhere. It never failed a test —
+    // it just looked broken to anyone watching it for five seconds.
+    const match = new LocalMatch(MODE_HAUL, 12345, 10);
+    const bots = [new Bot(match.ctx.level), new Bot(match.ctx.level)];
+    match.setBot(0, bots[0]);
+    match.setBot(1, bots[1]);
+
+    const last = [0, 0];
+    const reversals = [0, 0];
+    for (const i of [0, 1]) {
+      const think = bots[i].think.bind(bots[i]);
+      bots[i].think = (world, index): number => {
+        const mask = think(world, index);
+        const dir = mask & IN_LEFT ? -1 : mask & IN_RIGHT ? 1 : 0;
+        if (dir !== 0 && last[index] !== 0 && dir !== last[index]) reversals[index]++;
+        if (dir !== 0) last[index] = dir;
+        return mask;
+      };
+    }
+
+    const seconds = 90;
+    for (let t = 0; t < seconds * 60; t++) {
+      match.update(1000 / 60, [0, 0]);
+      match.events.length = 0;
+    }
+    // Measured on this exact run: 13.6 and 23.3 reversals per second before
+    // the cursor was made monotonic, 2.8 and 10.8 after. The bar sits between
+    // them with margin on both sides, because the system is chaotic enough
+    // that a tight bar would be a flaky test rather than a strict one.
+    //
+    // Note what this does not claim: the bot still fidgets while it waits, at
+    // roughly ten direction changes a second. That is a visible twitch, not a
+    // deadlock, and two attempts at widening the idle deadzone to remove it
+    // each halved how far the pair climbed — so it stands, measured and known,
+    // rather than traded for progress.
+    for (const i of [0, 1]) {
+      expect(reversals[i] / seconds, `bot ${i} reversals per second`).toBeLessThan(18);
+    }
   });
 
   it('waits for a partner who is not moving instead of dragging them', () => {

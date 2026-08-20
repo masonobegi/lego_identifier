@@ -4,11 +4,43 @@ import { join, normalize, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as steam from './steam.js';
 
-/** Replace with the App ID Steam issues once the store page exists. */
-const STEAM_APP_ID = Number(process.env.HAULMATES_APP_ID ?? '480');
+/**
+ * The Steam App ID this build identifies itself as.
+ *
+ * Same trap as the matchmaking server: reading the environment here reads the
+ * *player's* environment at launch, not the one the release was built in, so
+ * "set HAULMATES_APP_ID in the build environment" silently did nothing and the
+ * shipped app initialised against 480 — Spacewar. Every Steamworks call is
+ * wrapped and degrades to a no-op, so achievements, stats, rich presence and
+ * friend invites would all just quietly not happen. It is baked at package
+ * time now, into the same file as the server address.
+ */
+const SPACEWAR_APP_ID = 480;
 
-/** Where the public matchmaking server lives for release builds. */
-const DEFAULT_SERVER = process.env.HAULMATES_SERVER ?? '';
+function bakedConfig(): { server?: string; appId?: number } {
+  try {
+    const file = join(__dirname, '..', 'build-config.json');
+    if (!existsSync(file)) return {};
+    return JSON.parse(readFileSync(file, 'utf8')) as { server?: string; appId?: number };
+  } catch {
+    return {};
+  }
+}
+
+const BAKED = bakedConfig();
+const STEAM_APP_ID = Number(process.env.HAULMATES_APP_ID ?? BAKED.appId ?? SPACEWAR_APP_ID);
+
+/**
+ * Where the public matchmaking server lives for release builds.
+ *
+ * Order matters, and getting it wrong is not a small bug: with nothing set the
+ * client falls back to `ws://127.0.0.1:8787`, so a customer who installs the
+ * game and presses "Play online" is quietly pointed at a matchmaking server on
+ * their own machine that nobody started. The env var wins so a self-hoster can
+ * redirect an installed copy; `build-config.json`, baked in at package time by
+ * scripts/package-desktop.mjs, is what makes a shipped build work at all.
+ */
+const DEFAULT_SERVER = process.env.HAULMATES_SERVER || BAKED.server || '';
 
 /**
  * The renderer is an ES-module bundle, and Chromium refuses to load module
@@ -124,6 +156,11 @@ function runSelfTest(target: BrowserWindow): void {
                bridge: Boolean(bridge && bridge.available),
                saveRoundTrip: bridge ? bridge.readSave('selftest') : null,
                attractTick: app && app.attractTick ? app.attractTick : 0,
+               // What the shipped build will actually try to connect to. A
+               // release whose matchmaking server silently resolves to
+               // localhost is the single most expensive thing to ship here.
+               injectedServer: window.HAULMATES_SERVER || null,
+               serverUrl: app && app.settings ? app.settings.serverUrl : null,
                version: app ? app.version : null,
              };
            })()`,

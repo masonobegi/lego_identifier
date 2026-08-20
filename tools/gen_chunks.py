@@ -130,13 +130,24 @@ class C:
         return self
 
     # ------------------------------------------------------------ the climb
-    def climb(self, width=6, step=7, start=15, direction=1, tile='#'):
+    def climb(self, width=6, step=7, direction=1, tile='#'):
         """Lay the guaranteed route: the two seam landings plus a serpentine.
 
         Built top-down from a platform that can reach the top landing, then
         stepping down by a little more than one platform width so each foothold
         sticks out past the one above it. The bottom-most is solved against the
-        bottom landing rather than assumed."""
+        bottom landing rather than assumed.
+
+        There used to be a `start=` argument here, and every chunk passed a
+        different value. It was never read: the anchor column is forced to sit
+        beside the top landing, so the serpentine begins in the same place
+        every time and only `direction` distinguishes one chunk's route from
+        another's. Rewriting all twenty-one call sites to the same number
+        regenerated a byte-identical chunks.ts, which is how it was found.
+        Removed rather than honoured, because an argument that does nothing
+        reads as variety that is not there. Real variety has to come from
+        `width`, `step` and `direction`, which do work — see the tower-variety
+        task."""
         self.put(1, TOP_C0, tile * (TOP_C1 - TOP_C0 + 1))
         self._protect(1, TOP_C0, TOP_C1)
         self.put(self.h - 2, BOT_C0, tile * (BOT_C1 - BOT_C0 + 1))
@@ -317,42 +328,42 @@ chunks = []
 # A scaffolded builder's yard. Wide ledges, forgiving gaps, and the first
 # lessons in what the rope does to you.
 c = C('yard_start', 0, 0, 33, tags=['start'])
-c.climb(width=9, step=8, start=15, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.fill(30, 32, 2, 37, '#')
 c.put(29, 19, 'S')
 chunks.append(c.check(is_start=True))
 
 c = C('yard_ladders', 0, 0, 33)
-c.climb(width=9, step=8, start=18, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.col(2, 5, 27, '*').col(37, 5, 27, '*')
 c.restyle([3, 6], '=')
 chunks.append(c.check())
 
 c = C('yard_swing', 0, 1, 33)
-c.climb(width=9, step=8, start=12, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.col(2, 6, 24, '*').col(37, 6, 24, '*')
 c.wall_spikes(11, -1, 2).wall_spikes(17, 1, 2)
 chunks.append(c.check())
 
 c = C('yard_crates', 0, 0, 33)
-c.climb(width=9, step=8, start=20, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.deco(11, 4, 'xxxx').deco(20, 30, 'xxxx').deco(26, 6, 'xxx')
 c.wall_spikes(14, 1, 3)
 chunks.append(c.check())
 
 c = C('yard_bounce', 0, 1, 33)
-c.climb(width=9, step=8, start=14, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.deco(24, 4, 'oooo').deco(15, 32, 'ooo')
 c.deco(5, 14, 'vvvvvvvv')
 chunks.append(c.check())
 
 c = C('yard_saw', 0, 1, 33)
-c.climb(width=9, step=8, start=16, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.saw(x=8, y=13, r=1, ax=22, ay=0, period=200)
 c.saw(x=30, y=22, r=1, ax=-20, ay=0, period=230, phase=60)
@@ -362,21 +373,21 @@ chunks.append(c.check())
 # ================================================== BIOME 1 — THE FOUNDRY ====
 # Heat, moving metal, and machinery that pushes you toward the heat.
 c = C('foundry_lava', 1, 1, 33)
-c.climb(width=9, step=8, start=15, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.ledge(26, 2, 5, '#', '~').ledge(20, 33, 5, '#', '~').ledge(11, 2, 4, '#', '~')
 c.wall_spikes(23, 1, 2)
 chunks.append(c.check())
 
 c = C('foundry_conveyor', 1, 2, 33)
-c.climb(width=9, step=8, start=17, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.deco(23, 4, 'ccccc').deco(14, 30, 'CCCCC')
 c.ledge(24, 32, 5, '#', '~')
 chunks.append(c.check())
 
 c = C('foundry_press', 1, 2, 33)
-c.climb(width=9, step=8, start=14, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.mover(x=4, y=8, w=4, h=3, ax=0, ay=6, period=170, deadly=True)
 c.mover(x=31, y=17, w=4, h=3, ax=0, ay=6, period=190, phase=70, deadly=True)
@@ -384,7 +395,7 @@ c.ledge(28, 2, 4, '#', '~')
 chunks.append(c.check())
 
 c = C('foundry_saws', 1, 2, 33)
-c.climb(width=9, step=8, start=19, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.saw(x=10, y=9, r=1, ax=0, ay=9, period=160)
 c.saw(x=28, y=15, r=1, ax=0, ay=9, period=160, phase=80)
@@ -392,7 +403,7 @@ c.wall_spikes(20, -1, 2)
 chunks.append(c.check())
 
 c = C('foundry_moving', 1, 2, 33)
-c.climb(width=9, step=8, start=13, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.mover(x=8, y=12, w=5, h=1, ax=18, ay=0, period=240)
 c.mover(x=26, y=21, w=5, h=1, ax=-16, ay=0, period=240, phase=120)
@@ -402,21 +413,21 @@ chunks.append(c.check())
 # ================================================== BIOME 2 — THE FREEZER ====
 # No friction, no mercy, and a wind with opinions about where you land.
 c = C('freeze_ice', 2, 2, 33)
-c.climb(width=9, step=8, start=16, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.restyle([1, 2, 4, 5, 7, 8], 'i')
 c.wall_spikes(19, 1, 3)
 chunks.append(c.check())
 
 c = C('freeze_wind', 2, 2, 33)
-c.climb(width=9, step=8, start=18, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.col(3, 6, 27, 'W').col(36, 6, 27, 'W')
 c.deco(5, 13, 'vvvvvv').deco(5, 23, 'vvvv')
 chunks.append(c.check())
 
 c = C('freeze_crumble', 2, 3, 33)
-c.climb(width=9, step=8, start=15, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.restyle([1, 3, 5, 7], 'i')
 c.deco(9, 4, 'xxxx').deco(18, 30, 'xxxx').deco(24, 6, 'xxx')
@@ -425,7 +436,7 @@ c.wall_spikes(12, -1, 2)
 chunks.append(c.check())
 
 c = C('freeze_saws', 2, 3, 33)
-c.climb(width=9, step=8, start=20, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.restyle([1, 3, 5, 7], 'i')
 c.saw(x=19, y=11, r=1, ax=14, ay=0, period=190)
@@ -433,7 +444,7 @@ c.saw(x=9, y=20, r=1, ax=0, ay=6, period=140, phase=40)
 chunks.append(c.check())
 
 c = C('freeze_pit', 2, 3, 33)
-c.climb(width=9, step=8, start=12, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.col(2, 5, 28, '*').col(37, 5, 28, '*')
 c.wall_spikes(10, 1, 2).wall_spikes(22, -1, 2)
@@ -443,7 +454,7 @@ chunks.append(c.check())
 # ==================================================== BIOME 3 — THE SPIRE ====
 # Everything at once, at the top of the world, with the wind in your teeth.
 c = C('spire_gauntlet', 3, 3, 33)
-c.climb(width=9, step=8, start=17, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.restyle([4], 'i')
 c.deco(12, 4, 'xxxx').deco(22, 30, 'xxx')
@@ -453,7 +464,7 @@ c.wall_spikes(9, -1, 2)
 chunks.append(c.check())
 
 c = C('spire_crushers', 3, 3, 33)
-c.climb(width=9, step=8, start=14, direction=-1)
+c.climb(width=9, step=8, direction=-1)
 c.put(2, 19, '!')
 c.mover(x=6, y=7, w=4, h=3, ax=0, ay=7, period=140, deadly=True)
 c.mover(x=29, y=7, w=4, h=3, ax=0, ay=7, period=140, phase=70, deadly=True)
@@ -462,7 +473,7 @@ c.ledge(28, 2, 4, '#', '~').ledge(28, 33, 4, '#', '~')
 chunks.append(c.check())
 
 c = C('spire_final', 3, 3, 33)
-c.climb(width=9, step=8, start=21, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.put(2, 19, '!')
 c.col(2, 5, 28, '*').col(37, 5, 28, '*')
 c.deco(20, 32, 'ooo')
@@ -473,7 +484,7 @@ c.wall_spikes(18, 1, 2)
 chunks.append(c.check())
 
 c = C('spire_goal', 3, 0, 24, tags=['goal'])
-c.climb(width=9, step=8, start=15, direction=1)
+c.climb(width=9, step=8, direction=1)
 c.fill(0, 1, 2, 37, '#')
 c.put(2, 17, 'FFFFFF')
 c.put(5, 19, '!')

@@ -189,6 +189,9 @@ export class App {
     if (this.input.pausePressed()) {
       if (this.screen === 'none') this.show('pause');
       else if (this.screen === 'pause') this.resume();
+      // Escape is how everyone leaves a screen. On the results screen it used
+      // to do nothing at all, which is a bad note to end a run on.
+      else if (this.screen === 'results') this.leave();
     }
 
     const session = this.net ?? this.local;
@@ -198,6 +201,10 @@ export class App {
     }
 
     const inMenu = this.screen !== 'none';
+    // The arrow keys belong to player two whenever player two is a person.
+    // Everywhere else they are a convenience for whoever is holding the
+    // keyboard alone.
+    this.input.soloKeyboard = this.net !== null || this.botPartner;
     const masks: number[] = [0, 0];
     if (!inMenu) {
       if (this.net) masks[Math.max(0, this.net.localIndex)] = this.input.mask(0);
@@ -237,7 +244,13 @@ export class App {
       this.checkAchievements(world);
     }
 
-    if (this.local && this.local.phase === 'ended' && this.screen !== 'results') this.finishLocalRun();
+    // `finishedRun` is the latch. Without it, any screen change away from the
+    // results screen is undone on the very next frame — the session is still
+    // sitting there in phase 'ended' — which traps the player on the results
+    // of a run they already finished and re-counts the finish every time.
+    if (this.local && this.local.phase === 'ended' && !this.finishedRun && this.screen !== 'results') {
+      this.finishLocalRun();
+    }
   }
 
   private runAttract(dt: number): void {

@@ -114,6 +114,23 @@ exactly the taut-path mechanic doing its job; the open question is whether the t
 teach that before it demands it. Recorded here rather than patched, because the honest fix
 is level design, not another number in `constants.ts`.
 
+## What the levels actually are
+
+Worth stating plainly, because the chunk names do not: the campaign is two mirrored
+switchbacks. Every chunk calls `climb()` with the same width and step, and the anchor
+platform is forced to sit beside the top landing, so the only thing distinguishing one
+chunk's route from another's is which way it zig-zags.
+
+There was a `start=` argument that appeared to vary this, and every chunk passed a
+different value. It was never read. Rewriting all twenty-one call sites to the same number
+regenerated a byte-identical `chunks.ts`, which is how it was caught; the argument has
+been deleted rather than left implying variety that was not there.
+
+So the verification is honest about a narrower thing than it sounds like: the towers are
+provably climbable, and what is provably climbable is the same hop, roughly two hundred
+times. `width`, `step` and `direction` do work and are where real variety has to start,
+alongside geometry that actually requires the rope.
+
 ## Level design rules
 
 These were not obvious, and getting them wrong produced a tower that looked completely

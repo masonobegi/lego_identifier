@@ -245,11 +245,61 @@ async function main() {
   const couch = await solo.evaluate(() => ({ tick: window.HAULMATES.local?.localTick ?? 0, hasLocal: Boolean(window.HAULMATES.local) }));
   check('couch co-op runs without a server', couch.hasLocal && couch.tick > 60, JSON.stringify(couch));
 
-  /* ------------------------------------------------------------ bot partner */
-  await solo.keyboard.press('Escape');
-  await sleep(300);
+  /* ------------------------------------------- the second player's own keys */
+  // Both masks are read from one set of held keys. Player one used to hold the
+  // arrow keys as a convenience, which meant every press by player two also
+  // drove player one — and this test never noticed, because it only ever
+  // pressed D. Press player two's keys and watch player one.
+  await solo.evaluate(() => {
+    const w = window.HAULMATES.local.world;
+    window.__before = { p0x: w.players[0].x, p1x: w.players[1].x };
+  });
+  // Left, not right: player two spawns seven pixels from the step at x=518,
+  // so right is the one direction it cannot demonstrate anything in.
+  await solo.keyboard.down('ArrowLeft');
+  await sleep(1000);
+  await solo.keyboard.up('ArrowLeft');
+  await sleep(250);
+  const split = await solo.evaluate(() => {
+    const w = window.HAULMATES.local.world;
+    return {
+      p0moved: Math.round(Math.abs(w.players[0].x - window.__before.p0x)),
+      p1moved: Math.round(Math.abs(w.players[1].x - window.__before.p1x)),
+    };
+  });
+  check('player two moves when player two presses a key', split.p1moved > 60, JSON.stringify(split));
+  // Player one is roped to player two, so a little drag is the game working.
+  // Being *driven* is not: that was the bug, and it moved him step for step.
+  check("player one is not driven by player two's keys", split.p0moved < 25, JSON.stringify(split));
+
+  /* ------------------------------------------ finishing a run lets you leave */
+  // Leaving the results screen used to only change screens, leaving the
+  // finished session alive — so the next frame dragged the player straight
+  // back to results and counted the finish again, once per press.
+  const finishes = await solo.evaluate(() => {
+    const app = window.HAULMATES;
+    app.local.world.finished = 1;
+    app.local.world.finishTick = app.local.world.tick;
+    app.local.phase = 'ended';
+    return app.profile.finishes;
+  });
+  await sleep(500);
+  check('finishing a run shows the results screen',
+    await solo.evaluate(() => window.HAULMATES.screen === 'results'));
   await clickButton(solo, 'Back to menu');
-  await sleep(300);
+  await sleep(600);
+  const afterLeave = await solo.evaluate(() => ({
+    screen: window.HAULMATES.screen,
+    local: Boolean(window.HAULMATES.local),
+    finishes: window.HAULMATES.profile.finishes,
+  }));
+  check('leaving the results screen actually leaves', afterLeave.screen === 'title' && !afterLeave.local,
+    JSON.stringify(afterLeave));
+  check('the finish is counted once, not once per click', afterLeave.finishes === finishes + 1,
+    `${finishes} -> ${afterLeave.finishes}`);
+
+
+  /* ------------------------------------------------------------ bot partner */
   await clickButton(solo, 'Play on this machine');
   await clickButton(solo, 'A bot');
   await clickButton(solo, 'Start');

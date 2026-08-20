@@ -1,0 +1,46 @@
+# Self-hosting HAULMATES.
+#
+# The whole game in one container: the matchmaking socket and, because
+# WITH_CLIENT is set, the web client served from the same origin. That last
+# part matters — the client infers its server from window.location when it is
+# served over http(s), so a browser pointed at this container needs no
+# configuration at all.
+#
+#   docker compose up --build
+#   open http://localhost:8787
+#
+# Two people on the same LAN can play by pointing the second browser at the
+# host's address. Over the internet, put this behind a TLS terminator: browsers
+# refuse ws:// from an https:// page, and the client upgrades to wss://
+# automatically when it is served over https.
+
+services:
+  haulmates:
+    build:
+      context: .
+      args:
+        WITH_CLIENT: "1"
+    image: haulmates-server:latest
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      HOST: "0.0.0.0"
+      HAULMATES_LOG: "info"
+      # Serve the client that was baked into the image.
+      HAULMATES_STATIC: "/app/packages/client/dist"
+      # Sizing. A room is two players and one 60 Hz simulation; these defaults
+      # are deliberately conservative for a single small instance.
+      HAULMATES_MAX_ROOMS: "500"
+      HAULMATES_MAX_CONN_PER_IP: "24"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

@@ -1,0 +1,60 @@
+# One concrete place to put the matchmaking server.
+#
+# Fly is used here because it terminates TLS for you (browsers refuse ws://
+# from an https:// page, so a public server has to be wss://), it keeps
+# websockets open rather than cutting them at a proxy timeout, and a machine
+# small enough to run this costs a few dollars a month. Nothing in the server
+# is Fly-specific: it is a Node process that reads PORT and HOST, answers
+# /health, and exits cleanly on SIGTERM. Render, Railway, a VM with the
+# docker-compose file, or anything else that can run a container works the same.
+#
+#   fly launch --no-deploy --copy-config
+#   fly deploy
+#   HAULMATES_SERVER=wss://<your-app>.fly.dev npm run dist:win
+#
+# That last line is the one people forget. Without it the shipped game has no
+# server to talk to and every buyer's "Play online" fails.
+
+app = "haulmates"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[build.args]
+  # Serve the web client from the same origin as the socket, so a browser
+  # pointed at this app infers its own server with no configuration.
+  WITH_CLIENT = "1"
+
+[env]
+  PORT = "8787"
+  HOST = "0.0.0.0"
+  HAULMATES_LOG = "info"
+  HAULMATES_STATIC = "/app/packages/client/dist"
+  HAULMATES_MAX_ROOMS = "500"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # A room is a live 60 Hz simulation with two people in it. Stopping the
+  # machine under them ends their run, so idle machines stay up.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    # Two sockets per room, plus lobby traffic.
+    soft_limit = 400
+    hard_limit = 600
+
+[[http_service.checks]]
+  grace_period = "5s"
+  interval = "30s"
+  method = "GET"
+  path = "/health"
+  timeout = "3s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

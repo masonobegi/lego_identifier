@@ -15,7 +15,7 @@ import { drawHat } from '../render/actors.js';
 import { drawCharacterPreview } from '../render/preview.js';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { desktopAvailable, inviteFriend, openExternal, quitGame, steamAvailable } from '../steam.js';
-import { offlineBuild } from '../settings.js';
+import { DEFAULT_SERVER, offlineBuild } from '../settings.js';
 import { formatTime } from '../render/hud.js';
 import type { App } from '../app.js';
 
@@ -421,7 +421,14 @@ function pauseScreen(app: App): HTMLElement {
 
 function resultsScreen(app: App): HTMLElement {
   const r = app.lastResult;
-  if (!r) return h('div', { class: 'screen narrow' }, h('h2', { class: 'title' }, 'Run over'), h('div', { class: 'row' }, backButton(app, 'title')));
+  if (!r) {
+    return h(
+      'div',
+      { class: 'screen narrow' },
+      h('h2', { class: 'title' }, 'Run over'),
+      h('div', { class: 'row' }, button(app, '← Back to menu', '', () => app.leave(), {})),
+    );
+  }
 
   const seconds = r.finishTick / 60;
   const totalDeaths = r.deaths[0] + r.deaths[1];
@@ -453,7 +460,9 @@ function resultsScreen(app: App): HTMLElement {
     h(
       'div',
       { class: 'row' },
-      backButton(app, 'title', 'Back to menu'),
+      // Must end the session, not just change screens: a finished LocalMatch
+      // left alive drags the player straight back here.
+      button(app, '← Back to menu', '', () => app.leave(), { key: 'ESC' }),
       h('div', { class: 'spacer' }),
       app.net ? button(app, 'Rematch', 'Same friend, fresh regrets', () => app.rematch(), { primary: true, icon: '🔁' }) : null,
       !app.net ? button(app, 'Play again', '', () => app.restartLocal(), { primary: true, icon: '🔁' }) : null,
@@ -540,12 +549,34 @@ function settingsScreen(app: App): HTMLElement {
           spellcheck: 'false',
           onchange: (e: Event) => {
             s.serverUrl = (e.target as HTMLInputElement).value.trim();
+            // Typing an address here means "use this one", and it has to
+            // survive the next release changing the built-in default.
+            s.serverPinned = s.serverUrl.length > 0;
             app.applySettings();
             toast('Server updated');
           },
         }),
       ),
-      h('p', { class: 'sub' }, 'Leave this alone unless you are running your own server. Both players must be on the same one.'),
+      h(
+        'p',
+        { class: 'sub' },
+        s.serverPinned
+          ? 'Using your own server. Both players must be on the same one.'
+          : 'Following the address this build ships with. Both players must be on the same one.',
+      ),
+      s.serverPinned
+        ? h(
+            'div',
+            { class: 'row' },
+            button(app, 'Use the built-in server', '', () => {
+              s.serverPinned = false;
+              s.serverUrl = DEFAULT_SERVER;
+              app.applySettings();
+              app.refresh();
+              toast('Back to the built-in server');
+            }, { icon: '↺' }),
+          )
+        : null,
       h(
         'div',
         { class: 'row' },
@@ -583,7 +614,12 @@ function controlsScreen(app: App): HTMLElement {
               const target = e.currentTarget as HTMLButtonElement;
               target.textContent = 'Press a key…';
               app.input.capture = (code) => {
-                app.input.rebind(slot, action, code);
+                const clash = app.input.boundToOtherPlayer(slot, code);
+                if (clash) {
+                  toast(`${keyName(code)} is player ${slot === 0 ? 'two' : 'one'}'s ${ACTION_LABEL[clash].toLowerCase()}`);
+                } else {
+                  app.input.rebind(slot, action, code);
+                }
                 app.refresh();
               };
             },

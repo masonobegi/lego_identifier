@@ -47,10 +47,35 @@ const timer = setTimeout(() => {
 child.on('exit', (code) => {
   clearTimeout(timer);
   const passed = /SELFTEST PASS/.test(output);
-  if (passed && code === 0) {
-    console.log(`\nDesktop self test passed. Screenshot: ${shot}`);
-    process.exit(0);
+  if (!passed || code !== 0) {
+    console.error(`\nDesktop self test failed (exit ${code}).`);
+    process.exit(1);
   }
-  console.error(`\nDesktop self test failed (exit ${code}).`);
-  process.exit(1);
+
+  // If this build was packaged against a matchmaking server, prove the address
+  // survived the trip into the packaged renderer. A release that silently
+  // resolves to ws://127.0.0.1:8787 looks perfect right up until a customer
+  // presses "Play online".
+  const expected = (process.env.HAULMATES_SERVER ?? '').trim();
+  if (expected) {
+    const report = output.match(/SELFTEST PASS (\{.*\})/)?.[1];
+    let injected = null;
+    try {
+      injected = report ? JSON.parse(report).injectedServer : null;
+    } catch {
+      injected = null;
+    }
+    if (injected !== expected) {
+      console.error(
+        `\nThe packaged build did not carry its matchmaking server.\n` +
+          `  expected: ${expected}\n  got:      ${injected ?? '(none)'}\n` +
+          'Online play would fail for everyone who installs this build.',
+      );
+      process.exit(1);
+    }
+    console.log(`Matchmaking server baked in and reachable by the renderer: ${injected}`);
+  }
+
+  console.log(`\nDesktop self test passed. Screenshot: ${shot}`);
+  process.exit(0);
 });

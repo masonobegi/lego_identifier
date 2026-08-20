@@ -13,6 +13,14 @@ export interface Settings {
   hat: number;
   colour: number;
   serverUrl: string;
+  /**
+   * True once the player has typed their own server in. Until they do, the
+   * address follows whatever the build was packaged against rather than
+   * whatever it happened to be the first time this copy was launched — without
+   * this, a player who ran the game once before a server existed keeps
+   * ws://127.0.0.1:8787 saved forever and can never reach the public one.
+   */
+  serverPinned: boolean;
 }
 
 /** Where the public matchmaking server lives. Overridable in settings so a
@@ -56,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hat: 0,
   colour: 0,
   serverUrl: DEFAULT_SERVER,
+  serverPinned: false,
 };
 
 export const PROFILE_STATS_KEY = 'stats';
@@ -94,7 +103,7 @@ export function loadSettings(): Settings {
   s.sfx = clamp01(s.sfx);
   s.music = clamp01(s.music);
   s.shake = clamp01(s.shake);
-  if (!s.serverUrl) s.serverUrl = DEFAULT_SERVER;
+  if (!s.serverPinned || !s.serverUrl) s.serverUrl = DEFAULT_SERVER;
   return s;
 }
 

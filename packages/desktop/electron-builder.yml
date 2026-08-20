@@ -8,6 +8,10 @@ files:
   - dist/**/*
   - renderer/**/*
   - package.json
+  # Written by scripts/package-desktop.mjs from HAULMATES_SERVER. Without it a
+  # shipped build has no matchmaking server to point at and online play fails
+  # against the buyer's own localhost.
+  - build-config.json
   - '!**/*.map'
 extraMetadata:
   main: dist/main.js

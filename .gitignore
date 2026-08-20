@@ -23,3 +23,6 @@ steam/output/
 
 # single-file web bundle output
 packages/client/dist-web/
+
+# Baked into the desktop build by scripts/package-desktop.mjs
+packages/desktop/build-config.json

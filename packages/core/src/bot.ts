@@ -88,7 +88,7 @@ import type { World } from './types.js';
 /** How much of the rope's length the bot will spend on a lead before waiting. */
 /** Stay inside the rope's rest length: past it the rope is a spring, and a
  *  spring with a crate on it is how the crate dies. */
-const LEASH = ROPE_MAX * 0.5;
+const LEASH = ROPE_MAX * 0.45;
 /** Rows the bot will climb above its partner before waiting for them. */
 const LEAD_ROWS = 3;
 /** Rows below the bot the partner has to be before it braces as an anchor. */
@@ -123,6 +123,8 @@ const SAW_LOOKAHEAD = 40;
 const SAW_LANDING_LOOKAHEAD = 70;
 /** Clearance the bot wants from a blade, on top of both radii. */
 const SAW_CLEARANCE = 16;
+/** How far from its route cell the bot must be before it accepts a lower one. */
+const BACKTRACK_REACH = 6;
 /** Ticks of near-total stillness before the bot decides it is stuck. */
 const STUCK_TICKS = 70;
 /** How long an unstick manoeuvre runs. */
@@ -677,17 +679,26 @@ export class Bot {
     return false;
   }
 
-  /** Keep `cursor` pointing at where the bot actually is on the route. */
+  /**
+   * Keep `cursor` pointing at where the bot actually is on the route.
+   *
+   * Every candidate goes through `adopt`, which is what stops the bot
+   * vibrating. Re-deriving the cursor from the body cell on every grounded
+   * tick sounds harmless and is not: standing between two route cells, a
+   * pixel of drift flips which one is nearest, the two have launch columns on
+   * opposite sides, and the bot alternates LEFT and RIGHT at twenty-nine
+   * reversals a second. It never falls over and it never gets anywhere, and
+   * to anyone watching it is simply broken.
+   */
   private relocate(x: number, y: number): void {
     const cell = bodyCell(x, y);
     const direct = this.indexAt(cell.x, cell.y);
     if (direct >= 0) {
-      this.cursor = direct;
+      this.adopt(direct, cell);
       return;
     }
     // Mid-stroll between two route cells: the cells in between are not on the
-    // route at all, and snapping to the nearest one every tick makes the bot
-    // dither. Hold the cursor while we are plausibly still walking the leg.
+    // route at all. Hold the cursor while we are plausibly still walking the leg.
     const held = this.plan.cells[Math.min(this.cursor, this.plan.cells.length - 1)];
     if (held.y === cell.y && Math.abs(held.x - cell.x) <= 5) return;
 
@@ -707,7 +718,7 @@ export class Bot {
         }
       }
       if (onLedge >= 0) {
-        this.cursor = onLedge;
+        this.adopt(onLedge, cell);
         return;
       }
     }
@@ -731,7 +742,27 @@ export class Bot {
         }
       }
     }
-    if (bestIndex >= 0) this.cursor = bestIndex;
+    if (bestIndex >= 0) this.adopt(bestIndex, cell);
+  }
+
+  /**
+   * Move the cursor, but only forwards unless we have genuinely lost ground.
+   *
+   * Forwards is always fine — that is progress. Backwards has to be earned:
+   * the bot must actually be below where the route says it should be, or far
+   * enough away that the current leg is meaningless. Without that test, two
+   * adjacent cells that happen to resolve to different route indices trade the
+   * cursor back and forth forever.
+   */
+  private adopt(index: number, cell: RouteCell): void {
+    if (index >= this.cursor) {
+      this.cursor = index;
+      return;
+    }
+    const here = this.plan.cells[Math.min(this.cursor, this.plan.cells.length - 1)];
+    const fellBelow = cell.y > here.y + 1;
+    const strayed = Math.abs(cell.x - here.x) > BACKTRACK_REACH || Math.abs(cell.y - here.y) > BACKTRACK_REACH;
+    if (fellBelow || strayed) this.cursor = index;
   }
 
   private indexAt(x: number, y: number): number {
