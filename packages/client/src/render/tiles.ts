@@ -22,6 +22,7 @@ import {
   type World,
 } from '@haulmates/core';
 import { biomeFor, tileHash, type BiomePalette } from './palette.js';
+import { LOAD_MARKS, chevronPattern, fillChevron, stencilMark } from './stencil.js';
 
 /** Rows of tiles baked into one cached canvas. */
 const BLOCK_ROWS = 24;
@@ -78,15 +79,32 @@ export class TileCache {
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    for (let ry = 0; ry < rows; ry++) {
-      const ty = rowStart + ry;
-      const palette = biomeFor(level.biome[ty]);
-      for (let tx = 0; tx < level.w; tx++) {
-        const t = level.tiles[ty * level.w + tx];
-        if (t === T_EMPTY || isDynamic(t)) continue;
-        drawStaticTile(ctx, level, tx, ty, ry, t, palette, highContrast);
+    // Two passes over the same canvas, with the paint laid down between them.
+    //
+    // FIELD is surface: tile bodies and texture. READS is everything whose
+    // shape communicates a rule — chevron caps, edges, spikes, rollers. The
+    // stencil paint goes on after FIELD and before READS, so it is clipped to
+    // real geometry by `source-atop` and can never end up on top of a surface
+    // the player has to parse at speed. One canvas rather than two: the
+    // ordering gives the same guarantee without doubling the per-frame blits.
+    const sweep = (pass: TilePass): void => {
+      for (let ry = 0; ry < rows; ry++) {
+        const ty = rowStart + ry;
+        const palette = biomeFor(level.biome[ty]);
+        for (let tx = 0; tx < level.w; tx++) {
+          const t = level.tiles[ty * level.w + tx];
+          if (t === T_EMPTY || isDynamic(t)) continue;
+          drawStaticTile(ctx, level, tx, ty, ry, t, palette, highContrast, pass, rowStart * TILE);
+        }
       }
+    };
+
+    sweep('field');
+    if (!highContrast) {
+      const palette = biomeFor(level.biome[Math.min(level.h - 1, rowStart)]);
+      paintLoadMarks(ctx, level, rowStart, rows, palette);
     }
+    sweep('reads');
 
     this.blocks.set(index, canvas);
     this.order.push(index);
@@ -111,6 +129,36 @@ function isFilled(t: number): boolean {
   return t === T_SOLID || t === T_GRIP || t === T_ICE || t === T_CONV_L || t === T_CONV_R || t === T_BOUNCE || t === T_CRUMBLE;
 }
 
+type TilePass = 'field' | 'reads';
+
+/**
+ * Small load markings on the flats. One tile in fourteen, chosen by the same
+ * hash that drives every other bit of texture so the wall is stable.
+ */
+function paintLoadMarks(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  rowStart: number,
+  rows: number,
+  p: BiomePalette,
+): void {
+  if (p.paintAlpha <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.globalAlpha = p.paintAlpha * 0.8;
+  for (let ry = 2; ry < rows - 2; ry++) {
+    const ty = rowStart + ry;
+    for (let tx = 2; tx < level.w - 2; tx++) {
+      const h = tileHash(tx, ty);
+      if (h < 0.965) continue;
+      if (!isFilled(level.tiles[ty * level.w + tx])) continue;
+      const mark = stencilMark(LOAD_MARKS[Math.floor(h * 1000) % LOAD_MARKS.length], 9, p.stencil);
+      if (mark) ctx.drawImage(mark, tx * TILE - TILE, ry * TILE + 6);
+    }
+  }
+  ctx.restore();
+}
+
 function drawStaticTile(
   ctx: CanvasRenderingContext2D,
   level: Level,
@@ -120,6 +168,8 @@ function drawStaticTile(
   t: number,
   p: BiomePalette,
   highContrast: boolean,
+  pass: TilePass,
+  blockWorldY: number,
 ): void {
   const x = tx * TILE;
   const y = localRow * TILE;
@@ -130,21 +180,51 @@ function drawStaticTile(
   const openAbove = !isFilled(above);
   const rnd = tileHash(tx, ty);
 
+  // T_SOLID splits itself across both passes. Everything else belongs to
+  // exactly one: if its shape states a rule it goes over the paint, otherwise
+  // it is surface and goes under. Drawing a tile in both passes would draw it
+  // twice, which is wasted work and doubles every alpha blend in it.
+  if (t !== T_SOLID) {
+    const statesARule =
+      t === T_SPIKE_U ||
+      t === T_SPIKE_D ||
+      t === T_SPIKE_L ||
+      t === T_SPIKE_R ||
+      t === T_PLATFORM ||
+      t === T_BOUNCE ||
+      t === T_LAVA;
+    if (statesARule !== (pass === 'reads')) return;
+  }
+
   switch (t) {
     case T_SOLID: {
-      ctx.fillStyle = p.tileBody;
-      ctx.fillRect(x, y, TILE, TILE);
-      // Texture: a couple of stable blotches so flat walls do not read as gaps.
-      if (!highContrast) {
-        ctx.fillStyle = p.tileDetail;
-        ctx.fillRect(x + 2 + rnd * 9, y + 3 + tileHash(ty, tx) * 12, 5 + rnd * 5, 3);
-        ctx.fillRect(x + TILE - 9 - rnd * 6, y + TILE - 8 - rnd * 6, 4, 4);
+      if (pass === 'field') {
+        ctx.fillStyle = p.tileBody;
+        ctx.fillRect(x, y, TILE, TILE);
+        // Texture: a couple of stable blotches so flat walls do not read as gaps.
+        if (!highContrast) {
+          ctx.fillStyle = p.tileDetail;
+          ctx.fillRect(x + 2 + rnd * 9, y + 3 + tileHash(ty, tx) * 12, 5 + rnd * 5, 3);
+          ctx.fillRect(x + TILE - 9 - rnd * 6, y + TILE - 8 - rnd * 6, 4, 4);
+        }
+        return;
       }
+
+      // Every standable top gets the hazard band, boxed by ink above and below.
+      // The boxing is load-bearing rather than decorative: in the Freezer the
+      // light half of the chevron is nearly the colour of the sky, and without
+      // a rule under it the ledge cap would dissolve into the background.
       if (openAbove) {
-        ctx.fillStyle = p.tileTop;
-        ctx.fillRect(x, y, TILE, 4);
-        ctx.fillStyle = shade(p.tileBody, 18);
-        ctx.fillRect(x, y + 4, TILE, 3);
+        const chevron = highContrast ? null : chevronPattern(ctx, p);
+        if (chevron) {
+          fillChevron(ctx, chevron, blockWorldY + y, x, y, TILE, 6);
+        } else {
+          ctx.fillStyle = p.ink;
+          ctx.fillRect(x, y, TILE, 6);
+        }
+        ctx.fillStyle = p.ink;
+        ctx.fillRect(x, y, TILE, 1);
+        ctx.fillRect(x, y + 6, TILE, 2);
       }
       ctx.fillStyle = p.tileEdge;
       if (!isFilled(left)) ctx.fillRect(x, y, 2, TILE);
@@ -237,7 +317,7 @@ function drawStaticTile(
     case T_SPIKE_D:
     case T_SPIKE_L:
     case T_SPIKE_R: {
-      drawSpikes(ctx, x, y, t);
+      drawSpikes(ctx, x, y, t, p);
       return;
     }
     case T_DECO: {
@@ -250,10 +330,12 @@ function drawStaticTile(
   }
 }
 
-function drawSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void {
+function drawSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, p: BiomePalette): void {
   const count = 3;
   const w = TILE / count;
-  ctx.fillStyle = '#cfd6e8';
+  // Solid ink. Pale steel spikes vanished against a bone-white ground, which
+  // is the one place in the game where being hard to see is fatal.
+  ctx.fillStyle = p.ink;
   for (let i = 0; i < count; i++) {
     ctx.beginPath();
     if (t === T_SPIKE_U) {
@@ -276,7 +358,7 @@ function drawSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, t: numb
     ctx.closePath();
     ctx.fill();
   }
-  ctx.fillStyle = '#6d7590';
+  ctx.fillStyle = p.ink;
   if (t === T_SPIKE_U) ctx.fillRect(x, y + TILE - 4, TILE, 4);
   else if (t === T_SPIKE_D) ctx.fillRect(x, y, TILE, 4);
   else if (t === T_SPIKE_L) ctx.fillRect(x + TILE - 4, y, 4, TILE);

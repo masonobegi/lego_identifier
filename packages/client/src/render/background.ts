@@ -124,10 +124,11 @@ export class Background {
     p: BiomePalette,
     time: number,
   ): void {
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, p.skyTop);
-    sky.addColorStop(1, p.skyBottom);
-    ctx.fillStyle = sky;
+    // Flat, not a gradient. A vertical ramp reads as atmosphere and softness;
+    // this world is painted signage under a blown-out sky, and the flat fill is
+    // what makes the tower read as a thing standing in front of it rather than
+    // a thing lit by it.
+    ctx.fillStyle = p.paper;
     ctx.fillRect(0, 0, w, h);
 
     const set = this.ensure(ctx, biome, p);
@@ -154,19 +155,11 @@ export class Background {
       ctx.restore();
     }
 
-    // A vertical haze that deepens toward the bottom of frame sells altitude.
-    const fog = ctx.createLinearGradient(0, h * 0.35, 0, h);
-    fog.addColorStop(0, 'rgba(0,0,0,0)');
-    fog.addColorStop(1, p.fog);
-    ctx.fillStyle = fog;
+    // Distance washes toward paper rather than toward black, so the far side
+    // of the shaft fades out into the sky instead of into a void.
+    ctx.fillStyle = p.hazeVeil;
     ctx.fillRect(0, 0, w, h);
-
-    // A slow pulse of light from above, so the tower always reads as "up".
-    const beam = ctx.createRadialGradient(w * 0.5, -h * 0.15, 0, w * 0.5, -h * 0.15, h * 1.1);
-    beam.addColorStop(0, `rgba(255,255,255,${0.06 + Math.sin(time * 0.5) * 0.015})`);
-    beam.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = beam;
-    ctx.fillRect(0, 0, w, h);
+    void time;
   }
 
   /** Ambient motes appropriate to the biome, emitted into the particle pool. */

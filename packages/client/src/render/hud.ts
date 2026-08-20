@@ -70,7 +70,7 @@ function drawTopBar(ctx: CanvasRenderingContext2D, vw: number, s: HudState): voi
   ctx.fillText(formatTime(s.elapsedSeconds), 32, 66);
 
   ctx.font = `800 12px ${FONT}`;
-  ctx.fillStyle = biome.glow;
+  ctx.fillStyle = biome.hot;
   ctx.textAlign = 'right';
   ctx.fillText(biome.name, 290, 38);
 

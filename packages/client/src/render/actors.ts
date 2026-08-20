@@ -15,7 +15,13 @@ import {
   sawX,
   sawY,
 } from '@haulmates/core';
-import { CARGO_COLOURS, type BiomePalette } from './palette.js';
+import { CARGO_COLOURS, PLAYER_BODY, STENCIL_RED, type BiomePalette } from './palette.js';
+
+/**
+ * Face lines are drawn straight onto a near-black head, so they are paper, not
+ * ink. Only the pupils stay dark, and those sit on white eye whites.
+ */
+const FACE_LINE = '#F4EFE2';
 
 export interface ActorStyle {
   main: string;
@@ -33,10 +39,9 @@ function lerp(a: number, b: number, t: number): number {
 /* ------------------------------------------------------------------- rope */
 
 /** Rope colour runs green → amber → red as it approaches breaking tension. */
+/** Only ever used above 0.72 tension: below that the rope core is chalk. */
 function tensionColour(t: number): string {
-  if (t < 0.5) return '#c9a24a';
-  if (t < 0.8) return '#ffb03a';
-  return '#ff6a4d';
+  return t < 0.86 ? '#FFC800' : STENCIL_RED;
 }
 
 export function drawRope(
@@ -74,16 +79,20 @@ export function drawRope(
     ctx.stroke();
   };
 
-  stroke(7.5, 'rgba(0,0,0,0.5)', 1.5);
-  stroke(5.5, tensionColour(tension));
-  stroke(1.8, tension > 0.8 ? '#ffd9a0' : 'rgba(255,255,255,0.35)', -1.2);
+  // The rope is the one clean line in the picture, so it is drawn as ink,
+  // chalk, then a soft cast shadow — never as a coloured cord. Tension is
+  // carried by the core going red rather than by the whole rope changing hue,
+  // which keeps it legible against every biome.
+  stroke(8, 'rgba(46,38,28,0.18)', 3);
+  stroke(6.5, PLAYER_BODY);
+  stroke(3.6, tension > 0.72 ? tensionColour(tension) : '#FFFDF6');
 
   if (tension > 0.86) {
     // At breaking tension the rope shivers and glows: the visual warning that
     // somebody is about to be launched.
     ctx.save();
     ctx.globalAlpha = (tension - 0.86) * 4;
-    ctx.strokeStyle = '#fff1c9';
+    ctx.strokeStyle = STENCIL_RED;
     ctx.lineWidth = 1.4 + Math.sin(time * 40) * 0.6;
     ctx.beginPath();
     ctx.moveTo(xs[0], ys[0]);
@@ -111,7 +120,7 @@ export function drawCargo(
 
   // Tether from the middle of the rope down to the crate.
   const mid = (ROPE_NODES - 1) >> 1;
-  ctx.strokeStyle = '#8a6c2c';
+  ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 2.6;
   ctx.beginPath();
   ctx.moveTo(lerp(prev.ropeX[mid], world.ropeX[mid], alpha), lerp(prev.ropeY[mid], world.ropeY[mid], alpha));
@@ -124,20 +133,25 @@ export function drawCargo(
 
   const w = CARGO_W;
   const h = CARGO_H;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillStyle = 'rgba(46,38,28,0.20)';
   ctx.fillRect(-w / 2 + 2, -h / 2 + 3, w, h);
 
+  // Pale ply with a hard ink outline, so the crate never reads as another
+  // platform. It is the thing you are protecting; it has to look like freight.
   ctx.fillStyle = CARGO_COLOURS.body;
   ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.fillStyle = CARGO_COLOURS.bodyDark;
   ctx.fillRect(-w / 2, h / 2 - 4, w, 4);
-  ctx.fillRect(-w / 2, -h / 2, w, 3);
+  ctx.strokeStyle = CARGO_COLOURS.strap;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-w / 2 + 1, -h / 2 + 1, w - 2, h - 2);
 
+  // Strapping, then the one saturated red in the picture.
   ctx.fillStyle = CARGO_COLOURS.strap;
-  ctx.fillRect(-w / 2, -3, w, 5);
   ctx.fillRect(-3, -h / 2, 5, h);
-  ctx.fillStyle = CARGO_COLOURS.metal;
-  ctx.fillRect(-4, -4, 7, 7);
+  ctx.fillStyle = CARGO_COLOURS.stencil;
+  ctx.fillRect(-w / 2 + 3, -h / 2 + 5, w - 6, 3);
+  ctx.fillRect(-w / 2 + 3, h / 2 - 9, w - 6, 3);
 
   // Cracks accumulate as the crate takes damage — readable at a glance.
   const cracks = Math.round((1 - health) * 5);
@@ -154,7 +168,7 @@ export function drawCargo(
 
   if (health < 0.34) {
     ctx.globalAlpha = 0.28 + 0.22 * Math.sin(time * (10 + (1 - health) * 24));
-    ctx.fillStyle = '#ff4d6d';
+    ctx.fillStyle = CARGO_COLOURS.stencil;
     ctx.fillRect(-w / 2, -h / 2, w, h);
     ctx.globalAlpha = 1;
   }
@@ -206,15 +220,15 @@ export function drawPlayer(
   const bob = p.grounded && moving ? Math.sin(p.anim * 34) * 1.2 : 0;
   const lean = gripping ? p.wallDir * 2.4 : Math.max(-4, Math.min(4, p.vx / 55));
 
-  /* shadow */
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  /* contact shadow — warm and light, because nothing here is lit from behind */
+  ctx.fillStyle = 'rgba(46,38,28,0.22)';
   ctx.beginPath();
   ctx.ellipse(0, HALF_H - 1, HALF_W * 0.95, 3.2, 0, 0, Math.PI * 2);
   ctx.fill();
 
   /* legs */
   const legPhase = p.anim * 34;
-  ctx.strokeStyle = style.dark;
+  ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 4.4;
   ctx.lineCap = 'round';
   for (const side of [-1, 1]) {
@@ -226,20 +240,30 @@ export function drawPlayer(
     ctx.stroke();
   }
 
-  /* torso */
+  /* torso — a dark body wearing a hi-vis vest, not a coloured body */
   const torsoY = -3 + bob;
-  ctx.fillStyle = style.main;
-  roundRect(ctx, -HALF_W + 1 + lean * 0.3, torsoY - 6, PLAYER_W - 2, 17, 5);
+  const tx = -HALF_W + 1 + lean * 0.3;
+  ctx.fillStyle = PLAYER_BODY;
+  roundRect(ctx, tx, torsoY - 6, PLAYER_W - 2, 17, 5);
   ctx.fill();
+
+  // The vest is the only saturated hue on the figure, and it is worn rather
+  // than being what the figure is made of. That is the whole costume gag and
+  // it is also why two haulers stay tellable apart at capsule size.
+  ctx.fillStyle = style.main;
+  ctx.fillRect(tx + 1, torsoY - 4.5, PLAYER_W - 4, 13);
   ctx.fillStyle = style.dark;
-  ctx.fillRect(-HALF_W + 2 + lean * 0.3, torsoY + 6, PLAYER_W - 4, 3);
-  // Hi-vis stripe: reads instantly, and is the joke of the costume.
+  ctx.fillRect(tx + 1, torsoY + 6, PLAYER_W - 4, 2.5);
+
+  // Two retroreflective bands, always white, always the brightest thing on the
+  // body. At a distance the pair of them is what you actually track.
   ctx.fillStyle = style.light;
-  ctx.fillRect(-HALF_W + 2 + lean * 0.3, torsoY - 1, PLAYER_W - 4, 2.4);
+  ctx.fillRect(tx + 1, torsoY - 2.6, PLAYER_W - 4, 2.2);
+  ctx.fillRect(tx + 1, torsoY + 2.4, PLAYER_W - 4, 2.2);
 
   /* arms — the leading arm always reaches for the rope */
   const towardPartner = Math.sign(other.x - p.x) || 1;
-  ctx.strokeStyle = style.light;
+  ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 3.4;
   ctx.beginPath();
   ctx.moveTo(0, torsoY - 2);
@@ -259,13 +283,15 @@ export function drawPlayer(
   /* head */
   const headY = torsoY - 15;
   const headX = lean * 0.5;
-  ctx.fillStyle = style.main;
+  ctx.fillStyle = PLAYER_BODY;
   ctx.beginPath();
   ctx.arc(headX, headY, 8.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.22)';
+  // A light rim rather than a dark one: on a near-black head, shading down is
+  // invisible and shading up is what gives it a form.
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
-  ctx.arc(headX, headY + 2.4, 8.6, 0.25, Math.PI - 0.25);
+  ctx.arc(headX, headY - 2.2, 8.6, Math.PI + 0.25, -0.25);
   ctx.fill();
 
   if (hat !== 5) drawFace(ctx, headX, headY, p, dead, falling, gripping, moving, towardPartner);
@@ -307,7 +333,7 @@ function drawFace(
   const eyeY = hy - 1.4;
 
   if (dead) {
-    ctx.strokeStyle = '#12131c';
+    ctx.strokeStyle = FACE_LINE;
     ctx.lineWidth = 1.7;
     for (const side of [-1, 1]) {
       const ex = hx + side * 3.4;
@@ -318,7 +344,7 @@ function drawFace(
       ctx.lineTo(ex - 2, eyeY + 2);
       ctx.stroke();
     }
-    ctx.fillStyle = '#12131c';
+    ctx.fillStyle = FACE_LINE;
     ctx.beginPath();
     ctx.ellipse(hx, hy + 4, 2.4, 1.8, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -327,7 +353,7 @@ function drawFace(
 
   if (gripping) {
     // Squinting with effort.
-    ctx.strokeStyle = '#12131c';
+    ctx.strokeStyle = FACE_LINE;
     ctx.lineWidth = 1.8;
     for (const side of [-1, 1]) {
       ctx.beginPath();
@@ -356,8 +382,8 @@ function drawFace(
     ctx.fill();
   }
 
-  ctx.strokeStyle = '#12131c';
-  ctx.fillStyle = '#12131c';
+  ctx.strokeStyle = FACE_LINE;
+  ctx.fillStyle = FACE_LINE;
   ctx.lineWidth = 1.5;
   if (falling) {
     ctx.beginPath();

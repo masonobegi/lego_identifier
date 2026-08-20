@@ -20,6 +20,7 @@ import {
 import { Camera } from './camera.js';
 import { Background } from './background.js';
 import { TileCache, drawDynamicTiles } from './tiles.js';
+import { drawFloorMarks } from './stencil.js';
 import { P_CHUNK, P_DUST, P_RING, P_SMOKE, P_SPARK, Particles } from './particles.js';
 import { applyHighContrast, biomeFor, PLAYER_COLOURS } from './palette.js';
 import { drawCargo, drawMovers, drawPlayer, drawRope, drawSaws } from './actors.js';
@@ -216,6 +217,7 @@ export class Renderer {
     this.camera.apply(ctx, this.width, this.height);
     const view = this.camera.bounds(this.width, this.height, 96);
 
+    drawFloorMarks(ctx, palette, level.widthPx, level.heightPx, view);
     this.drawTiles(ctx, level, world, view, options);
     this.drawOutOfBounds(ctx, level, view, palette);
     drawDynamicTiles(ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1);
@@ -266,16 +268,21 @@ export class Renderer {
     ctx: CanvasRenderingContext2D,
     level: Level,
     view: { x0: number; y0: number; x1: number; y1: number },
-    palette: { tileEdge: string; tileBody: string; tileTop: string },
+    palette: { voidFill: string; ink: string; tileTop: string },
   ): void {
-    ctx.fillStyle = palette.tileEdge;
+    // Deliberately not ink. A black mass at the edge of a bone-white world
+    // reads as a hole punched in the page and drags the whole frame dark,
+    // which is the one thing this direction cannot afford.
+    ctx.fillStyle = palette.voidFill;
     if (view.x0 < 0) ctx.fillRect(view.x0, view.y0, -view.x0, view.y1 - view.y0);
     if (view.x1 > level.widthPx) ctx.fillRect(level.widthPx, view.y0, view.x1 - level.widthPx, view.y1 - view.y0);
     if (view.y1 > level.heightPx) {
       const top = Math.max(view.y0, level.heightPx);
       ctx.fillRect(view.x0, top, view.x1 - view.x0, view.y1 - top);
-      ctx.fillStyle = palette.tileBody;
-      ctx.fillRect(view.x0, level.heightPx, view.x1 - view.x0, 4);
+      // The tower's base plate. In ink, so it reads as the bottom of the
+      // structure rather than as a stray rule drawn across the frame.
+      ctx.fillStyle = palette.ink;
+      ctx.fillRect(view.x0, level.heightPx, view.x1 - view.x0, 5);
     }
   }
 
@@ -348,19 +355,24 @@ export class Renderer {
       this.flash = 0;
     }
 
-    // Vignette: pushes the eye toward the middle of the shaft.
+    // Sun burn rather than a vignette. Darkening the corners of a bone-white
+    // world just makes it look grubby; blowing the edges out toward white
+    // reads as glare and pushes the eye to the middle for the same reason.
     const grad = ctx.createRadialGradient(
       this.width / 2,
       this.height / 2,
-      Math.min(this.width, this.height) * 0.32,
+      Math.min(this.width, this.height) * 0.34,
       this.width / 2,
       this.height / 2,
-      Math.max(this.width, this.height) * 0.72,
+      Math.max(this.width, this.height) * 0.74,
     );
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, options.highContrast ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.55)');
+    grad.addColorStop(0, 'rgba(255,255,255,0)');
+    grad.addColorStop(1, options.highContrast ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.30)');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
   }
 
   /** Draws the idle backdrop behind the menus. */
