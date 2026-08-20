@@ -142,8 +142,14 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       pushEvent(world, EV_GRIP, p.x, p.y, index, grippy ? 1 : 0);
     }
     p.gripping = 1;
-    // A dedicated grip surface costs nothing to hold; bare rock burns stamina.
-    if (!grippy) p.grip -= GRIP_DRAIN * DT;
+    // Bracing on your own two feet costs nothing. Hanging off a wall by your
+    // fingers burns stamina; rebar is free because that is what rebar is for.
+    //
+    // This used to drain on solid ground too, which made an anchor expire after
+    // five seconds — and being an anchor is the whole co-operative half of this
+    // game. Measured: a partner reeling out of a six-tile pit needs about nine
+    // seconds, so the anchor gave out every time and the verb was decorative.
+    if (!grippy && p.grounded !== 1) p.grip -= GRIP_DRAIN * DT;
     if (p.grip <= 0) {
       p.grip = 0;
       p.gripping = 0;

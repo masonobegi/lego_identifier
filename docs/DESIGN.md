@@ -131,6 +131,46 @@ provably climbable, and what is provably climbable is the same hop, roughly two 
 times. `width`, `step` and `direction` do work and are where real variety has to start,
 alongside geometry that actually requires the rope.
 
+## The rope does not work yet
+
+This is the most important thing in this document, and it was found by trying to
+build levels that require the rope and discovering none could be built.
+
+Every rope verb was measured against the real simulation. All three fail:
+
+| What the design claims | What the simulation does |
+|---|---|
+| A partner walking away from a corner winches you up it | **0.0 tiles of lift.** You are dragged sideways instead. |
+| An anchored partner above you is a ladder | Reeling climbs 3.6 tiles of a 6-tile pit, then stalls under the lip. |
+| Anchor and swing across a gap | The pendulum returns **seven rows lower** than it started. |
+
+The causes are each specific, and none of them is a tuning number:
+
+**The winch does nothing because sliding is cheaper than lifting.** The taut-path
+constraint removes excess rope length, and it does not care *how*. A grounded
+partner dragged toward the anchor shortens the path just as effectively as being
+lifted, and the floor is the path of least resistance — so they slide until the
+rope is slack again and everything stops. `GROUND_HAUL_RESISTANCE` was meant to
+prevent exactly this, but it resists a sideways *pull*, not a sideways *slide*
+produced by the length clamp.
+
+**The swing dies because the rope is heavily damped.** `ROPE_DAMPING` is 0.86 per
+tick and a crate hangs off the middle of it. That damping is what keeps the
+verlet chain stable and the netcode well-behaved, and it also means a pendulum
+loses nearly all of its energy in a single arc.
+
+**Reeling cannot mantle.** It hauls you along the rope toward your partner, which
+gets you to just under the lip they are standing on, and there is no verb that
+gets you over it.
+
+One fix is in: bracing on solid ground no longer drains stamina, so an anchor
+lasts as long as it is needed rather than five seconds. That was necessary and
+is not sufficient — the anchor now holds, and the partner still cannot climb.
+
+Until this is fixed, the rope is a leash with good physics and no gameplay, and
+no amount of level design can hide it. The levels are the symptom; this is the
+disease.
+
 ## Level design rules
 
 These were not obvious, and getting them wrong produced a tower that looked completely

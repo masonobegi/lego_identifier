@@ -651,3 +651,38 @@ describe('the crate stays in the world', () => {
     expect(breaches).toBe(0);
   });
 });
+
+describe('bracing', () => {
+  it('costs nothing on solid ground, so an anchor outlasts a partner climbing to it', () => {
+    const ctx = labContext();
+    const world = createWorld(ctx);
+    const p = world.players[0];
+    p.grip = GRIP_MAX;
+
+    // Fifteen seconds braced on the floor: far longer than any reel takes.
+    for (let t = 0; t < 15 * 60; t++) step(ctx, world, [IN_GRIP, 0]);
+    expect(p.gripping).toBe(1);
+    expect(p.grip).toBe(GRIP_MAX);
+  });
+
+  it('still burns stamina hanging off a wall', () => {
+    const rows = labRows();
+    // A wall to cling to, mid-air, away from the floor.
+    for (let r = 10; r < 16; r++) rows[r] = replaceAt(rows[r], 2, '##');
+    const ctx = labContext(undefined, rows);
+    const world = createWorld(ctx);
+    const p = world.players[0];
+    p.x = 4 * TILE;
+    p.y = 12 * TILE;
+    p.grounded = 0;
+    p.grip = GRIP_MAX;
+
+    let clung = 0;
+    for (let t = 0; t < 15 * 60; t++) {
+      step(ctx, world, [IN_GRIP | IN_LEFT, 0]);
+      if (p.gripping === 1) clung++;
+    }
+    expect(clung).toBeGreaterThan(0);
+    expect(p.grip).toBeLessThan(GRIP_MAX);
+  });
+});

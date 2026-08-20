@@ -3,13 +3,16 @@
 **A two-player co-op disaster about a rope, a crate, and the end of a friendship.**
 
 Two haulers are tied together by a rope, with a fragile crate hanging off the middle of
-it. The rope is not a leash — it is a **mechanism**. Its length is measured along the path
-it actually takes, so hooking it over a beam costs you slack, and a partner walking away
-from that beam **winches you up it**. Wrap it round a pillar and your leash shortens. Run
-too far and you drag your friend off a ledge.
+it. Its length is measured along the path it actually takes, so hooking it over a beam
+costs you slack. Wrap it round a pillar and your leash shortens. Run too far and you drag
+your friend off a ledge.
 
-That is the game: a tower full of things to hook a rope over, and one other person on the
-end of it.
+> **Honest status: the rope is not yet a mechanic.** Earlier versions of this file said a
+> partner walking away from a beam winches you up it, and that an anchored partner is a
+> ladder. Both were measured against the simulation and both are false — the winch lifts
+> 0.0 tiles, and reeling stalls under the lip. See *The rope does not work yet* in
+> [docs/DESIGN.md](docs/DESIGN.md) for the measurements and the causes. The physics is
+> sound and the verbs are not, which is why no level in the campaign requires a rope.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
 nobody is around, a hand-authored campaign and an endless seeded tower. Built to ship on
