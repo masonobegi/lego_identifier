@@ -54,6 +54,26 @@ export const MAX_RISE = 3;
 /** Cell distances a jump covers per row risen, from scripts/calibrate-jump.mjs. */
 export const REACH_BY_RISE = [4, 3, 3, 3];
 export const FALL_DRIFT = 7;
+/**
+ * How far a hauler can be reeled up a wall by a partner standing on top of it.
+ *
+ * Measured against the simulation: a pit ten tiles deep is escapable, and the
+ * limit in practice is the rope's own length rather than the climb. Kept below
+ * that so the analysis never claims a climb that only just works.
+ */
+export const REEL_CLIMB_TILES = 8;
+
+/** Options for the fill. Solo is the default and is the stricter of the two. */
+export interface AnalyseOptions {
+  /**
+   * Allow climbs that need a second person: reeling up a wall with a partner
+   * braced on the lip. Off by default, so the plain fill still answers the
+   * question "could one player do this", which is what makes a rope gate
+   * detectable — a gate is exactly a cell the coop fill reaches and the solo
+   * fill does not.
+   */
+  coop?: boolean;
+}
 
 /** Every cell a player could stand in: solid footing, clear body, clear head. */
 export function standableGrid(level: Level): Uint8Array {
@@ -88,7 +108,7 @@ function findStart(level: Level, standable: Uint8Array): RouteCell | null {
 }
 
 /** Flood fill the level from the spawn and hand back the route to the goal. */
-export function analyseLevel(level: Level): LevelAnalysis {
+export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelAnalysis {
   const { w, h } = level;
   const standable = standableGrid(level);
   const seen = new Int32Array(w * h).fill(-1);
@@ -140,6 +160,26 @@ export function analyseLevel(level: Level): LevelAnalysis {
     }
     for (let ny = y + 1; ny < h; ny++) {
       for (let dx = -FALL_DRIFT; dx <= FALL_DRIFT; dx++) visit(i, x + dx, ny);
+    }
+
+    // The rope climb. Stand beside a wall with a partner braced on top of it,
+    // haul on the rope, walk your feet up, and mantle over the lip. This is the
+    // only edge in the fill that needs two people, which is what makes it
+    // useful: a cell reachable only through one of these is a cell the game
+    // cannot be finished without a partner.
+    if (options.coop) {
+      for (const side of [-1, 1]) {
+        if (!isSolidTile(tileAt(level, x + side, y))) continue;
+        for (let up = 1; up <= REEL_CLIMB_TILES; up++) {
+          // A ceiling on your own side stops the climb dead.
+          const overhead = tileAt(level, x, y - up);
+          if (isSolidTile(overhead) || isDeadlyTile(overhead)) break;
+          if (isSolidTile(tileAt(level, x + side, y - up))) continue;
+          // The wall ended here: this is the lip you mantle onto.
+          visit(i, x + side, y - up);
+          break;
+        }
+      }
     }
   }
 

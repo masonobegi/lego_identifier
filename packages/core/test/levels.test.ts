@@ -8,6 +8,7 @@ import {
   tileAt,
   type ChunkDef,
   type Level,
+  assembleLevel,
 } from '@haulmates/core';
 import { analyse, ledgeSteps, canMakeStep, verifyLevel } from '../../../scripts/verify-levels.mjs';
 
@@ -167,4 +168,61 @@ describe('climbability', () => {
       expect(outcome.ok).toBe(true);
     }
   }, 240_000);
+});
+
+describe('the co-op reachability fill', () => {
+  it('opens a pit that the solo fill cannot escape', () => {
+    // An open-topped pit thirteen wide and six deep, with the spawn on one side
+    // and the goal on the other. Too wide to jump, too deep to climb out of.
+    const W = 40;
+    const pitL = 14;
+    const pitR = 26;
+    const depth = 6;
+    const ledgeRow = 6;
+    const rows: string[] = [];
+    for (let r = 0; r < ledgeRow + depth + 3; r++) {
+      const a = new Array(W).fill('.');
+      a[0] = '#';
+      a[1] = '#';
+      a[W - 2] = '#';
+      a[W - 1] = '#';
+      if (r >= ledgeRow && r < ledgeRow + depth) {
+        for (let x = 2; x < W - 2; x++) if (x < pitL || x > pitR) a[x] = '#';
+      } else if (r >= ledgeRow + depth) {
+        a.fill('#');
+      }
+      rows.push(a.join(''));
+    }
+    const put = (r: number, c: number, ch: string): void => {
+      const a = rows[r].split('');
+      a[c] = ch;
+      rows[r] = a.join('');
+    };
+    put(ledgeRow - 1, 5, 'S');
+    put(ledgeRow - 1, 33, 'F');
+
+    const level = assembleLevel('gate', 'GATE', [{ id: 'gate', biome: 0, difficulty: 1, rows }]);
+    const solo = analyse(level);
+    const coop = analyse(level, { coop: true });
+
+    expect(solo.ok, 'one player alone should be stuck in the pit').toBe(false);
+    expect(coop.ok, 'the rope climb should open it').toBe(true);
+
+    let ropeOnly = 0;
+    for (let i = 0; i < solo.seen.length; i++) {
+      if (coop.seen[i] !== -1 && solo.seen[i] === -1) ropeOnly++;
+    }
+    expect(ropeOnly).toBeGreaterThan(0);
+  });
+
+  it('agrees with the solo fill on the shipped campaign, which uses no rope', () => {
+    // Documented rather than aspirational: the campaign contains no geometry
+    // that needs a rope, and this test will start failing the moment it does —
+    // which is the point at which someone should come and update it.
+    const level = buildCampaign();
+    const solo = analyse(level);
+    const coop = analyse(level, { coop: true });
+    expect(solo.ok).toBe(true);
+    expect(coop.reached).toBe(solo.reached);
+  });
 });

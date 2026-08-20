@@ -200,6 +200,41 @@ rather than at their partner and the rope stops being a tether. The pulley
 belongs in the hard length clamp; the spring is a soft reminder that your friend
 exists and should read as one.
 
+### Why there is no such thing as a rope-locked door
+
+A great deal of effort went into building geometry a lone player provably could
+not pass, gated by a flood fill that models the rope climb (`analyseLevel` with
+`coop: true`, and `scripts/verify-coop.mjs` to prove the crossing in the real
+simulation). A pit thirteen tiles wide and six deep does register correctly:
+solo unreachable, co-op reachable, eleven cells that only the rope opens.
+
+Then it fails in play, for a reason worth writing down.
+
+**Reeling pulls you toward your partner, and your partner is on the side you
+came from.** A hauler who drops into a pit climbs back out the way they entered,
+every time, because the anchor they are hauling against is behind them. To climb
+the *far* wall somebody must already be standing on it — and with two players of
+identical ability, whatever route gets the first one up there gets the second
+one up too.
+
+That generalises, and it is the honest conclusion: **two identical players and
+static geometry cannot produce a co-operative lock.** Any route one can walk, so
+can the other. A co-op requirement in this game can only come from one of two
+places:
+
+- **The tether.** They cannot be more than 9.7 tiles apart, so a route that
+  demands separation is impossible for the pair even though it is trivial for
+  one, and a route that demands one stand still while the other moves is
+  mandatory. This is the real constraint and it is under-used.
+- **Asymmetric state.** One of them holding something, standing somewhere, or
+  having done something the other has not.
+
+So the rope is not a key. It is a **rescue**: fall into a pit and your partner
+hauls you out instead of the run resetting. That is a genuinely good mechanic,
+it now works, and it is worth building levels around — but it belongs in the
+column marked "recovers a mistake", not "opens a door", and the levels should
+stop pretending otherwise.
+
 **The rule the geometry now enforces is not "one of you must brace" but "do not
 both go in".** A partner merely standing on the lip is enough to reel against;
 gripping only makes them immovable. That is a better rule than the one that was
