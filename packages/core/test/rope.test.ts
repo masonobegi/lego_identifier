@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  Bot,
   GRIP_MAX,
+  LocalMatch,
+  MODE_GAUNTLET,
   IN_RIGHT,
   PLAYER_H,
   ROPE_MAX,
@@ -276,3 +279,53 @@ describe('climbing out of a pit', () => {
     });
   }
 })
+
+describe('the rope holds its own length', () => {
+  /**
+   * The crate used to stretch it to seven times its maximum.
+   *
+   * `updateCargo` runs after `solveRope` and hauls the middle node seventy per
+   * cent of the way toward the crate every tick. With the crate unable to move
+   * — it was buried in the floor — the middle walked toward it a little
+   * further every tick, for ever. Measured: a 232-pixel rope reached 1727,
+   * while `tautPathLength` reported a comfortable 165, because that function
+   * string-pulls between the two haulers and never sees the sag. The crate was
+   * forty-six tiles below a pair who had not noticed.
+   *
+   * Nothing caught it. The rope is drawn from its own nodes, so it looked like
+   * a rope; the length constraint is measured hauler-to-hauler, so it read as
+   * slack; and the one number that would have shown it was the one nobody
+   * computed.
+   *
+   * A Verlet rope solved with a handful of Gauss-Seidel passes always sits a
+   * little over its constraint, so the bar is a ratio rather than the limit
+   * itself. Measured at 1.17 and 1.36 across four levels of two-minute bot
+   * runs; 1.6 sits clear of both, and nowhere near the failure it is here to
+   * catch.
+   */
+  it('does not stretch without limit when the crate cannot follow', () => {
+    for (const [mode, seed] of [
+      [MODE_HAUL, 7],
+      [MODE_GAUNTLET, 33],
+      [MODE_GAUNTLET, 555],
+    ] as const) {
+      const match = new LocalMatch(mode, seed, 10);
+      match.setBot(0, new Bot(match.ctx.level));
+      match.setBot(1, new Bot(match.ctx.level));
+      const w = match.world;
+      let worst = 0;
+      for (let t = 0; t < 90 * 60; t++) {
+        match.update(1000 / 60, [0, 0]);
+        match.events.length = 0;
+        let poly = 0;
+        for (let i = 1; i < ROPE_NODES; i++) {
+          const dx = w.ropeX[i] - w.ropeX[i - 1];
+          const dy = w.ropeY[i] - w.ropeY[i - 1];
+          poly += Math.sqrt(dx * dx + dy * dy);
+        }
+        if (poly > worst) worst = poly;
+      }
+      expect(worst / ROPE_MAX, `mode ${mode} seed ${seed}: worst rope length`).toBeLessThan(1.6);
+    }
+  });
+});
