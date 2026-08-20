@@ -95,6 +95,25 @@ export interface InputConfig {
   p2: Bindings;
 }
 
+/**
+ * `navigator.getGamepads()`, but it cannot take the game down.
+ *
+ * Embedded contexts can disallow the gamepad feature by permissions policy,
+ * and the call then *throws* a SecurityError rather than returning nothing.
+ * That is not a hypothetical: it is what a page hosting this in an iframe did,
+ * and because pads are polled while the App is being constructed, the whole
+ * game died before it drew a frame and rendered as a black rectangle.
+ *
+ * Feature-detecting the method is not enough — it exists, it just refuses.
+ */
+function readPads(): readonly (Gamepad | null)[] {
+  try {
+    return navigator.getGamepads?.() ?? [];
+  } catch {
+    return [];
+  }
+}
+
 function cloneBindings(b: Bindings): Bindings {
   const out = {} as Bindings;
   for (const a of ACTIONS) out[a] = [...b[a]];
@@ -158,7 +177,7 @@ export class InputManager {
   }
 
   private assignPads(): void {
-    const list = navigator.getGamepads ? navigator.getGamepads() : [];
+    const list = readPads();
     const connected: number[] = [];
     for (const pad of list) if (pad && pad.connected) connected.push(pad.index);
     this.pads = [connected[0] ?? -1, connected[1] ?? -1];
@@ -177,8 +196,8 @@ export class InputManager {
 
   private padFor(slot: number): Gamepad | null {
     const index = this.pads[slot];
-    if (index < 0 || !navigator.getGamepads) return null;
-    return navigator.getGamepads()[index] ?? null;
+    if (index < 0) return null;
+    return readPads()[index] ?? null;
   }
 
   /**

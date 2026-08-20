@@ -94,6 +94,7 @@ if (!process.argv.includes('--no-check')) {
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
+  const problemsEarly = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
   // A fragment is only ever seen inside somebody else's page skeleton, so
@@ -113,6 +114,42 @@ if (!process.argv.includes('--no-check')) {
     await btn.waitFor({ state: 'visible', timeout: 10000 });
     await btn.click();
   };
+  // Boot once more in a browser that refuses the gamepad API. An embedded
+  // host disallowed the feature by permissions policy, and getGamepads()
+  // throws a SecurityError rather than returning nothing — which killed the
+  // game during construction and rendered it as a black rectangle. Feature
+  // detection does not help: the method exists, it just refuses.
+  const hostile = await browser.newPage({ viewport: { width: 900, height: 600 } });
+  await hostile.addInitScript(() => {
+    Object.defineProperty(navigator, 'getGamepads', {
+      value: () => {
+        throw new DOMException('disallowed by permissions policy', 'SecurityError');
+      },
+      configurable: true,
+    });
+  });
+  const hostileErrors = [];
+  hostile.on('pageerror', (e) => hostileErrors.push(e.message));
+  await hostile.goto(openUrl);
+  const survived = await hostile
+    .waitForFunction(() => Boolean(window.HAULMATES) && document.querySelectorAll('button.btn').length > 0, {
+      timeout: 15000,
+    })
+    .then(() => true)
+    .catch(() => false);
+  const hostileState = await hostile.evaluate(() => ({
+    booted: Boolean(window.HAULMATES),
+    buttons: document.querySelectorAll('button.btn').length,
+    failure: document.querySelector('[role="alert"] pre')?.textContent ?? null,
+  }));
+  await hostile.close();
+  if (!survived) {
+    problemsEarly.push(
+      `the game does not boot when the browser refuses the gamepad API ` +
+        `(${JSON.stringify(hostileState)}${hostileErrors.length ? ` errors: ${hostileErrors[0]}` : ''})`,
+    );
+  }
+
   await click('Play on this machine');
   await click('A bot');
   await click('Start');
@@ -132,7 +169,7 @@ if (!process.argv.includes('--no-check')) {
   await browser.close();
   if (scratch) rmSync(scratch, { force: true });
 
-  const problems = [];
+  const problems = [...problemsEarly];
   if (errors.length) problems.push(`page errors: ${errors.slice(0, 3).join(' | ')}`);
   if (state.tick < 200) problems.push(`simulation barely advanced (${state.tick} ticks)`);
   // Route position, not displacement: the tower is a serpentine, so a bot two
