@@ -13,7 +13,7 @@ import {
 } from './constants.js';
 import { hazardAt } from './hazards.js';
 import { T_CHECKPOINT, T_GOAL, tileAt } from './level.js';
-import { applyRopeForces, clampRopeLength, solveRope } from './rope.js';
+import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
 import { updatePlayer } from './player.js';
 import { placeAtSpawn } from './state.js';
@@ -144,7 +144,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   if (world.restartTimer > 0) {
     world.restartTimer--;
     if (world.restartTimer === 0) {
-      placeAtSpawn(world, world.spawnX, world.spawnY);
+      placeAtSpawn(level, world, world.spawnX, world.spawnY);
       world.cargo.hp = CARGO_HP;
       world.crumble.fill(0);
       pushEvent(world, EV_RESPAWN, world.spawnX, world.spawnY, -1, 0);
@@ -157,6 +157,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
     solveRope(world, level);
     clampRopeLength(world, level);
     updateCargo(level, world);
+    tightenRope(world);
     return;
   }
 
@@ -169,6 +170,10 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   clampRopeLength(world, level);
   applyRopeLoad(world);
   updateCargo(level, world);
+  // The crate has just hauled on the rope's middle node. Put the rope back
+  // inside its own length before anything reads it, or a crate that cannot
+  // move drags the middle a little further toward itself every tick, for ever.
+  tightenRope(world);
 
   /* --------------------------------------------------------------- deaths */
   for (let i = 0; i < 2; i++) {

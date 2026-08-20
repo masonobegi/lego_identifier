@@ -1,5 +1,6 @@
-import { CARGO_HP, GRIP_MAX, ROPE_NODES, ROPE_REST } from './constants.js';
+import { CARGO_H, CARGO_HP, CARGO_W, GRIP_MAX, PLAYER_H, ROPE_NODES, ROPE_REST, TILE } from './constants.js';
 import type { Level } from './level.js';
+import { rectHitsTiles } from './physics.js';
 import type { CargoState, PlayerState, SimContext, World } from './types.js';
 
 /**
@@ -38,7 +39,26 @@ function emptyPlayer(): PlayerState {
 }
 
 /** Place both players and the whole rope at a spawn point. */
-export function placeAtSpawn(world: World, x: number, y: number): void {
+/**
+ * Nudge the crate up out of anything solid it was placed inside.
+ *
+ * A spawn point is authored for the haulers, and the crate is put near them; on
+ * a ledge one tile thick that is enough to leave a corner of it in the rock.
+ * Anything embedded in geometry is immovable for the rest of the run — the
+ * sweep that moves it has nowhere legal to go — so the one place worth checking
+ * is the moment it is placed.
+ */
+function liftClear(level: Level, world: World): void {
+  const cargo = world.cargo;
+  const hw = CARGO_W / 2 - 1;
+  const hh = CARGO_H / 2 - 1;
+  for (let step = 0; step < 6; step++) {
+    if (!rectHitsTiles(level, world, cargo.x - hw, cargo.y - hh, cargo.x + hw, cargo.y + hh)) return;
+    cargo.y -= TILE;
+  }
+}
+
+export function placeAtSpawn(level: Level, world: World, x: number, y: number): void {
   const half = ROPE_REST * 0.36;
   for (let i = 0; i < 2; i++) {
     const p = world.players[i];
@@ -80,9 +100,21 @@ export function placeAtSpawn(world: World, x: number, y: number): void {
     world.ropePY[i] = ny;
   }
 
+  // The crate stands on the ground at the haulers' feet, not at the bottom of
+  // the rope's slack arc.
+  //
+  // It used to be placed twenty-two pixels below the sagging mid node, which in
+  // the campaign is two rows *into* the floor. Measured: the crate spawned at
+  // row 649.5 with rows 648, 649 and 650 all solid — buried in rock, unable to
+  // move a pixel in any direction, on every spawn and every respawn. The tether
+  // hauled at it for the whole run and it never once shifted, which is why the
+  // pair could climb forty-four rows and leave it behind: there was nothing on
+  // the end of the rope but a hole in the world. The hauling mechanic this
+  // game is named after had never run.
   const mid = (ROPE_NODES - 1) >> 1;
   world.cargo.x = world.ropeX[mid];
-  world.cargo.y = world.ropeY[mid] + 22;
+  world.cargo.y = (ay + by) * 0.5 + (PLAYER_H - CARGO_H) / 2;
+  liftClear(level, world);
   world.cargo.px = world.cargo.x;
   world.cargo.py = world.cargo.y;
   world.cargo.rot = 0;
@@ -116,7 +148,7 @@ export function createWorld(ctx: SimContext): World {
     cargoBreaks: 0,
     events: [],
   };
-  placeAtSpawn(world, level.spawnX, level.spawnY);
+  placeAtSpawn(level, world, level.spawnX, level.spawnY);
   return world;
 }
 

@@ -671,18 +671,32 @@ describe('bracing', () => {
     for (let r = 10; r < 16; r++) rows[r] = replaceAt(rows[r], 2, '##');
     const ctx = labContext(undefined, rows);
     const world = createWorld(ctx);
+    // Both haulers by the wall, rope slack between them.
+    //
+    // This used to teleport one of them across the room and leave the rope
+    // where it was, which put a full rope-length of tension on the grip before
+    // the first tick. The wall lost: measured, the hauler was hauled off it
+    // after six ticks and spent the remaining fourteen seconds standing on the
+    // floor, so what the test actually measured was the drain rate of standing
+    // still. It passed for years on the strength of that.
+    dropPlayersAt(world, 4 * TILE + 30, 12 * TILE);
     const p = world.players[0];
-    p.x = 4 * TILE;
-    p.y = 12 * TILE;
     p.grounded = 0;
     p.grip = GRIP_MAX;
 
     let clung = 0;
+    let lowest = GRIP_MAX;
     for (let t = 0; t < 15 * 60; t++) {
       step(ctx, world, [IN_GRIP | IN_LEFT, 0]);
       if (p.gripping === 1) clung++;
+      if (p.grip < lowest) lowest = p.grip;
     }
-    expect(clung).toBeGreaterThan(0);
-    expect(p.grip).toBeLessThan(GRIP_MAX);
+    // Long enough to be a cling rather than a brush past the wall.
+    expect(clung, 'ticks spent clinging').toBeGreaterThan(60);
+    // The low-water mark, not the reading at the end: grip regenerates once
+    // you are back on solid ground, so a hauler who clings, tires, drops and
+    // then stands around finishes on a full bar — which says nothing at all
+    // about whether clinging cost anything.
+    expect(lowest, 'lowest grip while clinging').toBeLessThan(GRIP_MAX * 0.9);
   });
 });

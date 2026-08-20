@@ -99,6 +99,43 @@ const DEADZONE = 4;
 const BRAKE_DIST = 18;
 /** Speed above which coasting beats another tick of acceleration. */
 const BRAKE_SPEED = 110;
+/**
+ * How far off its mark a settled hauler has to be pushed before it steps back.
+ *
+ * A Schmitt trigger, in pixels, and the multiplier matters more than the
+ * number: stopping still happens at DEADZONE, so the bot lands on its mark just
+ * as precisely as before. Only *starting* is harder. Two earlier attempts at
+ * this widened the deadzone itself instead, which made the bot stop short of
+ * everything and halved how far the pair climbed — the fidget is caused by
+ * being nudged off a mark it has already reached, not by imprecision reaching
+ * it.
+ */
+const RESETTLE = DEADZONE * 3;
+/**
+ * How far below the waiting thresholds a hauler has to come before it sets off
+ * again. The same Schmitt trigger as RESETTLE, applied to the decision that
+ * actually deadlocked the campaign — starting to wait is easy, stopping is not.
+ */
+const WAIT_RELEASE = 0.8;
+/**
+ * Ticks a hauler will hold position for a partner before setting off anyway.
+ *
+ * Every deadlock this bot has ever produced has been a mutual wait: each of
+ * them correctly concluded that the considerate thing to do was stand still,
+ * and they were both right, and the pair then sat there for four minutes.
+ * Nothing in the position of either hauler distinguishes that from a rescue
+ * going well, so it cannot be detected — only timed out.
+ */
+const WAIT_PATIENCE = 300;
+/**
+ * Ticks without advancing along the route before the bot treats itself as
+ * stuck, however busy it looks.
+ *
+ * The older stillness check measured pixels moved, which a bot alternating
+ * LEFT and RIGHT sixty times a second passes with room to spare. Route
+ * progress is the thing actually at stake, so it is the thing to measure.
+ */
+const STALL_TICKS = 480;
 /** Pixels per tick of crate movement that counts as "still swinging". */
 const CRATE_CALM_SPEED = 4;
 /** Ticks to hold JUMP, indexed by rows to rise. Longer is higher, not further. */
@@ -201,9 +238,19 @@ export class Bot {
   private lastY = 0;
   private anchoring = false;
   private ropeWait = 0;
+  /** True while holding position for a partner, with hysteresis on both edges. */
+  private holding = false;
+  /** Ticks spent holding position for a partner, so patience can run out. */
+  private waitTicks = 0;
+  /** Ticks since the route cursor last advanced. */
+  private stallTicks = 0;
+  /** Highest route cursor reached, so shuffling backwards does not reset the clock. */
+  private bestCursor = -1;
   private leap: Leap | null = null;
   private leapFor = -1;
   private steerWait = 0;
+  /** True while standing on a mark, so small shoves do not restart the walk. */
+  private settled = false;
   private slack: number;
   private leash: number;
   private leadRows: number;
@@ -347,11 +394,26 @@ export class Bot {
     const mateCell = bodyCell(mate.x, mate.y);
     const mateIndex = this.indexAt(mateCell.x, mateCell.y);
     const inFront = mateIndex >= 0 ? this.cursor > mateIndex : mateRows > 0.5;
-    const waiting =
+    //
+    // Both thresholds have hysteresis, and they need it more than anything
+    // else in here does. `waiting` chooses between two route cells that are
+    // usually on opposite sides of the hauler, so a decision sitting on its
+    // threshold does not wobble the bot by a pixel — it sends it left, then
+    // right, then left, at sixty hertz. Measured on the campaign: three
+    // hundred LEFTs and three hundred RIGHTs in six hundred ticks, perfectly
+    // alternating, while the partner braced for it and the pair sat there for
+    // four solid minutes.
+    const patience = this.holding ? WAIT_RELEASE : 1;
+    const considerate =
       !airborne &&
       nextIndex !== this.cursor &&
       inFront &&
-      (ropeDist > this.leash || mateRows > this.leadRows + this.slack);
+      (ropeDist > this.leash * patience || mateRows > this.leadRows * patience + this.slack);
+    // Patience runs out. Without this the wait is unbounded, and an unbounded
+    // wait held by both haulers at once is a deadlock with no way out of it.
+    const waiting = considerate && this.waitTicks < WAIT_PATIENCE;
+    this.waitTicks = considerate ? this.waitTicks + 1 : 0;
+    this.holding = waiting;
     const target = waiting ? here : next;
 
     if (this.chargeFor !== nextIndex) {
@@ -471,11 +533,22 @@ export class Bot {
 
   private toward(x: number, goal: number, vx = 0): number {
     const d = goal - x;
-    if (Math.abs(d) <= DEADZONE) return 0;
+    const away = Math.abs(d);
+    // Hysteresis. Standing on a ledge with a partner and a crate on the end of
+    // the rope, the bot is shoved a pixel or two off its mark several times a
+    // second; without this it answers every shove, and the answer is a
+    // direction change. Measured at twenty-six reversals a second, which is
+    // not a deadlock and does not fail anything — it just looks broken to
+    // anyone watching it for five seconds.
+    if (away <= (this.settled ? RESETTLE : DEADZONE)) {
+      this.settled = true;
+      return 0;
+    }
+    this.settled = false;
     // Coast the last few pixels. Driving all the way onto the mark and then
     // correcting back sends a whip down the rope, and the crate hanging off
     // the middle of it is what pays for that.
-    if (Math.abs(d) < BRAKE_DIST && vx * d > 0 && Math.abs(vx) > BRAKE_SPEED) return 0;
+    if (away < BRAKE_DIST && vx * d > 0 && Math.abs(vx) > BRAKE_SPEED) return 0;
     return d > 0 ? 1 : -1;
   }
 
@@ -776,10 +849,25 @@ export class Bot {
     this.lastY = y;
     if (moved < 0.6) this.stillTicks++;
     else this.stillTicks = 0;
-    if (this.stillTicks > STUCK_TICKS && this.unstick === 0) {
+
+    // Two clocks, because there are two ways to get nowhere. Standing
+    // perfectly still is the obvious one. The other is being extremely busy
+    // about it — pacing, jiggling, running up to a jump and backing off again
+    // — which sails past a check on pixels moved and gets absolutely nothing
+    // done. Route progress catches both.
+    if (this.cursor > this.bestCursor) {
+      this.bestCursor = this.cursor;
+      this.stallTicks = 0;
+    } else {
+      this.stallTicks++;
+    }
+
+    if ((this.stillTicks > STUCK_TICKS || this.stallTicks > STALL_TICKS) && this.unstick === 0) {
       this.unstick = UNSTICK_TICKS;
       this.unstickDir = -this.unstickDir;
       this.stillTicks = 0;
+      this.stallTicks = 0;
+      this.waitTicks = WAIT_PATIENCE;
     }
   }
 

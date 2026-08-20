@@ -44,6 +44,13 @@ export const GRIP_MAX = 210;
 export const GRIP_DRAIN = 42;
 export const GRIP_REGEN = 62;
 export const GRIP_REGEN_DELAY = 12;
+/**
+ * Share of the full drain rate paid for bracing a partner who is hanging on
+ * the rope. At 0.35 a full bar holds a dangling hauler for fourteen seconds:
+ * long enough that a rescue is a rescue, short enough that a pair who have
+ * wedged themselves cannot stay wedged.
+ */
+export const HANG_DRAIN_SHARE = 0.35;
 export const GRIP_REACH = 5;
 
 /** Rope. The rope is elastic between REST and MAX, then hard-clamped. */
@@ -135,7 +142,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 11;
+export const SIM_VERSION = 12;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

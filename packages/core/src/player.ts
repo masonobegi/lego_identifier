@@ -9,6 +9,8 @@ import {
   EMOTE_TICKS,
   GRAVITY,
   GRIP_DRAIN,
+  HANG_DRAIN_SHARE,
+  ROPE_REST,
   GRIP_MAX,
   GRIP_REACH,
   GRIP_REGEN,
@@ -142,14 +144,33 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       pushEvent(world, EV_GRIP, p.x, p.y, index, grippy ? 1 : 0);
     }
     p.gripping = 1;
-    // Bracing on your own two feet costs nothing. Hanging off a wall by your
-    // fingers burns stamina; rebar is free because that is what rebar is for.
+    // What costs stamina is holding weight, not holding on.
     //
-    // This used to drain on solid ground too, which made an anchor expire after
-    // five seconds — and being an anchor is the whole co-operative half of this
-    // game. Measured: a partner reeling out of a six-tile pit needs about nine
-    // seconds, so the anchor gave out every time and the verb was decorative.
+    // Hanging off a wall by your fingers burns it fast; rebar is free, because
+    // that is what rebar is for; and standing on your own two feet with a slack
+    // rope is free too. That last one used to drain, which made an anchor
+    // expire after five seconds when a partner reeling out of a six-tile pit
+    // needs about nine — the anchor gave out every time and the verb was
+    // decorative.
+    //
+    // But free-for-ever is its own failure, and a worse one. With a partner
+    // swinging under you on a taut rope and nothing to pay for it, bracing is a
+    // position two haulers can hold until the heat death of the universe.
+    // Measured on the campaign: bot 0 held GRIP on a full bar while bot 1 hung
+    // over a void reeling at it, and the pair stayed exactly there for four
+    // minutes — no progress, no deaths, no reset, nothing to break the tie.
+    // A dangling partner is real weight, so it draws on the bar; slowly, so a
+    // rescue is still a rescue, but it ends.
+    const mate = world.players[1 - index];
+    const mdx = mate.x - p.x;
+    const mdy = mate.y - p.y;
+    const hanging =
+      !mate.dead &&
+      mate.grounded !== 1 &&
+      !mate.gripping &&
+      mdx * mdx + mdy * mdy > ROPE_REST * ROPE_REST;
     if (!grippy && p.grounded !== 1) p.grip -= GRIP_DRAIN * DT;
+    else if (hanging) p.grip -= GRIP_DRAIN * HANG_DRAIN_SHARE * DT;
     if (p.grip <= 0) {
       p.grip = 0;
       p.gripping = 0;

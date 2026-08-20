@@ -262,6 +262,29 @@ export function solveRope(world: World, level: Level): void {
   const bx = anchorX(world, 1);
   const by = anchorY(world, 1);
 
+  tightenRope(world);
+}
+
+/**
+ * Re-apply the segment length constraint, pinning both ends to the haulers.
+ *
+ * Split out of `solveRope` because it has to run again after the crate has
+ * moved. The crate's tether hauls the rope's middle node up to seventy per cent
+ * of the way toward itself every tick, and it does that *after* the solver has
+ * run — so with a crate that cannot move, the middle node walks toward it and
+ * the rope stretches without limit. Measured: a 232-pixel rope reached 1727
+ * pixels while `tautPathLength` reported a comfortable 165, because that
+ * function string-pulls between the two haulers and never sees the sag. The
+ * crate was left forty-six tiles below a pair who did not notice.
+ */
+export function tightenRope(world: World): void {
+  const rx = world.ropeX;
+  const ry = world.ropeY;
+  const ax = anchorX(world, 0);
+  const ay = anchorY(world, 0);
+  const bx = anchorX(world, 1);
+  const by = anchorY(world, 1);
+
   for (let iter = 0; iter < ROPE_ITERATIONS; iter++) {
     rx[0] = ax;
     ry[0] = ay;
@@ -272,7 +295,7 @@ export function solveRope(world: World, level: Level): void {
       const dy = ry[i + 1] - ry[i];
       const d = Math.sqrt(dx * dx + dy * dy);
       if (d <= SEG_MAX || d < 0.0001) continue;
-      const scale = (d - SEG_MAX) / d * 0.5;
+      const scale = ((d - SEG_MAX) / d) * 0.5;
       const ox = dx * scale;
       const oy = dy * scale;
       if (i !== 0) {
@@ -404,9 +427,13 @@ export const ROPE_MID = (ROPE_NODES - 1) >> 1;
  * *up* it. A pulley, out of geometry the level designer already had.
  */
 const MAX_CONTACTS = 8;
-const pathX = new Float64Array(MAX_CONTACTS + 2);
-const pathY = new Float64Array(MAX_CONTACTS + 2);
+// Room for both spans of the path — hauler to load, load to hauler — plus the
+// three fixed points those spans hang between.
+const pathX = new Float64Array(MAX_CONTACTS * 2 + 3);
+const pathY = new Float64Array(MAX_CONTACTS * 2 + 3);
 let pathCount = 0;
+/** Bends around level geometry only. The load is on the path but is not a bend. */
+let bendCount = 0;
 
 /** Sampled line-of-sight test. Deterministic: integer steps, no transcendentals. */
 function segmentClear(level: Level, world: World, x0: number, y0: number, x1: number, y1: number): boolean {
@@ -437,6 +464,7 @@ export function tautPathLength(world: World, level: Level): number {
   const by = anchorY(world, 1);
 
   pathCount = 0;
+  bendCount = 0;
   pathX[pathCount] = ax;
   pathY[pathCount] = ay;
   pathCount++;
@@ -460,10 +488,11 @@ export function tautPathLength(world: World, level: Level): number {
     // the straight line rather than inventing a path.
     if (next < 0 || next <= cursor) break;
     cursor = next;
-    if (pathCount >= MAX_CONTACTS + 1) break;
+    if (pathCount >= pathX.length - 2) break;
     pathX[pathCount] = world.ropeX[next];
     pathY[pathCount] = world.ropeY[next];
     pathCount++;
+    bendCount++;
   }
 
   pathX[pathCount] = bx;
@@ -481,7 +510,7 @@ export function tautPathLength(world: World, level: Level): number {
 
 /** How many bends the rope currently has. Zero means a clear straight run. */
 export function ropeContactCount(): number {
-  return Math.max(0, pathCount - 2);
+  return bendCount;
 }
 
 /**
