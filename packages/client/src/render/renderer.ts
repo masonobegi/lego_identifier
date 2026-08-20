@@ -13,6 +13,7 @@ import {
   EV_ROPE_YANK,
   EV_STEP,
   TILE,
+  pointSolid,
   type Level,
   type SimEvent,
   type World,
@@ -20,6 +21,34 @@ import {
 import { Camera } from './camera.js';
 import { Background } from './background.js';
 import { TileCache, drawDynamicTiles } from './tiles.js';
+
+/** Chalk marks written per frame. A cap, so a thrashing rope cannot stall a frame. */
+const SCUFFS_PER_FRAME = 6;
+/** Pixels a rope node must travel in a frame to count as sliding rather than resting. */
+const SCUFF_MIN_SLIDE = 1.2;
+/** Depth of the chevron cap band, in pixels. Kept clear of chalk. */
+const CAP_BAND = 10;
+
+/** Is this point on the painted top edge of a ledge? */
+function onLedgeCap(level: Level, world: World, x: number, y: number): boolean {
+  const ty = Math.floor(y / TILE);
+  for (let probe = 0; probe <= 1; probe++) {
+    const row = ty + probe;
+    if (y - row * TILE > CAP_BAND || y < row * TILE) continue;
+    if (pointSolid(level, world, x, row * TILE + TILE * 0.5) && !pointSolid(level, world, x, row * TILE - 2)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Where to look for a wall, given the solver keeps nodes just clear of one. */
+const SCUFF_PROBES: [number, number][] = [
+  [-5, 0],
+  [5, 0],
+  [0, -5],
+  [0, 5],
+];
 import { drawFloorMarks } from './stencil.js';
 import { P_CHUNK, P_DUST, P_RING, P_SMOKE, P_SPARK, Particles } from './particles.js';
 import { applyHighContrast, biomeFor, PLAYER_COLOURS } from './palette.js';
@@ -217,6 +246,7 @@ export class Renderer {
     this.camera.apply(ctx, this.width, this.height);
     const view = this.camera.bounds(this.width, this.height, 96);
 
+    this.recordScuffs(level, world, prev, options);
     drawFloorMarks(ctx, palette, level.widthPx, level.heightPx, view);
     this.drawTiles(ctx, level, world, view, options);
     this.drawOutOfBounds(ctx, level, view, palette);
@@ -238,6 +268,43 @@ export class Renderer {
 
     this.postProcess(ctx, dt, options);
     drawHud(ctx, this.width, this.height, input.hud);
+  }
+
+  /**
+   * Grind chalk into the paint wherever the rope is dragging along a wall.
+   *
+   * Two conditions, both necessary. *Touching*, or the rope would paint the
+   * open air it swings through. *Sliding*, or a rope resting against a corner
+   * while the players stand still would burn a hole in one spot. What survives
+   * is a record of the route the pair actually took, which is the point: at the
+   * top of a long climb the wall below you is the story of getting there.
+   */
+  private recordScuffs(level: Level, world: World, prev: World, options: RenderOptions): void {
+    if (options.highContrast) return;
+    let written = 0;
+    for (let i = 0; i < world.ropeX.length && written < SCUFFS_PER_FRAME; i++) {
+      const x = world.ropeX[i];
+      const y = world.ropeY[i];
+      const moved = Math.abs(x - prev.ropeX[i]) + Math.abs(y - prev.ropeY[i]);
+      if (moved < SCUFF_MIN_SLIDE) continue;
+      // Probe around the node rather than at it: a rope node is kept just
+      // outside geometry by the solver, so testing the point itself never hits.
+      let hit = false;
+      for (const [ox, oy] of SCUFF_PROBES) {
+        if (pointSolid(level, world, x + ox, y + oy)) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) continue;
+      // Never chalk the top of a ledge. The cap band is the single most
+      // important thing on screen to read at speed, and wear laid over it
+      // mutes the chevron into the concrete. Walls and undersides take the
+      // marks instead, which is where a rope drags hardest anyway.
+      if (onLedgeCap(level, world, x, y)) continue;
+      this.tiles.addScuff(x, y, 3 + Math.min(3, moved * 0.25));
+      written++;
+    }
   }
 
   private drawTiles(

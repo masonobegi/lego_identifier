@@ -49,21 +49,71 @@ function shade(hex: string, amount: number): string {
  * several draw calls for its edges and texture. Baking turns that into one
  * `drawImage` per block and keeps the frame budget for things that move.
  */
+/** Marks kept per block. Past this the wall turns to soup rather than history. */
+const SCUFF_LIMIT = 96;
+
 export class TileCache {
   private blocks = new Map<number, HTMLCanvasElement>();
   private order: number[] = [];
   private levelId = '';
   private paletteKey = '';
+  /**
+   * Where the rope has ground chalk into the paint, per block, as a flat
+   * [x, y, r, ...] ring buffer in block-local pixels.
+   *
+   * Kept outside the baked canvases on purpose. The canvas cache is an LRU of
+   * six blocks, so a player who climbs twenty floors and looks back down would
+   * find the wall wiped clean if the marks lived only in the bitmap. Storing
+   * them here and replaying them on every bake is what makes the tower
+   * remember the route — including the three times you fell back down it.
+   */
+  private scuffs = new Map<number, number[]>();
 
   invalidate(): void {
     this.blocks.clear();
     this.order.length = 0;
   }
 
+  /** Forget the tower's history. Called when a new level is assembled. */
+  private forgetScuffs(): void {
+    this.scuffs.clear();
+  }
+
+  /**
+   * Record a rope scuff at a world position. Cheap enough to call for every
+   * sliding rope node every frame; it dedupes onto a coarse grid itself.
+   */
+  addScuff(worldX: number, worldY: number, radius: number): void {
+    const rows = BLOCK_ROWS * TILE;
+    const index = Math.floor(worldY / rows);
+    if (index < 0) return;
+    let ring = this.scuffs.get(index);
+    if (!ring) {
+      ring = [];
+      this.scuffs.set(index, ring);
+    }
+    const lx = worldX;
+    const ly = worldY - index * rows;
+    // Skip a mark that lands on top of the previous one, or the rope would
+    // burn a hole rather than leave a trail.
+    const n = ring.length;
+    if (n >= 3 && Math.abs(ring[n - 3] - lx) < 5 && Math.abs(ring[n - 2] - ly) < 5) return;
+    if (ring.length >= SCUFF_LIMIT * 3) ring.splice(0, 3);
+    ring.push(lx, ly, radius);
+
+    const canvas = this.blocks.get(index);
+    const ctx = canvas?.getContext('2d');
+    if (ctx) paintScuff(ctx, lx, ly, radius, this.scuffPaint, this.scuffAlpha);
+  }
+
+  private scuffPaint = '#FFFDF6';
+  private scuffAlpha = 0.1;
+
   block(level: Level, index: number, highContrast: boolean): HTMLCanvasElement | null {
     const key = `${level.id}|${highContrast}`;
     if (key !== this.levelId + '|' + this.paletteKey) {
       this.invalidate();
+      if (level.id !== this.levelId) this.forgetScuffs();
       this.levelId = level.id;
       this.paletteKey = String(highContrast);
     }
@@ -106,6 +156,19 @@ export class TileCache {
     }
     sweep('reads');
 
+    // Replay everything the rope has ground into this block. On top of the
+    // reads pass rather than under it, because a scuff is chalk sitting on the
+    // paint — but at a low enough alpha that it can never hide an edge.
+    const skin = biomeFor(level.biome[Math.min(level.h - 1, rowStart)]);
+    this.scuffPaint = skin.chalk;
+    this.scuffAlpha = highContrast ? 0 : skin.scuffAlpha;
+    const ring = this.scuffs.get(index);
+    if (ring && this.scuffAlpha > 0) {
+      for (let i = 0; i < ring.length; i += 3) {
+        paintScuff(ctx, ring[i], ring[i + 1], ring[i + 2], this.scuffPaint, this.scuffAlpha);
+      }
+    }
+
     this.blocks.set(index, canvas);
     this.order.push(index);
     while (this.order.length > CACHE_SIZE) {
@@ -118,6 +181,25 @@ export class TileCache {
   static blockRows(): number {
     return BLOCK_ROWS;
   }
+}
+
+/** One chalk smear. Soft-edged, so a trail reads as wear rather than as dots. */
+function paintScuff(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  radius: number,
+  colour: string,
+  alpha: number,
+): void {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.ellipse(x, y, radius, radius * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function neighbour(level: Level, tx: number, ty: number): number {
