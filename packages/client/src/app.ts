@@ -1,4 +1,5 @@
 import {
+  Bot,
   DEFAULT_TOWER_LENGTH,
   IN_GRIP,
   IN_JUMP,
@@ -76,6 +77,8 @@ export class App {
 
   lobbyMode = MODE_HAUL;
   lobbyTowerLength = DEFAULT_TOWER_LENGTH;
+  /** Local play with a bot on the second rope end rather than a second person. */
+  botPartner = false;
 
   net: NetClient | null = null;
   local: LocalMatch | null = null;
@@ -200,7 +203,9 @@ export class App {
       if (this.net) masks[Math.max(0, this.net.localIndex)] = this.input.mask(0);
       else {
         masks[0] = this.input.mask(0);
-        masks[1] = this.input.mask(1);
+        // The bot overrides slot two inside the session anyway; not reading
+        // the keys for it keeps the arrow keys from looking half-connected.
+        if (!this.botPartner) masks[1] = this.input.mask(1);
       }
     }
 
@@ -439,7 +444,7 @@ export class App {
     const session = this.net ?? this.local!;
     const names: [string, string] = this.net
       ? [this.net.peers[0].name || 'HAULER ONE', this.net.peers[1].name || 'HAULER TWO']
-      : [this.settings.playerName || 'PLAYER ONE', 'PLAYER TWO'];
+      : [this.settings.playerName || 'PLAYER ONE', this.local?.bots[1] ? 'AUTOHAULER' : 'PLAYER TWO'];
     const colours = this.displayColours();
     return {
       world,
@@ -614,6 +619,7 @@ export class App {
     this.lastResult = null;
     const seed = (Math.random() * 0x7fffffff) | 0;
     this.local = new LocalMatch(this.lobbyMode, seed, this.lobbyTowerLength);
+    if (this.botPartner) this.local.setBot(1, new Bot(this.local.ctx.level));
     this.renderer.reset(this.local.world);
     this.profile.runs++;
     this.persist();

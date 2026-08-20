@@ -32,10 +32,11 @@
     "steam:config": "node scripts/gen-steam-config.mjs",
     "desktop:payload": "node scripts/package-desktop.mjs --skip-installer",
     "desktop:verify": "node scripts/verify-desktop.mjs",
-    "verify": "npm run typecheck && npm run test && npm run build && npm run verify:levels && npm run e2e && npm run desktop:payload && npm run desktop:verify",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run verify:levels && npm run e2e && npm run web && npm run desktop:payload && npm run desktop:verify",
     "levels": "python3 tools/gen_chunks.py packages/core/src/chunks.ts",
     "verify:levels": "node scripts/verify-levels.mjs",
-    "calibrate": "node scripts/calibrate-jump.mjs"
+    "calibrate": "node scripts/calibrate-jump.mjs",
+    "web": "node scripts/bundle-web.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

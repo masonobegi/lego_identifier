@@ -20,6 +20,16 @@ export interface Settings {
  *  when the player is hosting from their own machine. */
 export const DEFAULT_SERVER = inferDefaultServer();
 
+/**
+ * Builds that ship as one self-contained file (scripts/bundle-web.mjs) have no
+ * matchmaking server behind them and no way to reach one — the page may not
+ * even be allowed to open a socket. Saying so up front beats offering online
+ * play and then failing to connect.
+ */
+export function offlineBuild(): boolean {
+  return typeof window !== 'undefined' && (window as { HAULMATES_OFFLINE?: boolean }).HAULMATES_OFFLINE === true;
+}
+
 function inferDefaultServer(): string {
   if (typeof window === 'undefined') return 'ws://127.0.0.1:8787';
   const injected = (window as { HAULMATES_SERVER?: string }).HAULMATES_SERVER;

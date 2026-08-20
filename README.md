@@ -11,8 +11,9 @@ too far and you drag your friend off a ledge.
 That is the game: a tower full of things to hook a rope over, and one other person on the
 end of it.
 
-Online play for two people, couch co-op for two people on one screen, a hand-authored
-campaign and an endless seeded tower. Built to ship on Steam.
+Online play for two people, couch co-op for two on one screen, a bot partner for when
+nobody is around, a hand-authored campaign and an endless seeded tower. Built to ship on
+Steam.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -29,7 +30,18 @@ Open <http://localhost:5173> in **two browser tabs**. In the first: *Play online
 haul*. In the second: *Play online → Join with a code*, and type the five-letter code from
 the first tab. Both press Ready.
 
-To play on one screen instead, pick *Couch co-op* — no server needed.
+To play on one screen instead, pick *Play on this machine* — no server needed. There you
+choose your second hauler: **a friend** on the other half of the keyboard, or **a bot**.
+
+### Playing alone
+
+```bash
+npm run web
+```
+
+That writes `dist/haulmates.html` — the entire game in one self-contained file, no server,
+no install, no network. Open it in a browser, choose *Play on this machine → A bot →
+Start*, and the Autohauler takes the other end of the rope. See [The bot](#the-bot).
 
 ## The four verbs
 
@@ -54,6 +66,7 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run dev` | Matchmaking server + hot-reloading client |
 | `npm test` | 60+ unit and integration tests (simulation, netcode, protocol, levels) |
 | `npm run e2e` | Drives two real browsers through a real match and screenshots it |
+| `npm run web` | Bundles the whole game into one self-contained HTML file, then plays it |
 | `npm run build` | Builds core, server and web client |
 | `npm run verify` | Everything above, plus the packaged desktop self-test |
 | `npm run verify:levels` | Proves every tower can actually be climbed |
@@ -62,6 +75,46 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run art` | Regenerates all store art and installer icons |
 | `npm run steam:config` | Regenerates the Steamworks achievement/stat/depot config |
 | `npm run dist:win` / `dist:linux` / `dist:mac` | Builds the Steam-ready desktop app |
+
+## The bot
+
+The game needs two people, which is also the reason nobody can try it alone. The
+**Autohauler** fixes that: pick *Play on this machine → A bot*.
+
+It is not a neural network and it does not search the state space. It reads the same
+flood fill that gates the build — `packages/core/src/route.ts`, the one `npm run
+verify:levels` uses to prove a tower is climbable — and walks the route that analysis
+hands back. Sharing that code is the point: a bot with its own idea of what a jump can
+reach is a bot that disagrees with the level designer.
+
+On top of the route it runs three rules about the rope, which are the co-operative half
+of the game played back at you:
+
+- **It waits.** The hauler in front stops when the rope goes tight or it gets more than
+  three rows above you, rather than dragging you off a ledge.
+- **It braces.** When you are climbing, it holds GRIP so the rope has a fixed end to
+  pivot on. Measured: with bracing on, a bot pair climbs nearly twice as far before the
+  crate gives out.
+- **It reels.** Stranded below you on a taut rope, it hauls itself up instead of waiting
+  to be rescued.
+
+Two details took most of the work. Jumps get a **run-up** — the reach figures in
+`route.ts` were measured from a player at running speed, and a bot that walks back to line
+up on the launch column arrives with its velocity pointing the wrong way and falls two
+tiles short of everything. And the launch column is chosen by **flying the arc**: plain
+ballistics against the tile grid with the body's real box, over every column on the ledge,
+because the route only names one cell per ledge and that cell often has a ceiling nine
+pixels above the hauler's head.
+
+Left completely alone — two bots, nobody driving — a pair reaches route cell 72 of 302
+and its second checkpoint in about seven minutes, then loses the crate on a ledge lip and
+resets. Where it stops is a fact about the crate, not the bot: the crate hangs from the
+middle of the rope, climbing shortens the rope, and past a certain lip the yank puts the
+crate into the underside of the ledge you just left. The bot made that measurable for the
+first time. A weaker version of the same run is the regression gate in
+`packages/core/test/bot.test.ts`.
+
+It is a partner, not a speedrunner, and it will not save you from yourself.
 
 ## The rope
 
@@ -156,7 +209,7 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
 
 Running `npm run verify` exercises, in order:
 
-- **66 unit and integration tests** — simulation determinism over thousands of ticks,
+- **77 unit and integration tests** — simulation determinism over thousands of ticks,
   rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
   and full online matches against the real server under 25–130 ms latency, jitter, and a
   simulated connection freeze.
@@ -169,6 +222,10 @@ Running `npm run verify` exercises, in order:
 - **A browser end-to-end run** — two real Chromium clients connect to a real server, host
   and join a room, play a match, and are checked for byte-identical simulation state.
   Screenshots land in `test-results/`.
+- **A single-file web bundle that is actually opened.** `npm run web` inlines the whole
+  game into one HTML file, then launches it from `file://` and plays a few seconds of a
+  bot match, because a self-contained bundle that does not boot is worse than none — it
+  looks finished.
 - **A packaged desktop self-test** — the built Electron binary is launched headlessly and
   checked for a working renderer, preload bridge and save file.
 
@@ -181,6 +238,9 @@ What is **not** verified here, stated plainly:
 - **How it feels.** The automated checks prove the tower can be climbed and that both
   players see the same world. They cannot tell you whether the jump arc is satisfying or
   whether the third biome drags. Play it with someone before you price it.
+- **Whether the bot is any fun.** Its progress is measured; its company is not. It also
+  cannot use bounce pads or grip walls, because the route analysis it follows deliberately
+  ignores both, and it will happily stand and wait while you work out what to do.
 - **Audio output.** The synth is exercised by the tests and throws no errors, but nothing
   here listens to it.
 

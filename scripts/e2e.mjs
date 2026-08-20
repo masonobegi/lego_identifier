@@ -6,10 +6,9 @@
  * of it. It also writes screenshots so a human can see what shipped.
  */
 import { chromium } from 'playwright';
+import { findChromium } from './chromium.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync, existsSync } from 'node:fs';
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const PORT = Number(process.env.E2E_PORT ?? 8901);
@@ -27,19 +26,6 @@ mkdirSync(SHOTS, { recursive: true });
  * build number does not match the Playwright package, so prefer an explicit
  * path over Playwright's own download.
  */
-function findChromium() {
-  if (process.env.PLAYWRIGHT_CHROMIUM) return process.env.PLAYWRIGHT_CHROMIUM;
-  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
-  if (!root || !existsSync(root)) return undefined;
-  const candidates = [];
-  for (const entry of readdirSync(root)) {
-    if (!entry.startsWith('chromium')) continue;
-    candidates.push(join(root, entry, 'chrome-linux', 'chrome'));
-    candidates.push(join(root, entry, 'chrome-linux', 'headless_shell'));
-  }
-  return candidates.find((p) => existsSync(p));
-}
-
 const server = spawn(process.execPath, ['packages/server/dist/cli.js', '--static', 'packages/client/dist'], {
   env: { ...process.env, PORT: String(PORT), HAULMATES_LOG: 'warn' },
   stdio: ['ignore', 'inherit', 'inherit'],
@@ -247,7 +233,8 @@ async function main() {
   solo.on('pageerror', (e) => errors.push(`solo: ${e.message}`));
   await solo.goto(url, { waitUntil: 'networkidle' });
   await waitFor(solo, () => Boolean(window.HAULMATES), 'solo boot');
-  await clickButton(solo, 'Couch co-op');
+  await clickButton(solo, 'Play on this machine');
+  await clickButton(solo, 'A friend');
   await clickButton(solo, 'Start');
   await sleep(400);
   await solo.keyboard.down('KeyD');
@@ -258,11 +245,49 @@ async function main() {
   const couch = await solo.evaluate(() => ({ tick: window.HAULMATES.local?.localTick ?? 0, hasLocal: Boolean(window.HAULMATES.local) }));
   check('couch co-op runs without a server', couch.hasLocal && couch.tick > 60, JSON.stringify(couch));
 
-  /* ------------------------------------------------- customise + trophies */
+  /* ------------------------------------------------------------ bot partner */
   await solo.keyboard.press('Escape');
   await sleep(300);
   await clickButton(solo, 'Back to menu');
   await sleep(300);
+  await clickButton(solo, 'Play on this machine');
+  await clickButton(solo, 'A bot');
+  await clickButton(solo, 'Start');
+  await sleep(400);
+  const botStart = await solo.evaluate(() => ({
+    hasBot: Boolean(window.HAULMATES.local?.bots?.[1]),
+    y: window.HAULMATES.local?.world.players[1].y ?? 0,
+  }));
+  check('a bot takes the second rope end', botStart.hasBot, JSON.stringify(botStart));
+
+  // Player one walks; player two is never touched. Anything the second hauler
+  // does from here is the bot's own doing.
+  for (let i = 0; i < 3; i++) {
+    await solo.keyboard.down('KeyD');
+    await sleep(1200);
+    await solo.keyboard.up('KeyD');
+    await sleep(900);
+  }
+  await solo.screenshot({ path: `${SHOTS}/13-bot.png` });
+  const botRun = await solo.evaluate(() => {
+    const local = window.HAULMATES.local;
+    return {
+      tick: local?.localTick ?? 0,
+      y: local?.world.players[1].y ?? 0,
+      cursor: local?.bots?.[1]?.cursor ?? -1,
+      hp: local?.world.cargo.hp ?? 0,
+    };
+  });
+  // Route position rather than displacement: the tower doubles back on itself,
+  // so a bot two ledges up can be standing almost exactly where it started.
+  check('the bot climbs the route on its own', botRun.cursor >= 2, JSON.stringify(botRun));
+  check('the bot does not smash the crate straight away', botRun.hp > 40, String(Math.round(botRun.hp)));
+  await solo.keyboard.press('Escape');
+  await sleep(300);
+  await clickButton(solo, 'Back to menu');
+  await sleep(300);
+
+  /* ------------------------------------------------- customise + trophies */
   await clickButton(solo, 'Customise');
   await sleep(400);
   await solo.screenshot({ path: `${SHOTS}/11-customise.png` });

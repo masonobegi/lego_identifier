@@ -104,6 +104,16 @@ seconds — a bug that reads as a broken game, not a tense one. The threshold is
 px/s, so a jump costs nothing and a twenty-tile fall costs half the crate, and it slowly
 repairs itself after a stretch of careful handling.
 
+**The crate is still the ceiling, and now we can measure it.** Building the bot turned a
+vague feeling into a number: an unattended pair climbs about a quarter of the campaign and
+then loses the crate at the same kind of place every time — the lip of a ledge wide enough
+that the crate ends up hanging under it. Climbing shortens the rope, the rope yanks the
+crate, and the crate goes into the underside of the ledge at around a thousand pixels per
+second. Players route around this by walking the rope over the corner first, which is
+exactly the taut-path mechanic doing its job; the open question is whether the tower should
+teach that before it demands it. Recorded here rather than patched, because the honest fix
+is level design, not another number in `constants.ts`.
+
 ## Level design rules
 
 These were not obvious, and getting them wrong produced a tower that looked completely
@@ -151,8 +161,21 @@ a checkpoint at the top of every chunk.
 **The Gauntlet** — a seeded tower of 3 to 30 floors drawn from the same chunk library. The
 seed is shared, so both players build the same tower from the same twelve bytes.
 
-**Couch co-op** — either mode with both players on one screen. No server involved, which
-also means it works as a demo, a review build, and an offline fallback.
+**Local play** — either mode with both haulers on one machine. No server involved, which
+also means it works as a demo, a review build, and an offline fallback. The second hauler
+is either a friend on the other half of the keyboard or the **Autohauler**, a bot that
+follows the same verified route the build gate uses.
+
+The bot exists for a specific commercial reason as well as a kind one. A co-op game that
+cannot be tried alone is a co-op game most people bounce off before they ever find someone
+to play it with: the store page asks them to arrange a friend before they know whether
+they want to. A partner that waits, braces and reels turns "come back when you have a
+friend" into "here is what it feels like". It is not meant to replace the friend — it
+never argues, and arguing is most of the game — but it is meant to sell the idea of one.
+
+Design notes are in the README under *The bot*; the implementation is
+`packages/core/src/bot.ts`, and it shares its route analysis with `route.ts` so a bot can
+never believe in a jump the level verifier would reject.
 
 ## Presentation
 

@@ -15,6 +15,7 @@ import { drawHat } from '../render/actors.js';
 import { drawCharacterPreview } from '../render/preview.js';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { desktopAvailable, inviteFriend, openExternal, quitGame, steamAvailable } from '../steam.js';
+import { offlineBuild } from '../settings.js';
 import { formatTime } from '../render/hud.js';
 import type { App } from '../app.js';
 
@@ -138,12 +139,18 @@ function titleScreen(app: App): HTMLElement {
     h(
       'div',
       { class: 'menu' },
-      button(app, 'Play online', 'Two players, one rope, anywhere in the world', () => app.show('online'), {
-        primary: true,
-        icon: '🌐',
-      }),
-      button(app, 'Couch co-op', 'Two controllers or a shared keyboard on one screen', () => app.show('couch'), {
+      button(
+        app,
+        'Play online',
+        offlineBuild()
+          ? 'Not in this build — online play needs a matchmaking server'
+          : 'Two players, one rope, anywhere in the world',
+        () => app.show('online'),
+        { primary: !offlineBuild(), icon: '🌐', disabled: offlineBuild() },
+      ),
+      button(app, 'Play on this machine', 'A friend beside you, or a bot on the other end of the rope', () => app.show('couch'), {
         icon: '🛋️',
+        primary: offlineBuild(),
       }),
       button(app, 'How to play', 'Four buttons. Infinite ways to ruin things.', () => app.show('controls'), { icon: '🎮' }),
       button(app, 'Customise', 'Colours and hats you have earned', () => app.show('customise'), { icon: '🎩' }),
@@ -724,24 +731,46 @@ function customiseScreen(app: App): HTMLElement {
 
 function couchScreen(app: App): HTMLElement {
   const pads = app.input.padCount;
+  const partner = (label: string, hint: string, bot: boolean, icon: string): HTMLElement =>
+    button(app, label, hint, () => {
+      app.botPartner = bot;
+      app.refresh();
+    }, { primary: app.botPartner === bot, icon });
+
   return h(
     'div',
     { class: 'screen narrow' },
-    h('h2', { class: 'title' }, 'Couch co-op'),
+    h('h2', { class: 'title' }, 'Play on this machine'),
     h(
       'p',
       { class: 'sub' },
-      pads >= 2
-        ? 'Two gamepads detected. Perfect.'
-        : pads === 1
-          ? 'One gamepad detected — player two can use the arrow keys, right shift and right control.'
-          : 'No gamepads detected. Player one uses WASD, player two uses the arrow keys, right shift and right control.',
+      app.botPartner
+        ? 'The Autohauler knows the route, waits when the rope goes tight, and braces so you can climb off it. It will not save you from yourself.'
+        : pads >= 2
+          ? 'Two gamepads detected. Perfect.'
+          : pads === 1
+            ? 'One gamepad detected — player two can use the arrow keys, right shift and right control.'
+            : 'Player one uses WASD, player two uses the arrow keys, right shift and right control.',
+    ),
+    h(
+      'label',
+      { class: 'field' },
+      h('span', {}, 'Second hauler'),
+      h(
+        'div',
+        { class: 'menu two' },
+        partner('A friend', 'Two people, one keyboard or two pads.', false, '👥'),
+        partner('A bot', 'The Autohauler takes the other end of the rope.', true, '🤖'),
+      ),
     ),
     modeSelector(app),
     h(
       'div',
       { class: 'menu' },
-      button(app, 'Start', 'Both haulers on one screen', () => app.startCouch(), { primary: true, icon: '▶' }),
+      button(app, 'Start', app.botPartner ? 'You and the Autohauler' : 'Both haulers on one screen', () => app.startCouch(), {
+        primary: true,
+        icon: '▶',
+      }),
       button(app, 'Rebind keys', '', () => app.show('controls'), { icon: '⌨️' }),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),

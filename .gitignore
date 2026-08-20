@@ -20,3 +20,6 @@ packages/desktop/out/
 # steamcmd working directories
 steam/content/
 steam/output/
+
+# single-file web bundle output
+packages/client/dist-web/

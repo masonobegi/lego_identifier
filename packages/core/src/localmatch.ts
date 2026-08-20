@@ -4,6 +4,7 @@ import { cloneWorld, copyWorldInto, createWorld } from './state.js';
 import { step } from './sim.js';
 import type { SimContext, SimEvent, World } from './types.js';
 import type { MatchPhase } from './netclient.js';
+import type { Bot } from './bot.js';
 
 const TICK_MS = 1000 / TICK_RATE;
 const MAX_STEPS_PER_FRAME = 6;
@@ -22,6 +23,13 @@ export class LocalMatch {
   localIndex = -1;
   events: SimEvent[] = [];
   localTick = 0;
+  /**
+   * A bot in a slot supplies that player's input instead of the caller.
+   * Consulted once per simulation tick rather than once per frame, because a
+   * bot that thinks at the display's rate holds its jump for the wrong length
+   * of time on every machine but the author's.
+   */
+  readonly bots: (Bot | null)[] = [null, null];
 
   private accumulatorMs = 0;
 
@@ -38,7 +46,12 @@ export class LocalMatch {
     while (this.accumulatorMs >= TICK_MS && steps < MAX_STEPS_PER_FRAME) {
       this.accumulatorMs -= TICK_MS;
       copyWorldInto(this.prev, this.world);
-      step(this.ctx, this.world, [inputs[0] & 0xff, inputs[1] & 0xff]);
+      const masks = [inputs[0] & 0xff, inputs[1] & 0xff];
+      for (let i = 0; i < 2; i++) {
+        const bot = this.bots[i];
+        if (bot) masks[i] = bot.think(this.world, i) & 0xff;
+      }
+      step(this.ctx, this.world, masks);
       for (const e of this.world.events) this.events.push(e);
       this.world.events.length = 0;
       this.localTick = this.world.tick;
@@ -48,12 +61,18 @@ export class LocalMatch {
     if (this.world.finished && this.phase === 'running') this.phase = 'ended';
   }
 
+  /** Put a bot in a player slot, or clear it with null. */
+  setBot(index: number, bot: Bot | null): void {
+    this.bots[index] = bot;
+  }
+
   restart(seed = this.ctx.seed): void {
     this.world = createWorld({ ...this.ctx, seed });
     this.prev = cloneWorld(this.world);
     this.phase = 'running';
     this.localTick = 0;
     this.events.length = 0;
+    for (const bot of this.bots) bot?.reset();
   }
 
   drainEvents(): SimEvent[] {
