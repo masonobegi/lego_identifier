@@ -1,0 +1,17 @@
+"AppBuild"
+{
+  "AppID" "480"
+  "Desc" "HAULMATES build"
+
+  // Relative to this file. Point ContentRoot at the folder holding the
+  // per-platform builds produced by scripts/package-desktop.mjs.
+  "ContentRoot" "./content/"
+  "BuildOutput" "./output/"
+
+  "Depots"
+  {
+    "481" "depot_windows.vdf"
+    "482" "depot_linux.vdf"
+    "483" "depot_mac.vdf"
+  }
+}

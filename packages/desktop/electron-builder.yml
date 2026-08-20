@@ -1,0 +1,38 @@
+appId: com.haulmates.game
+productName: HAULMATES
+copyright: Copyright © 2026
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - renderer/**/*
+  - package.json
+  - '!**/*.map'
+extraMetadata:
+  main: dist/main.js
+# Steam ships the DRM-free build itself, so no auto-updater is configured.
+publish: null
+asar: true
+asarUnpack:
+  - '**/*.node'
+win:
+  target:
+    - target: dir
+  icon: build/icon.ico
+  artifactName: HAULMATES-win-x64.${ext}
+linux:
+  # Without this the binary is named after the npm package (@haulmatesdesktop),
+  # which is what Steam would end up launching.
+  executableName: haulmates
+  target:
+    - target: dir
+  icon: build/icon.png
+  category: Game
+  artifactName: HAULMATES-linux-x64.${ext}
+mac:
+  target:
+    - target: dir
+  icon: build/icon.icns
+  category: public.app-category.action-games
+  artifactName: HAULMATES-mac.${ext}

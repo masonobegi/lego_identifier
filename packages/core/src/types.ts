@@ -1,0 +1,115 @@
+import type { Level } from './level.js';
+
+/** One player's simulated state. Every field is part of the rollback snapshot. */
+export interface PlayerState {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  facing: number;
+  grounded: number;
+  groundKind: number;
+  coyote: number;
+  jumpBuffer: number;
+  jumpHeld: number;
+  wallDir: number;
+  gripping: number;
+  gripX: number;
+  gripY: number;
+  grip: number;
+  gripCooldown: number;
+  stunned: number;
+  dead: number;
+  respawn: number;
+  emote: number;
+  emoteTimer: number;
+  anim: number;
+  ridePlatform: number;
+  deaths: number;
+  restartHeld: number;
+  prevInput: number;
+}
+
+/** The crate. Verlet-integrated so it plays nicely with the rope solver. */
+export interface CargoState {
+  x: number;
+  y: number;
+  px: number;
+  py: number;
+  rot: number;
+  rotV: number;
+  hp: number;
+  shake: number;
+  grounded: number;
+}
+
+/** Presentation-only events emitted by a tick. Rendered, never simulated. */
+export interface SimEvent {
+  kind: number;
+  x: number;
+  y: number;
+  a: number;
+  b: number;
+}
+
+/** The full mutable world. Cloned for rollback; hashed for desync detection. */
+export interface World {
+  tick: number;
+  rng: number;
+  players: PlayerState[];
+  ropeX: Float64Array;
+  ropeY: Float64Array;
+  ropePX: Float64Array;
+  ropePY: Float64Array;
+  cargo: CargoState;
+  crumble: Int32Array;
+  checkpoint: number;
+  spawnX: number;
+  spawnY: number;
+  best: number;
+  finished: number;
+  finishTick: number;
+  restartTimer: number;
+  bonds: number;
+  betrayals: number;
+  cargoBreaks: number;
+  events: SimEvent[];
+}
+
+/** Immutable per-match context: the level and the run seed. */
+export interface SimContext {
+  level: Level;
+  seed: number;
+  mode: number;
+}
+
+export const EV_JUMP = 1;
+export const EV_LAND = 2;
+export const EV_DEATH = 3;
+export const EV_RESPAWN = 4;
+export const EV_CARGO_HIT = 5;
+export const EV_CARGO_BREAK = 6;
+export const EV_CHECKPOINT = 7;
+export const EV_BOUNCE = 8;
+export const EV_GRIP = 9;
+export const EV_ROPE_YANK = 10;
+export const EV_CRUMBLE = 11;
+export const EV_FINISH = 12;
+export const EV_EMOTE = 13;
+export const EV_RESTART = 14;
+export const EV_STEP = 15;
+export const EV_CARGO_LAND = 16;
+export const EV_REEL = 17;
+
+export const MODE_HAUL = 0;
+export const MODE_GAUNTLET = 1;
+
+/** Ground material, used for footstep audio and friction. */
+export const GROUND_NONE = 0;
+export const GROUND_SOLID = 1;
+export const GROUND_ICE = 2;
+export const GROUND_CONVEYOR_L = 3;
+export const GROUND_CONVEYOR_R = 4;
+export const GROUND_CRUMBLE = 5;
+export const GROUND_PLATFORM = 6;
+export const GROUND_MOVER = 7;

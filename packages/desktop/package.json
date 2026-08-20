@@ -1,0 +1,30 @@
+{
+  "name": "@haulmates/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HAULMATES desktop shell",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prestart": "npm run build",
+    "start": "electron .",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:win": "npm run build && electron-builder --win --x64",
+    "dist:linux": "npm run build && electron-builder --linux --x64",
+    "dist:mac": "npm run build && electron-builder --mac --universal",
+    "clean": "rm -rf dist release"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^24.13.3",
+    "7zip-bin": "~5.2.0",
+    "app-builder-bin": "4.2.0"
+  },
+  "optionalDependencies": {
+    "steamworks.js": "^0.4.0"
+  },
+  "author": {
+    "name": "HAULMATES"
+  },
+  "homepage": "https://github.com/masonobegi/lego_identifier"
+}

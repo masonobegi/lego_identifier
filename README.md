@@ -1,143 +1,144 @@
-# Brick ID
+# HAULMATES
 
-A React Native (Expo) app for identifying LEGO parts, tracking your collection, and finding which sets you can build.
+**A two-player co-op disaster about a rope, a crate, and the end of a friendship.**
 
-![icon](assets/icon.png)
+Two haulers are tied together by a rope that will not stretch past its limit. Between
+them dangles a fragile crate. Above them is a tower. Everything interesting in the game
+comes out of those three facts: run too far and you drag your partner off a ledge, brace
+yourself and they can swing from you, and the crate is always one bad landing from
+matchwood.
 
-## Features
+Online play for two people, couch co-op for two people on one screen, a hand-authored
+campaign and an endless seeded tower. Built to ship on Steam.
 
-| Feature | Description |
+![Gameplay](docs/screenshots/gameplay.png)
+
+---
+
+## Quick start
+
+```bash
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173> in **two browser tabs**. In the first: *Play online → Host a
+haul*. In the second: *Play online → Join with a code*, and type the five-letter code from
+the first tab. Both press Ready.
+
+To play on one screen instead, pick *Couch co-op* — no server needed.
+
+## The four verbs
+
+| Action | Default key | Gamepad | What it is for |
+|---|---|---|---|
+| Move / jump | `A` `D` / `SPACE` | Stick / `A` | Ordinary, generous platforming. |
+| **Grip** | `L-SHIFT` | Right trigger | Lock yourself in place on ground or wall. You become an anchor your partner can swing from. Drains, except on yellow rebar. |
+| **Reel** | `F` | Left trigger | Drag yourself along the rope toward your partner. The fastest way up is usually the other person. |
+| Emote | `T` | `Y` | Apologise. Or don't. |
+
+Both players must hold `R` to reset to the last checkpoint.
+
+## Commands
+
+| Command | What it does |
 |---|---|
-| **Part Finder** | Photograph any LEGO piece → see every set it appears in |
-| **Set Checker** | Pick a set → scan your pieces → see what matches |
-| **Multi-Part Scanner** | Grid split or sequential scan → ranked set matches |
-| **Collection Tracking** | Build an inventory of every piece you own |
-| **Set Progress** | Track completion % for sets you want to build |
-| **Can Build** | See which sets you can build from your current parts |
-| **Barcode Scanner** | Scan the barcode on a LEGO box to track it instantly |
-| **BrickLink Export** | Export missing parts as a BrickLink Wanted List XML |
-| **Scan History** | Last 20 scans saved, tap to re-open results |
+| `npm run dev` | Matchmaking server + hot-reloading client |
+| `npm test` | 60+ unit and integration tests (simulation, netcode, protocol, levels) |
+| `npm run e2e` | Drives two real browsers through a real match and screenshots it |
+| `npm run build` | Builds core, server and web client |
+| `npm run verify` | Everything above, plus the packaged desktop self-test |
+| `npm run art` | Regenerates all store art and installer icons |
+| `npm run steam:config` | Regenerates the Steamworks achievement/stat/depot config |
+| `npm run dist:win` / `dist:linux` / `dist:mac` | Builds the Steam-ready desktop app |
 
-## APIs Used
+## How it is put together
 
-| API | Purpose | Key Required |
-|---|---|---|
-| [Brickognize](https://brickognize.com) | Part identification from photos | No (free, open) |
-| [Rebrickable API v3](https://rebrickable.com/api/) | Set & part data, inventories | Yes (free) |
+```
+packages/
+  core/     Deterministic simulation, level format, wire protocol, netcode client
+  server/   Authoritative matchmaking + tick server (Node, ws)
+  client/   Renderer, procedural audio, menus, input (Vite, canvas)
+  desktop/  Electron shell with Steamworks integration
+tools/      Level authoring script
+scripts/    Dev runner, packaging, art and config generation, end-to-end tests
+steam/      Generated Steamworks configuration and store art
+docs/       Design, netcode, launch checklist, store copy
+```
 
-## Getting Started
+**`core` is the contract.** It holds the entire simulation and nothing else — no DOM, no
+Node APIs, no rendering. Both clients and the server run the identical `step()` function,
+which is what makes rollback netcode possible. It never calls `Math.random`, `Math.sin`,
+or any other function whose result is allowed to differ between platforms; there is a
+test that enforces this by scanning the source.
 
-### 1. Clone the repo
+**Nothing is loaded from disk at runtime.** Levels are ASCII art compiled into the bundle,
+every sprite is drawn with canvas paths, and every sound — including the soundtrack — is
+synthesised live in the Web Audio API. The whole game is a 44 KB gzipped download with no
+asset licensing attached to it.
+
+## Netcode in one paragraph
+
+The server is authoritative and simulates the match at a fixed 60 Hz. Each client runs
+*ahead* of the server by roughly half its round-trip time, predicting the partner's input
+as "whatever they did last tick". When the server confirms what actually happened, any
+tick where the prediction was wrong triggers a rollback: the last confirmed world is
+copied forward and every tick since is replayed. The state is small enough (two players,
+a fifteen-node rope, a crate, some crumbling blocks) that a worst-case rollback costs well
+under a millisecond. The server also broadcasts a state checksum every second; a mismatch
+pulls a full snapshot. See [docs/NETCODE.md](docs/NETCODE.md).
+
+## Running a server
+
+The game needs one server that both players connect to. It is a single Node process with
+no database and no state worth backing up.
 
 ```bash
-git clone https://github.com/masonobegi/lego_identifier.git
-cd lego_identifier
-npm install --legacy-peer-deps
+npm run build
+node packages/server/dist/cli.js                       # ws://0.0.0.0:8787
+node packages/server/dist/cli.js --static packages/client/dist   # also serves the web build
 ```
 
-### 2. Get a Rebrickable API key
+Environment variables: `PORT`, `HOST`, `HAULMATES_MAX_ROOMS`, `HAULMATES_ROOM_GRACE`,
+`HAULMATES_LOG`. `GET /health` and `GET /stats` are available for monitoring.
 
-1. Create a free account at [rebrickable.com](https://rebrickable.com)
-2. Go to **Settings → API**
-3. Copy your API key
+A single small VM handles a few thousand concurrent rooms — each one is two sockets and a
+60 Hz tick over about a kilobyte of state. Players can point the game at their own server
+from the Settings screen, and the desktop build can host one in-process.
 
-You can enter your key directly in the app on first launch (Onboarding screen), or set it in a `.env` file:
+Once you have a server, set `HAULMATES_SERVER=wss://your-host` when building the desktop
+app and it becomes the default for players.
 
-```bash
-cp .env.example .env
-# Edit .env and paste your key:
-# EXPO_PUBLIC_REBRICKABLE_KEY=your_key_here
-```
+## Shipping to Steam
 
-### 3. Run in Expo Go
+The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short version:
 
-```bash
-npx expo start
-```
+1. Buy the App ID, then `HAULMATES_APP_ID=<id> npm run steam:config`.
+2. Set the same ID in `packages/desktop/src/main.ts` (or the `HAULMATES_APP_ID` env var).
+3. `npm run dist:win` and `npm run dist:linux`; copy the output into `steam/content/`.
+4. Upload with `steamcmd +run_app_build steam/app_build.vdf`.
+5. Enter the achievements from `steam/achievements.json` on the partner site.
+6. Replace the placeholder capsules in `steam/store/` with real art before launch.
 
-Scan the QR code with **Expo Go** on your phone ([iOS](https://apps.apple.com/app/expo-go/id982107779) / [Android](https://play.google.com/store/apps/details?id=host.exp.exponent)).
+## What is verified, and how
 
-## Building for Device
+Running `npm run verify` exercises, in order:
 
-This project uses [EAS Build](https://docs.expo.dev/build/introduction/). Install the CLI first:
+- **60+ unit and integration tests** — simulation determinism over thousands of ticks,
+  rollback convergence, snapshot round-tripping, physics invariants, level connectivity,
+  protocol encoding, and full online matches against the real server under 25–130 ms
+  latency, jitter, and a simulated connection freeze.
+- **A browser end-to-end run** — two real Chromium clients connect to a real server, host
+  and join a room, play a match, and are checked for byte-identical simulation state.
+  Screenshots land in `test-results/`.
+- **A packaged desktop self-test** — the built Electron binary is launched headlessly and
+  checked for a working renderer, preload bridge and save file.
 
-```bash
-npm install -g eas-cli
-eas login
-```
+Not verified here, because it needs a Steam client and a real App ID: achievement
+delivery, rich presence, and the Steam friend-invite flow. That code is written
+defensively — every Steamworks call degrades to a no-op — and the game has been confirmed
+to run correctly with Steam absent.
 
-Then link your project:
+## Licence
 
-```bash
-eas init
-# This will set your projectId in app.json
-```
-
-### Android (APK for testing)
-
-```bash
-eas build --platform android --profile preview
-```
-
-Downloads a `.apk` you can install directly on any Android device.
-
-### iOS (requires Mac + Apple Developer account)
-
-```bash
-# Simulator build (no Apple account needed)
-eas build --platform ios --profile development
-
-# TestFlight build (requires Apple Developer $99/yr)
-eas build --platform ios --profile preview
-```
-
-### Production builds
-
-```bash
-eas build --platform all --profile production
-```
-
-## Project Structure
-
-```
-src/
-  screens/         # One file per screen
-  services/        # API calls, AsyncStorage, business logic
-  components/      # Shared UI components (NetworkBanner)
-  constants/       # Theme (colors, spacing, typography, shadows)
-assets/            # App icon, splash screen
-scripts/           # generate-assets.js — regenerates icon/splash PNGs
-```
-
-## Regenerating App Icons
-
-The icon and splash are generated from code. To regenerate after changes:
-
-```bash
-node scripts/generate-assets.js
-```
-
-## Tips for Best Scan Results
-
-- **Single part scans**: Place the piece on a **plain white or grey background** with good natural light
-- **Multi-part grid scans**: Spread pieces out so they don't overlap cell boundaries
-- **Sequential scans**: Fill the camera frame with one piece at a time
-- Use the **flash toggle** in the camera viewfinder for dark environments
-
-## Tech Stack
-
-- [React Native](https://reactnative.dev) + [Expo SDK 54](https://expo.dev)
-- [React Navigation](https://reactnavigation.org) (Stack)
-- [expo-camera](https://docs.expo.dev/versions/latest/sdk/camera/) — camera + barcode scanning
-- [expo-image-picker](https://docs.expo.dev/versions/latest/sdk/imagepicker/) — gallery access
-- [expo-image-manipulator](https://docs.expo.dev/versions/latest/sdk/imagemanipulator/) — grid cropping
-- [expo-linear-gradient](https://docs.expo.dev/versions/latest/sdk/linear-gradient/) — UI gradients
-- [expo-haptics](https://docs.expo.dev/versions/latest/sdk/haptics/) — tactile feedback
-- [expo-clipboard](https://docs.expo.dev/versions/latest/sdk/clipboard/) — BrickLink XML copy
-- [@react-native-async-storage/async-storage](https://react-native-async-storage.github.io/async-storage/) — local data persistence
-- [@react-native-community/netinfo](https://github.com/react-native-netinfo/react-native-netinfo) — network status
-- [axios](https://axios-http.com) — HTTP client
-
-## License
-
-MIT
+All code and art in this repository is original. No third-party assets are bundled.

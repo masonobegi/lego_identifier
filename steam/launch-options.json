@@ -1,0 +1,24 @@
+{
+  "note": "Mirror these under Steamworks > Installation > General Installation.",
+  "launchOptions": [
+    {
+      "os": "windows",
+      "executable": "HAULMATES.exe",
+      "description": "Play HAULMATES"
+    },
+    {
+      "os": "linux",
+      "executable": "haulmates",
+      "description": "Play HAULMATES"
+    },
+    {
+      "os": "macos",
+      "executable": "HAULMATES.app",
+      "description": "Play HAULMATES"
+    }
+  ],
+  "richPresenceTokens": {
+    "#Status_Generic": "%status%"
+  },
+  "note2": "The game writes a \"connect\" rich-presence key of the form \"+haulmates_join CODE\"; Steam passes it to the client as launch arguments when a friend clicks Join Game."
+}

@@ -1,35 +1,45 @@
 {
-  "name": "lego_identifier",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
-    "@react-native-community/netinfo": "^12.0.1",
-    "@react-navigation/native": "^7.2.4",
-    "@react-navigation/stack": "^7.9.0",
-    "axios": "^1.16.0",
-    "expo": "~54.0.33",
-    "expo-camera": "^55.0.18",
-    "expo-clipboard": "^55.0.13",
-    "expo-image-manipulator": "^55.0.16",
-    "expo-image-picker": "^55.0.20",
-    "expo-linear-gradient": "^55.0.13",
-    "expo-media-library": "^55.0.16",
-    "expo-status-bar": "~3.0.9",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-gesture-handler": "^2.31.2",
-    "react-native-safe-area-context": "^5.7.0",
-    "react-native-screens": "^4.25.0"
-  },
+  "name": "haulmates-monorepo",
   "private": true,
+  "version": "1.0.0",
+  "description": "HAULMATES - a two-player online co-op physics disaster",
+  "workspaces": [
+    "packages/core",
+    "packages/server",
+    "packages/client",
+    "packages/desktop"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w @haulmates/core && npm run build -w @haulmates/server && npm run build -w @haulmates/client",
+    "build:core": "npm run build -w @haulmates/core",
+    "build:client": "npm run build -w @haulmates/client",
+    "build:server": "npm run build -w @haulmates/server",
+    "dev": "node scripts/dev.mjs",
+    "dev:server": "npm run dev -w @haulmates/server",
+    "dev:client": "npm run dev -w @haulmates/client",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b packages/core packages/server packages/client --pretty false && tsc -p packages/desktop/tsconfig.json --noEmit",
+    "e2e": "node scripts/e2e.mjs",
+    "art": "node scripts/gen-art.mjs",
+    "dist:win": "node scripts/package-desktop.mjs --win",
+    "dist:linux": "node scripts/package-desktop.mjs --linux",
+    "dist:mac": "node scripts/package-desktop.mjs --mac",
+    "ci": "npm run typecheck && npm run test && npm run build",
+    "steam:config": "node scripts/gen-steam-config.mjs",
+    "desktop:payload": "node scripts/package-desktop.mjs --skip-installer",
+    "desktop:verify": "node scripts/verify-desktop.mjs",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run e2e && npm run desktop:payload && npm run desktop:verify"
+  },
   "devDependencies": {
-    "jimp": "^1.6.1"
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
+    "playwright": "^1.49.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "ws": "^8.21.3"
   }
 }

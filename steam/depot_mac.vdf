@@ -1,0 +1,16 @@
+"DepotBuild"
+{
+  "DepotID" "483"
+  "ContentRoot" "../content/mac/"
+
+  "FileMapping"
+  {
+    "LocalPath" "*"
+    "DepotPath" "."
+    "recursive" "1"
+  }
+
+  "FileExclusion" "*.pdb"
+  "FileExclusion" "*.map"
+  "FileExclusion" "**/*.log"
+}
