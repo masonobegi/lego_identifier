@@ -226,3 +226,36 @@ describe('the co-op reachability fill', () => {
     expect(coop.reached).toBe(solo.reached);
   });
 });
+
+describe('structural variety', () => {
+  it('gives every chunk its own silhouette', () => {
+    // Six of the twenty chunks were once byte-identical geometry wearing
+    // different decorations, because every one of them called climb() with the
+    // same width and step and only the direction varied. A player climbing the
+    // campaign saw the same room a third of the time.
+    const shape = (c: ChunkDef): string =>
+      c.rows.map((r) => r.replace(/[^#=]/g, '.').replace(/[#=]/g, '#')).join('|');
+    const seen = new Map<string, string[]>();
+    for (const c of CHUNKS) {
+      const key = shape(c);
+      const ids = seen.get(key);
+      if (ids) ids.push(c.id);
+      else seen.set(key, [c.id]);
+    }
+    const duplicates = [...seen.values()].filter((ids) => ids.length > 1);
+    expect(duplicates, `identical geometry: ${JSON.stringify(duplicates)}`).toEqual([]);
+    expect(seen.size).toBe(CHUNKS.length);
+  });
+
+  it('varies platform width across the library', () => {
+    // The lever that produces the variety. If someone flattens these back to a
+    // single width the shapes collapse again, and this catches it.
+    const widths = new Set<number>();
+    for (const c of CHUNKS) {
+      for (const row of c.rows) {
+        for (const run of row.split(/[^#=]+/)) if (run.length > 3 && run.length < 20) widths.add(run.length);
+      }
+    }
+    expect(widths.size).toBeGreaterThanOrEqual(4);
+  });
+});
