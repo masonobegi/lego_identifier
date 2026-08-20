@@ -9,10 +9,11 @@ import {
   RESET_DELAY,
   RESPAWN_TICKS,
   RESTART_HOLD,
+  GOAL_CARGO_REACH,
   TILE,
 } from './constants.js';
 import { hazardAt } from './hazards.js';
-import { T_CHECKPOINT, T_GOAL, tileAt } from './level.js';
+import { T_CHECKPOINT, T_GOAL, type Level, tileAt } from './level.js';
 import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
 import { updatePlayer } from './player.js';
@@ -91,16 +92,17 @@ function checkCheckpoints(world: World, ctx: SimContext): void {
   }
 }
 
-function checkGoal(world: World, ctx: SimContext): void {
-  if (world.finished) return;
-  const level = ctx.level;
-  let both = true;
+/**
+ * Are both haulers touching the goal?
+ *
+ * Exported because the HUD needs to say why a pair standing on the goal is not
+ * finishing, and the only thing worse than a rule the player cannot see is two
+ * copies of it that disagree.
+ */
+export function pairAtGoal(world: World, level: Level): boolean {
   for (let i = 0; i < 2; i++) {
     const p = world.players[i];
-    if (p.dead) {
-      both = false;
-      break;
-    }
+    if (p.dead) return false;
     const tx = Math.floor(p.x / TILE);
     const ty = Math.floor(p.y / TILE);
     let touching = false;
@@ -112,13 +114,35 @@ function checkGoal(world: World, ctx: SimContext): void {
         }
       }
     }
-    if (!touching) both = false;
+    if (!touching) return false;
   }
-  if (both) {
-    world.finished = 1;
-    world.finishTick = world.tick;
-    pushEvent(world, EV_FINISH, level.goalX, level.goalY, world.tick, 0);
-  }
+  return true;
+}
+
+/** Has the load been brought up with them, in one piece? */
+export function cargoAtGoal(world: World, level: Level): boolean {
+  if (world.cargo.hp <= 0) return false;
+  const dx = world.cargo.x - level.goalX;
+  const dy = world.cargo.y - level.goalY;
+  return dx * dx + dy * dy <= GOAL_CARGO_REACH * GOAL_CARGO_REACH;
+}
+
+function checkGoal(world: World, ctx: SimContext): void {
+  if (world.finished) return;
+  const level = ctx.level;
+  // The crate has to arrive too.
+  //
+  // It never used to. This asked only that both haulers were touching the goal
+  // tile, so in a game named after hauling a crate up a tower, the crate was
+  // not part of finishing one — which is the deepest reason nothing in the
+  // game ever made anybody care about it. A pair who sprint to the top and
+  // leave the load three ledges down have not finished the level; they have
+  // abandoned it.
+  if (!pairAtGoal(world, level) || !cargoAtGoal(world, level)) return;
+
+  world.finished = 1;
+  world.finishTick = world.tick;
+  pushEvent(world, EV_FINISH, level.goalX, level.goalY, world.tick, 0);
 }
 
 /**

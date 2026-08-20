@@ -57,6 +57,17 @@ export const GRIP_REACH = 5;
 export const ROPE_NODES = 15;
 export const ROPE_REST = 118;
 export const ROPE_MAX = 232;
+/**
+ * How close the crate has to be to the goal for a run to count as finished.
+ *
+ * The crate hangs off the middle of the rope, so with both haulers standing on
+ * the goal it can never be further than half a rope plus its tether — about a
+ * hundred and thirty-six pixels — and it settles at ninety-six on every level
+ * measured. A hundred and seventy leaves that comfortable margin while still
+ * being less than three ledges, so a crate left behind on the way up cannot be
+ * mistaken for one that arrived.
+ */
+export const GOAL_CARGO_REACH = 170;
 /** Deliberately soft. The hard length clamp does the dramatic work; this is
  *  only a reminder that your friend exists. Stiff values here turn the puller
  *  around instead of transferring load, which kills every drag and swing. */
@@ -142,7 +153,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 12;
+export const SIM_VERSION = 13;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

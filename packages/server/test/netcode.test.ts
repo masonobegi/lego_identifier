@@ -140,13 +140,20 @@ describe('online match', () => {
   it('reports the same result to both players when the run ends', () => {
     const h = createHarness({ latency: () => 20 });
     // Teleport both players onto the goal on the server; the clients will be
-    // corrected by the next authoritative snapshot.
+    // corrected by the next authoritative snapshot. The crate comes with them,
+    // because a run does not finish without it — leaving it at the bottom of
+    // the tower and expecting a result is the exact thing that rule exists to
+    // refuse.
     const room = h.room();
     h.run(500, () => 0);
     room.world.players[0].x = room.level.goalX;
     room.world.players[0].y = room.level.goalY;
     room.world.players[1].x = room.level.goalX + 12;
     room.world.players[1].y = room.level.goalY;
+    room.world.cargo.x = room.level.goalX;
+    room.world.cargo.y = room.level.goalY;
+    room.world.cargo.px = room.world.cargo.x;
+    room.world.cargo.py = room.world.cargo.y;
     h.run(3000, () => 0);
 
     expect(room.world.finished).toBe(1);

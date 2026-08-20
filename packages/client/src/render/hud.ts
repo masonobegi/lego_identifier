@@ -1,4 +1,14 @@
-import { CARGO_HP, DT, GRIP_MAX, RESTART_HOLD, TILE, type Level, type World } from '@haulmates/core';
+import {
+  CARGO_HP,
+  DT,
+  GRIP_MAX,
+  RESTART_HOLD,
+  TILE,
+  cargoAtGoal,
+  pairAtGoal,
+  type Level,
+  type World,
+} from '@haulmates/core';
 import { biomeFor } from './palette.js';
 import { roundRect } from './actors.js';
 
@@ -48,6 +58,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, s: 
   drawTopBar(ctx, vw, s);
   drawProgress(ctx, vw, vh, s);
   drawCargoWarning(ctx, vw, vh, s);
+  drawCargoCall(ctx, vw, vh, s);
   drawRestartVote(ctx, vw, vh, s);
   if (s.showNetgraph && s.net) drawNetgraph(ctx, vw, s.net);
   if (s.hintStrength > 0.01 && s.hint) drawHint(ctx, vw, vh, s);
@@ -144,6 +155,39 @@ function drawCargoWarning(ctx: CanvasRenderingContext2D, vw: number, vh: number,
   ctx.fillRect(x, y + 2, barW, 10);
   ctx.fillStyle = hp > 0.6 ? '#6ee787' : hp > 0.3 ? '#ffb03a' : '#ff4d6d';
   ctx.fillRect(x, y + 2, barW * hp, 10);
+}
+
+
+/**
+ * "You are both here, the crate is not."
+ *
+ * A run does not finish until the load is up here too, and a pair standing on
+ * the goal watching nothing happen deserves to be told which of them is
+ * missing rather than left to guess. Drawn from the same two predicates the
+ * simulation finishes on, so the message can never disagree with the rule.
+ */
+function drawCargoCall(ctx: CanvasRenderingContext2D, vw: number, vh: number, s: HudState): void {
+  if (s.world.finished) return;
+  if (!pairAtGoal(s.world, s.level) || cargoAtGoal(s.world, s.level)) return;
+
+  const rows = Math.max(0, Math.round((s.world.cargo.y - s.level.goalY) / TILE));
+  const dead = s.world.cargo.hp <= 0;
+  const text = dead ? 'THE CRATE IS GONE — RESTART AT THE CHECKPOINT' : 'BRING THE CRATE UP';
+  const under = dead ? '' : rows > 0 ? `still ${rows} row${rows === 1 ? '' : 's'} below` : 'almost there';
+
+  const y = vh / 2 - 96;
+  ctx.font = `900 22px ${FONT}`;
+  const w = Math.max(300, ctx.measureText(text).width + 56);
+  panel(ctx, vw / 2 - w / 2, y - 30, w, under ? 74 : 50);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = dead ? '#ff4d6d' : '#ffd166';
+  ctx.fillText(text, vw / 2, y);
+  if (under) {
+    ctx.font = `600 13px ${FONT}`;
+    ctx.fillStyle = '#8c97b6';
+    ctx.fillText(under, vw / 2, y + 26);
+  }
+  ctx.textAlign = 'left';
 }
 
 function drawRestartVote(ctx: CanvasRenderingContext2D, vw: number, vh: number, s: HudState): void {

@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import {
   CARGO_H,
   CARGO_W,
+  GRIP_MAX,
   MODE_GAUNTLET,
   MODE_HAUL,
+  ROPE_NODES,
   TILE,
   Bot,
   LocalMatch,
   isSolidTile,
+  step,
 } from '../src/index.js';
 import type { CargoState, Level } from '../src/index.js';
 
@@ -107,5 +110,57 @@ describe('the crate', () => {
     // because the rope had already been stopped from stretching to infinity.
     expect(sum / ticks, 'average rows the crate trails the pair by').toBeLessThan(6);
     expect(worst, 'worst rows the crate trails the pair by').toBeLessThan(28);
+  });
+
+  /**
+   * The rule that makes the crate the point of the game rather than scenery.
+   *
+   * Finishing used to ask only that both haulers were touching the goal tile.
+   * In a game named after hauling a crate up a tower, the crate was not part of
+   * finishing one — so nothing anywhere in the game ever required a player to
+   * care where it was, and measurably, nobody did.
+   */
+  it('is required at the goal before a run counts as finished', () => {
+    for (const [mode, seed] of [
+      [MODE_HAUL, 7],
+      [MODE_GAUNTLET, 33],
+    ] as const) {
+      for (const bringIt of [true, false]) {
+        const match = new LocalMatch(mode, seed, 10);
+        const { level } = match.ctx;
+        const world = match.world;
+
+        // Both haulers on the goal, rope slack between them.
+        for (let i = 0; i < 2; i++) {
+          const p = world.players[i];
+          p.x = level.goalX + (i === 0 ? -20 : 20);
+          p.y = level.goalY;
+          p.vx = 0;
+          p.vy = 0;
+          p.grounded = 1;
+          p.dead = 0;
+          p.grip = GRIP_MAX;
+        }
+        for (let i = 0; i < ROPE_NODES; i++) {
+          const t = i / (ROPE_NODES - 1);
+          world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t;
+          world.ropeY[i] = level.goalY;
+          world.ropePX[i] = world.ropeX[i];
+          world.ropePY[i] = level.goalY;
+        }
+        // Either up here with them, or twelve rows down the shaft.
+        world.cargo.x = level.goalX;
+        world.cargo.y = level.goalY + (bringIt ? 0 : 12 * TILE);
+        world.cargo.px = world.cargo.x;
+        world.cargo.py = world.cargo.y;
+        world.cargo.hp = 100;
+
+        for (let t = 0; t < 240; t++) {
+          step(match.ctx, world, [0, 0]);
+          world.events.length = 0;
+        }
+        expect(world.finished === 1, `mode ${mode} seed ${seed} crate brought: ${bringIt}`).toBe(bringIt);
+      }
+    }
   });
 });
