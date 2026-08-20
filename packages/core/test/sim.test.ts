@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CARGO_H,
   DT,
   EV_CARGO_BREAK,
   GRAVITY,
@@ -18,6 +19,7 @@ import {
   MODE_HAUL,
   PI,
   ROPE_MAX,
+  ROPE_MID,
   Rng,
   TILE,
   buildCampaign,
@@ -28,9 +30,12 @@ import {
   dsin,
   hashSeed,
   hashWorld,
+  isSolidTile,
   levelForMatch,
   readSnapshot,
   step,
+  tileAt,
+  updateCargo,
   writeSnapshot,
   type ChunkDef,
   type Level,
@@ -538,23 +543,111 @@ describe('physics invariants', () => {
     expect(world.players[0].x).toBeGreaterThan(startX + 4 * TILE);
   });
 
-  it('destroys the crate when it is dragged along the ground', () => {
+  it('does not grind the crate to pieces just for touching the floor', () => {
+    // This test used to assert the opposite, and passed for the wrong reason.
+    // The rope tether wrote the crate's corrected position straight onto it,
+    // shoving it into the floor every tick, and the collision response beat it
+    // up on the way back out — so a crate resting on the ground with a slack
+    // rope was destroyed in about ten seconds by a bug rather than by play.
+    //
+    // Measured while fixing it: the crate does not actually slide here at all.
+    // The players run, the rope slackens, and the crate sits still. Whatever
+    // the old test was measuring, it was not dragging.
     const ctx = labContext();
     const world = createWorld(ctx);
     for (let i = 0; i < 120; i++) {
       step(ctx, world, [0, 0]);
       world.events.length = 0;
     }
-    world.players[0].dead = 1;
-    world.players[0].respawn = 100000;
-    let broke = false;
-    for (let i = 0; i < 600 && !broke; i++) {
-      step(ctx, world, [0, IN_RIGHT]);
-      broke = world.events.some((e) => e.kind === EV_CARGO_BREAK);
+    expect(world.cargo.grounded).toBe(1);
+
+    const startHp = world.cargo.hp;
+    for (let i = 0; i < 900; i++) {
+      const dir = Math.floor(i / 110) % 2 === 0 ? IN_RIGHT : IN_LEFT;
+      step(ctx, world, [dir, dir]);
       world.events.length = 0;
     }
-    expect(broke).toBe(true);
-    expect(world.cargoBreaks).toBeGreaterThan(0);
+    expect(world.cargoBreaks).toBe(0);
+    expect(world.cargo.hp).toBeGreaterThan(startHp * 0.5);
   });
 
+});
+
+describe('the crate stays in the world', () => {
+  // A sealed box with one thick slab across it. Rows 8-11 are solid, so the
+  // slab spans y 192..288 with open air on both sides of it.
+  const SLAB_TOP = 8;
+  const SLAB_ROWS = 4;
+  const BOTTOM = 22;
+  const slabTopPx = SLAB_TOP * TILE;
+  const slabBottomPx = (SLAB_TOP + SLAB_ROWS) * TILE;
+
+  function vault(): Level {
+    const rows: string[] = [];
+    for (let r = 0; r <= BOTTOM; r++) {
+      const solid = r === 0 || r === BOTTOM || (r >= SLAB_TOP && r < SLAB_TOP + SLAB_ROWS);
+      rows.push(solid ? '#'.repeat(40) : '#' + '.'.repeat(38) + '#');
+    }
+    rows[SLAB_TOP - 1] = replaceAt(rows[SLAB_TOP - 1], 19, 'S');
+    rows[BOTTOM - 1] = replaceAt(rows[BOTTOM - 1], 5, 'F');
+    return assembleLevel('vault', 'VAULT', [{ id: 'vault', biome: 0, difficulty: 0, rows }]);
+  }
+
+  function insideSlab(y: number): boolean {
+    return y > slabTopPx && y < slabBottomPx;
+  }
+
+  it('has a slab that is actually solid', () => {
+    const level = vault();
+    expect(isSolidTile(tileAt(level, 20, SLAB_TOP))).toBe(true);
+    expect(isSolidTile(tileAt(level, 20, SLAB_TOP - 1))).toBe(false);
+    expect(isSolidTile(tileAt(level, 20, SLAB_TOP + SLAB_ROWS))).toBe(false);
+  });
+
+  it('does not phase through a slab when the rope is yanked hard', () => {
+    const level = vault();
+    const world = createWorld({ level, seed: 1, mode: MODE_HAUL });
+    world.cargo.hp = 1e9;
+
+    // Rest the crate on the slab, then haul the rope's middle node far below
+    // it. The correction that produces is several tiles long in a single tick,
+    // which is exactly the case that used to be written straight onto the
+    // crate's position without ever testing the floor in between.
+    let worst = 0;
+    for (let pull = 40; pull <= 2000; pull += 40) {
+      world.cargo.x = 20 * TILE;
+      world.cargo.y = slabTopPx - CARGO_H / 2 - 1;
+      world.cargo.px = world.cargo.x;
+      world.cargo.py = world.cargo.y;
+      world.ropeX[ROPE_MID] = world.cargo.x;
+      world.ropeY[ROPE_MID] = world.cargo.y + pull;
+
+      updateCargo(level, world);
+      worst = Math.max(worst, world.cargo.y);
+      expect(insideSlab(world.cargo.y), `pull ${pull} put the crate inside the slab at y=${world.cargo.y.toFixed(1)}`).toBe(false);
+      expect(world.cargo.y, `pull ${pull} pulled the crate clean through the slab`).toBeLessThan(slabBottomPx);
+    }
+    expect(worst).toBeLessThan(slabBottomPx);
+  });
+
+  it('cannot be dragged into geometry however the rope thrashes', () => {
+    const level = vault();
+    const world = createWorld({ level, seed: 2, mode: MODE_HAUL });
+    world.cargo.hp = 1e9;
+    world.cargo.x = 20 * TILE;
+    world.cargo.y = slabTopPx - CARGO_H / 2 - 1;
+    world.cargo.px = world.cargo.x;
+    world.cargo.py = world.cargo.y;
+
+    // Whip the anchor around, including to points inside the slab itself.
+    let breaches = 0;
+    for (let t = 0; t < 1200; t++) {
+      const a = t % 40;
+      world.ropeX[ROPE_MID] = (a < 20 ? 3 : 36) * TILE;
+      world.ropeY[ROPE_MID] = (t % 80 < 40 ? SLAB_TOP + 2 : 2) * TILE;
+      updateCargo(level, world);
+      if (insideSlab(world.cargo.y) && world.cargo.x > TILE && world.cargo.x < 39 * TILE) breaches++;
+    }
+    expect(breaches).toBe(0);
+  });
 });

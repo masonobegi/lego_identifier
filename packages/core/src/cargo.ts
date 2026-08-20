@@ -89,6 +89,13 @@ export function updateCargo(level: Level, world: World): void {
 
   // Tether to the middle of the rope. The crate is much heavier than the rope,
   // so most of the correction lands on the rope node, not the crate.
+  //
+  // The crate's share is swept through the world rather than assigned, which
+  // is the whole point of routing it through moveCollider. Writing the
+  // corrected position straight onto the crate is a teleport, and a rope yanked
+  // hard enough produces a correction bigger than a tile — so the crate
+  // arrived on the far side of the floor without ever touching it. Every other
+  // body in the simulation moves by sweeping; this one used not to.
   const mx = world.ropeX[ROPE_MID];
   const my = world.ropeY[ROPE_MID];
   const dx = c.x - mx;
@@ -96,8 +103,12 @@ export function updateCargo(level: Level, world: World): void {
   const d = Math.sqrt(dx * dx + dy * dy);
   if (d > CARGO_TETHER && d > 0.0001) {
     const corr = (d - CARGO_TETHER) / d;
-    c.x -= dx * corr * 0.3;
-    c.y -= dy * corr * 0.3;
+    collider.set(c.x, c.y, HW, HH);
+    collider.dropThrough = false;
+    moveCollider(level, world, collider, -dx * corr * 0.3, -dy * corr * 0.3);
+    c.x = collider.x;
+    c.y = collider.y;
+    if (collider.hitY === 1) c.grounded = 1;
     world.ropeX[ROPE_MID] += dx * corr * 0.7;
     world.ropeY[ROPE_MID] += dy * corr * 0.7;
   }
