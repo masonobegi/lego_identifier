@@ -70,6 +70,17 @@ export const REEL_FORCE = 3100;
 export const REEL_MAX_SPEED = 430;
 /** Reeling is hard work: it drains the same stamina pool gripping does. */
 export const REEL_DRAIN = 16;
+/**
+ * How fast you walk up a wall while reeling on a rope that runs above you.
+ *
+ * Without this, reeling gets you to just under the lip your partner is standing
+ * on and abandons you there, which made every pit in the game a dead end rather
+ * than a puzzle. Deliberately slower than a run: this is hauling yourself up,
+ * not climbing a ladder.
+ */
+export const REEL_CLIMB_SPEED = 150;
+/** Sideways push that gets a climbing hauler over the lip they have reached. */
+export const REEL_MANTLE_SPEED = 130;
 
 /** Cargo — the crate that dangles from the middle of the rope and ruins lives. */
 export const CARGO_W = 26;

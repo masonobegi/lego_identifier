@@ -167,9 +167,43 @@ One fix is in: bracing on solid ground no longer drains stamina, so an anchor
 lasts as long as it is needed rather than five seconds. That was necessary and
 is not sufficient — the anchor now holds, and the partner still cannot climb.
 
-Until this is fixed, the rope is a leash with good physics and no gameplay, and
-no amount of level design can hide it. The levels are the symptom; this is the
-disease.
+### What the fix turned out to be
+
+**The winch was mostly a wrong expectation.** A rope hooked over a beam, with
+your partner standing on a floor, *should* drag them across that floor — a real
+rope does. The winch only lifts when there is nothing to slide on, and with the
+partner hanging free it now measures 1.8 tiles of lift. What was genuinely
+broken is that the length clamp applied one mobility scalar to the whole pull
+vector, so a steeply upward pull freed the *horizontal* component too and the
+hauler skidded sideways at full speed until they were under an overhang and
+could not be lifted at all. Traction is now applied per axis: boots resist a
+skid, nothing resists a lift.
+
+**Reeling was one move short.** It hauled you along the rope to just under the
+lip your partner stood on and abandoned you there — measured, 3.6 tiles of a
+six-tile pit. It now climbs a wall while the rope pulls upward, and mantles over
+the lip once there is clear air beside your head. Pits five, seven and ten tiles
+deep all go from dead ends to two-person puzzles.
+
+Two things were tried and reverted, and both are worth recording because they
+sound right:
+
+*Traction on the spring.* The soft spring was damped on the ground for the same
+reason as the clamp. It stalled a bot pair permanently at eight tiles: the
+spring's entire job is closing the distance between two people, and a damped one
+means they drift apart and never come back.
+
+*The spring following the taut path.* More faithful — a rope over a pulley does
+pull you at the pulley — and it makes the game worse. With geometry between the
+pair, and in this tower there almost always is, each is pulled at a corner
+rather than at their partner and the rope stops being a tether. The pulley
+belongs in the hard length clamp; the spring is a soft reminder that your friend
+exists and should read as one.
+
+**The rule the geometry now enforces is not "one of you must brace" but "do not
+both go in".** A partner merely standing on the lip is enough to reel against;
+gripping only makes them immovable. That is a better rule than the one that was
+designed, and it was found by testing rather than chosen.
 
 ## Level design rules
 

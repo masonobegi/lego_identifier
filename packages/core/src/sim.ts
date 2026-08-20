@@ -151,7 +151,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
     }
     // Controls are locked during the reset beat so nobody instantly re-dies.
     const frozen = [0, 0];
-    applyRopeForces(world, frozen);
+    applyRopeForces(world, level, frozen);
     updatePlayer(level, world, 0, 0);
     updatePlayer(level, world, 1, 0);
     solveRope(world, level);
@@ -162,7 +162,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
 
   const effective = world.finished ? [0, 0] : inputs;
 
-  applyRopeForces(world, effective);
+  applyRopeForces(world, level, effective);
   updatePlayer(level, world, 0, effective[0]);
   updatePlayer(level, world, 1, effective[1]);
   solveRope(world, level);

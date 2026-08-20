@@ -15,6 +15,11 @@ import {
   type Level,
   type SimContext,
   type World,
+  MODE_HAUL,
+  IN_GRIP,
+  IN_REEL,
+  cloneWorld,
+  IN_LEFT,
 } from '@haulmates/core';
 
 /* ------------------------------------------------------------------ setup */
@@ -184,3 +189,90 @@ describe('the winch', () => {
     expect(worst).toBeLessThan(ROPE_MAX * 1.7);
   });
 });
+
+describe('climbing out of a pit', () => {
+  /**
+   * A ledge on the left, a shaft on the right with a real wall and a floor.
+   * Walking right off the ledge drops you in; the drop is deeper than a jump,
+   * so the only way out is the rope and the person holding it.
+   */
+  function pitLevel(depth: number): Level {
+    const W = 40;
+    const LIP = 8;
+    const FLOOR = LIP + depth;
+    const rows: string[] = [];
+    for (let r = 0; r <= FLOOR; r++) {
+      const a = new Array(W).fill('.');
+      a[0] = '#';
+      a[W - 1] = '#';
+      if (r >= LIP) for (let x = 1; x <= 13; x++) a[x] = '#';
+      if (r === FLOOR) a.fill('#');
+      rows.push(a.join(''));
+    }
+    const put = (r: number, c: number, ch: string): void => {
+      const a = rows[r].split('');
+      a[c] = ch;
+      rows[r] = a.join('');
+    };
+    put(LIP - 1, 4, 'S');
+    put(1, 20, 'F');
+    return assembleLevel('pit', 'PIT', [{ id: 'pit', biome: 0, difficulty: 0, rows }]);
+  }
+
+  function dropOneIn(ctx: SimContext): { world: World; lipY: number } {
+    const world = createWorld(ctx);
+    const lipY = 8 * TILE - PLAYER_H / 2 - 1;
+    world.players[0].x = 11 * TILE + 12;
+    world.players[1].x = 13 * TILE + 12;
+    for (const p of world.players) {
+      p.y = lipY;
+      p.vx = 0;
+      p.vy = 0;
+      p.grounded = 1;
+      p.grip = GRIP_MAX;
+    }
+    for (let i = 0; i < ROPE_NODES; i++) {
+      const t = i / (ROPE_NODES - 1);
+      world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t;
+      world.ropeY[i] = lipY;
+      world.ropePX[i] = world.ropeX[i];
+      world.ropePY[i] = lipY;
+    }
+    // One of them walks off the edge; the rope drapes over the lip on the way.
+    for (let t = 0; t < 120; t++) step(ctx, world, [IN_GRIP, IN_RIGHT]);
+    for (let t = 0; t < 40; t++) step(ctx, world, [IN_GRIP, 0]);
+    return { world, lipY };
+  }
+
+  for (const depth of [5, 7, 10]) {
+    it(`is impossible alone and possible together, ${depth} tiles deep`, () => {
+      const level = pitLevel(depth);
+      const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+
+      const { world, lipY } = dropOneIn(ctx);
+      expect(world.players[1].y, 'the hauler should be down the pit').toBeGreaterThan(lipY + 3 * TILE);
+
+      // Both in the hole: nothing above to haul against, so nobody gets out.
+      // A partner merely *standing* up top is enough to reel against — GRIP
+      // only makes them immovable — so the rule the geometry enforces is not
+      // "one of you must brace", it is "do not both go in".
+      const sunk = cloneWorld(world);
+      for (let t = 0; t < 90; t++) step(ctx, sunk, [IN_RIGHT, 0]);
+      expect(sunk.players[0].y, 'both should be down the pit').toBeGreaterThan(lipY + 3 * TILE);
+      for (let t = 0; t < 600; t++) step(ctx, sunk, [IN_REEL | IN_LEFT, IN_REEL | IN_LEFT]);
+      for (const p of sunk.players) {
+        expect(p.y, 'neither should climb out with nobody up top').toBeGreaterThan(lipY + TILE);
+      }
+
+      // Together: one braces on the lip, the other reels up the wall and over.
+      let escapedAt = -1;
+      for (let t = 0; t < 600 && escapedAt < 0; t++) {
+        step(ctx, world, [IN_GRIP, IN_REEL | IN_LEFT]);
+        const p = world.players[1];
+        if (p.grounded === 1 && p.y < lipY + 6) escapedAt = t;
+      }
+      expect(escapedAt, 'the pair should get them out').toBeGreaterThanOrEqual(0);
+      expect(escapedAt, 'and it should not take all day').toBeLessThan(400);
+    });
+  }
+})

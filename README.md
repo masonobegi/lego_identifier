@@ -7,12 +7,14 @@ it. Its length is measured along the path it actually takes, so hooking it over 
 costs you slack. Wrap it round a pillar and your leash shortens. Run too far and you drag
 your friend off a ledge.
 
-> **Honest status: the rope is not yet a mechanic.** Earlier versions of this file said a
-> partner walking away from a beam winches you up it, and that an anchored partner is a
-> ladder. Both were measured against the simulation and both are false — the winch lifts
-> 0.0 tiles, and reeling stalls under the lip. See *The rope does not work yet* in
-> [docs/DESIGN.md](docs/DESIGN.md) for the measurements and the causes. The physics is
-> sound and the verbs are not, which is why no level in the campaign requires a rope.
+**A pit deeper than a jump is a two-person problem.** Fall in and you are stuck; with
+your partner up top you climb the rope, walk your feet up the wall, and mantle over the
+lip. If you *both* go in, you are both stuck — a partner standing on the edge is what you
+haul against.
+
+> Both of those sentences were false until recently, and were measured false rather than
+> noticed. See *The rope does not work yet* in [docs/DESIGN.md](docs/DESIGN.md) for what
+> was broken, what the fix was, and the two plausible-sounding fixes that made it worse.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
 nobody is around, a hand-authored campaign and an endless seeded tower. Built to ship on

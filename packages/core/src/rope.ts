@@ -3,6 +3,8 @@ import {
   GRIP_REGEN_DELAY,
   REEL_DRAIN,
   REEL_FORCE,
+  REEL_CLIMB_SPEED,
+  REEL_MANTLE_SPEED,
   REEL_MAX_SPEED,
   ROPE_CORRECTION,
   ROPE_GRAVITY,
@@ -15,12 +17,13 @@ import {
   ROPE_SPRING,
   GROUND_HAUL_RESISTANCE,
   PLAYER_H,
+  GRIP_REACH,
   PLAYER_HALF_W,
   ROPE_YANK_SPEED,
   IN_REEL,
 } from './constants.js';
 import type { Level } from './level.js';
-import { collider, moveCollider, pointSolid } from './physics.js';
+import { collider, moveCollider, rectHitsTiles, pointSolid } from './physics.js';
 import { EV_REEL, EV_ROPE_YANK, type World } from './types.js';
 import { pushEvent } from './events.js';
 
@@ -57,12 +60,53 @@ function mobility(world: World, i: number): number {
  * up, which is the whole reason a rope over a ledge can winch your partner out
  * of a pit while you simply walk away from it.
  */
+/**
+ * How much of a rope correction this hauler absorbs, for splitting the
+ * overshoot between the two ends. A pull that is mostly upward moves them
+ * freely; a sideways or downward one meets their feet.
+ *
+ * This is only the *share*. How that share is then applied is `haulTraction`,
+ * and the two must be separate, because a hauler being lifted is still standing
+ * on the ground in the sideways direction.
+ */
 function haulMobility(world: World, i: number, dirY: number): number {
   const p = world.players[i];
   if (p.gripping && !p.dead) return 0;
   if (p.dead) return 1;
   if (p.grounded !== 1) return 1;
-  return dirY < -0.55 ? 1 : GROUND_HAUL_RESISTANCE;
+  const lifting = dirY < 0 ? -dirY : 0;
+  return GROUND_HAUL_RESISTANCE + (1 - GROUND_HAUL_RESISTANCE) * lifting;
+}
+
+/**
+ * Traction, per axis, for a hauler the rope is dragging. This is the winch.
+ *
+ * The length clamp removes excess rope and does not care how it is removed, so
+ * offered a choice between lifting a grounded hauler and skidding them
+ * sideways it always takes the cheaper one — and the floor is cheaper.
+ * Measured, that meant a partner walking away from a beam lifted their mate
+ * exactly 0.0 tiles: they were skidded along the ground instead, usually until
+ * they were under an overhang where they could no longer be lifted at all.
+ *
+ * Applying the correction through traction is what fixes it. Boots on solid
+ * ground resist a skid; nothing resists being picked up. The sideways option
+ * stops being cheap, so the clamp takes the vertical one, and a hauler dangling
+ * off a beam finally goes *up* when their partner walks away from it.
+ *
+ * The correction is deliberately not conserved within a tick: a resisted hauler
+ * leaves the rope over-long and the clamp fires again next tick. That is the
+ * difference between a winch and a snap.
+ */
+function haulTraction(world: World, i: number, dirY: number, out: { x: number; y: number }): void {
+  const p = world.players[i];
+  if (p.dead || p.grounded !== 1 || p.gripping) {
+    out.x = 1;
+    out.y = 1;
+    return;
+  }
+  out.x = GROUND_HAUL_RESISTANCE;
+  // Up is free; down is resisted, because you cannot be pulled through a floor.
+  out.y = dirY < 0 ? 1 : GROUND_HAUL_RESISTANCE;
 }
 
 /**
@@ -70,7 +114,22 @@ function haulMobility(world: World, i: number, dirY: number): number {
  * the rope passes its rest length, plus the REEL input which drags you toward
  * your partner along the rope.
  */
-export function applyRopeForces(world: World, inputs: number[]): void {
+/**
+ * Rope forces: the spring that reminds you your partner exists, and the reel.
+ *
+ * The spring pulls each hauler toward the first thing the rope bends around at
+ * *their* end, not toward their partner. With a clear run between them those
+ * are the same direction; with a beam in between they are not, and that
+ * difference is the entire pulley.
+ *
+ * It used to pull along the straight line between the two of them, which meant
+ * a rope hooked over a beam still yanked you sideways through the wall the beam
+ * was part of. Combined with the spring being exempt from traction, that was
+ * what made the winch measure 0.0 tiles of lift: a hauler standing under a beam
+ * was skidded along the floor toward their partner by a force that did not know
+ * the beam existed.
+ */
+export function applyRopeForces(world: World, level: Level, inputs: number[]): void {
   const a = world.players[0];
   const b = world.players[1];
   let dx = b.x - a.x;
@@ -94,6 +153,16 @@ export function applyRopeForces(world: World, inputs: number[]): void {
       // A pinned partner means the whole spring lands on the free player.
       const wa = ma === 0 ? 0 : mb === 0 ? 1 : 0.5;
       const wb = mb === 0 ? 0 : ma === 0 ? 1 : 0.5;
+
+      // Along the straight line between them, deliberately, even though the
+      // rope may be draped over something. Following the taut path here is more
+      // faithful and makes the game worse: with geometry between the pair — and
+      // in this tower there almost always is — each is pulled at a corner
+      // rather than at their partner, the two never close up, and the rope
+      // stops being a tether at all. Measured, it stalled a bot pair
+      // permanently at eight tiles. The pulley belongs in the length clamp,
+      // which is a hard constraint; this is a soft reminder that your friend
+      // exists, and it should read as one.
       a.vx += nx * accel * wa * DT;
       a.vy += ny * accel * wa * DT;
       b.vx -= nx * accel * wb * DT;
@@ -114,6 +183,43 @@ export function applyRopeForces(world: World, inputs: number[]): void {
     if (along < REEL_MAX_SPEED) {
       p.vx += sx * REEL_FORCE * DT;
       p.vy += sy * REEL_FORCE * DT;
+    }
+
+    // Walking your feet up the wall while you haul on the rope.
+    //
+    // Reeling alone hauls you along the rope toward your partner, which brings
+    // you to just under the lip they are standing on and leaves you there —
+    // measured, a hauler reeling out of a six-tile pit climbed 3.6 tiles and
+    // stopped, because there is no verb that gets you over an edge. That single
+    // missing move is why a pit could never be a co-operative puzzle.
+    //
+    // With a wall against your shoulder and the rope pulling up, you climb it.
+    // The wall is required: this must never read as flying.
+    // Gated on where the partner is, not on the reel vector's slope. Using the
+    // slope switched the climb off exactly as it became useful: as you rise to
+    // your partner's level the pull goes horizontal, so a hauler climbing out
+    // of a pit stopped dead the moment their head drew level with the lip.
+    const mate = world.players[1 - i];
+    if (p.wallDir !== 0 && !mate.dead && mate.y < p.y + PLAYER_H && p.grounded !== 1) {
+      if (p.vy > -REEL_CLIMB_SPEED) p.vy = -REEL_CLIMB_SPEED;
+
+      // The mantle. Climbing gets your head level with the lip and leaves you
+      // hanging there — measured, a hauler reeling out of a five-tile pit
+      // stalled one tile short, every time, which is the most infuriating
+      // possible place to stop. Once there is clear air beside your head, you
+      // swing your legs over instead of dangling under the edge you just
+      // reached.
+      const side = p.wallDir;
+      const headY = p.y - PLAYER_H / 2;
+      const clear = !rectHitsTiles(
+        level,
+        world,
+        p.x + side * PLAYER_HALF_W,
+        headY - 2,
+        p.x + side * (PLAYER_HALF_W + GRIP_REACH + 6),
+        headY + 8,
+      );
+      if (clear) p.vx = side * REEL_MANTLE_SPEED;
     }
     p.grip = Math.max(0, p.grip - REEL_DRAIN * DT);
     p.gripCooldown = GRIP_REGEN_DELAY;
@@ -193,6 +299,8 @@ export function solveRope(world: World, level: Level): void {
  */
 const pullA = { x: 0, y: 0 };
 const pullB = { x: 0, y: 0 };
+const tractionA = { x: 1, y: 1 };
+const tractionB = { x: 1, y: 1 };
 
 function haul(world: World, level: Level, index: number, dx: number, dy: number): void {
   if (dx === 0 && dy === 0) return;
@@ -248,8 +356,12 @@ export function clampRopeLength(world: World, level: Level): void {
   // Haul through collision rather than teleporting. Sliding a hauled player
   // along a wall is the difference between being winched up out of a pit and
   // being shoved into its side, where every subsequent lift just re-collides.
-  haul(world, level, 0, ax * overshoot * wa * ROPE_CORRECTION, ay * overshoot * wa * ROPE_CORRECTION);
-  haul(world, level, 1, bx * overshoot * wb * ROPE_CORRECTION, by * overshoot * wb * ROPE_CORRECTION);
+  haulTraction(world, 0, ay, tractionA);
+  haulTraction(world, 1, by, tractionB);
+  const amountA = overshoot * wa * ROPE_CORRECTION;
+  const amountB = overshoot * wb * ROPE_CORRECTION;
+  haul(world, level, 0, ax * amountA * tractionA.x, ay * amountA * tractionA.y);
+  haul(world, level, 1, bx * amountB * tractionB.x, by * amountB * tractionB.y);
 
   // Cancel the part of their motion that is paying out more rope, leaving
   // everything sideways intact so the pair swings instead of stopping dead.
