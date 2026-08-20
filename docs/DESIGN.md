@@ -4,8 +4,10 @@
 
 Two people. One rope. One crate. A tower.
 
-It is a co-op climbing game where the co-op is not optional and not always voluntary. Your
-partner is a physics object attached to you, and so are you to them.
+The rope is the game. Not as a tether — as a **mechanism**. Its length is measured along
+the path it physically takes, so it wraps, hooks and pulleys against the level geometry,
+and your partner's weight and movement become forces you can use. A co-op climbing game
+where the co-op is mechanical rather than thematic.
 
 ## Why this design
 
@@ -36,11 +38,42 @@ fighting you. The rope provides all the difficulty required.
 you are a fixed point, and your partner is on a pendulum. It costs stamina on bare rock but
 nothing on yellow rebar, which is how level design controls where anchoring is allowed.
 
-**Reel** pulls you along the rope toward your partner. It makes a braced partner into a
-ladder, and it is the tool for recovering someone who has fallen past you.
+**Reel** hauls you along the rope toward your partner. It has to beat gravity or the verb
+is a lie — it shipped at 1450 px/s² against gravity of 2000, which meant a player hauling
+straight up climbed a sixth of a tile in five seconds while every menu told them the
+fastest way up was the other person. It is now 3100 and costs grip stamina, so a braced
+partner really is a ladder and climbing one is a resource decision.
 
 **Emote** exists because "sorry" and "that was your fault" need to be sayable without a
 microphone.
+
+## The rope as a mechanism
+
+The original design was a leash: the rope drew as a draping chain but its length limit was
+measured along the straight line between the two players. It looked like it hooked over
+beams and behaved as though it went through them. Everything distinctive about the game
+came from fixing that.
+
+The taut path is now computed by string-pulling over the rope's own nodes — walk forward,
+and from each contact jump as far along the rope as still has clear line of sight. With
+nothing in the way it collapses to the straight line, so ordinary play is unchanged. With
+a beam in the way there is a bend, and each player is hauled along *their own end* of the
+rope rather than toward their partner.
+
+That one change produces the winch (a partner walking away from a lip hauls you up it),
+makes wrapping the rope cost slack, and turns the level's architecture into rope hardware.
+
+Two supporting decisions:
+
+**Hauling goes through collision, not teleportation.** The correction used to move players
+directly. Once the rope could pull sideways, that shoved the hauled player into the wall
+they were being lifted up, where every subsequent pull just re-collided. Routing it
+through the collider lets them slide up the face instead.
+
+**Traction decides who moves.** Feet on solid ground resist a sideways or downward haul at
+about a third strength; nothing resists a lift. That is what makes the standing player the
+anchor and the hanging player the load, with no button involved — and it is what allows a
+winch to work at all, since with equal resistance the pair simply deadlocks.
 
 ## Tuning decisions worth recording
 

@@ -3,8 +3,10 @@ import {
   DT,
   EV_CARGO_BREAK,
   GRAVITY,
+  GRIP_MAX,
   MAX_FALL,
   PLAYER_H,
+  REEL_FORCE,
   ROPE_LOAD,
   assembleLevel,
   IN_GRIP,
@@ -430,6 +432,88 @@ describe('physics invariants', () => {
     // Grip stamina is finite, so they eventually slip — but never before moving
     // less than a tile while the partner pulls hard.
     expect(Math.abs(anchored.x - before.x)).toBeLessThan(TILE * 3);
+  });
+
+  it('starts both haulers with a full grip bar', () => {
+    const ctx = labContext();
+    const world = createWorld(ctx);
+    for (const p of world.players) expect(p.grip).toBe(GRIP_MAX);
+  });
+
+  it('lets a player climb the rope toward an anchored partner', () => {
+    // The whole co-op fantasy rests on this: reeling has to beat gravity, or
+    // "the fastest way up is the other person" is simply untrue.
+    expect(REEL_FORCE).toBeGreaterThan(GRAVITY);
+
+    const ctx = labContext();
+    const world = createWorld(ctx);
+    for (let i = 0; i < 60; i++) {
+      step(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    // Pin one hauler in mid-air and let the other haul themselves up to them.
+    const anchor = world.players[0];
+    const climber = world.players[1];
+    anchor.x = 20 * TILE;
+    anchor.y = 8 * TILE;
+    anchor.gripping = 1;
+    anchor.gripX = anchor.x;
+    anchor.gripY = anchor.y;
+    anchor.grip = GRIP_MAX;
+    climber.x = 20 * TILE;
+    climber.y = 8 * TILE + 190;
+    climber.vx = 0;
+    climber.vy = 0;
+    climber.grip = GRIP_MAX;
+
+    const startY = climber.y;
+    let highest = climber.y;
+    for (let i = 0; i < 200; i++) {
+      step(ctx, world, [IN_GRIP, IN_REEL]);
+      world.events.length = 0;
+      highest = Math.min(highest, world.players[1].y);
+    }
+    expect((startY - highest) / TILE).toBeGreaterThan(3);
+  });
+
+  it('makes reeling cost grip stamina, so it is not free', () => {
+    const ctx = labContext();
+    const world = createWorld(ctx);
+    for (let i = 0; i < 60; i++) {
+      step(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    world.players[0].x = 20 * TILE;
+    world.players[0].y = 8 * TILE;
+    world.players[0].gripping = 1;
+    world.players[0].gripX = world.players[0].x;
+    world.players[0].gripY = world.players[0].y;
+    world.players[1].x = 20 * TILE;
+    world.players[1].y = 8 * TILE + 190;
+    const before = world.players[1].grip;
+    for (let i = 0; i < 120; i++) {
+      step(ctx, world, [IN_GRIP, IN_REEL]);
+      world.events.length = 0;
+    }
+    expect(world.players[1].grip).toBeLessThan(before);
+  });
+
+  it('ignores reeling on a slack rope', () => {
+    const ctx = labContext();
+    const world = createWorld(ctx);
+    for (let i = 0; i < 60; i++) {
+      step(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    // Standing next to each other: there is nothing to pull against.
+    world.players[1].x = world.players[0].x + 20;
+    world.players[1].y = world.players[0].y;
+    const before = world.players[1].grip;
+    for (let i = 0; i < 60; i++) {
+      step(ctx, world, [0, IN_REEL]);
+      world.events.length = 0;
+    }
+    expect(world.players[1].grip).toBe(before);
   });
 
   it('lets a dead player be dragged along instead of anchoring the pair', () => {

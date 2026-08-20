@@ -2,11 +2,14 @@
 
 **A two-player co-op disaster about a rope, a crate, and the end of a friendship.**
 
-Two haulers are tied together by a rope that will not stretch past its limit. Between
-them dangles a fragile crate. Above them is a tower. Everything interesting in the game
-comes out of those three facts: run too far and you drag your partner off a ledge, brace
-yourself and they can swing from you, and the crate is always one bad landing from
-matchwood.
+Two haulers are tied together by a rope, with a fragile crate hanging off the middle of
+it. The rope is not a leash — it is a **mechanism**. Its length is measured along the path
+it actually takes, so hooking it over a beam costs you slack, and a partner walking away
+from that beam **winches you up it**. Wrap it round a pillar and your leash shortens. Run
+too far and you drag your friend off a ledge.
+
+That is the game: a tower full of things to hook a rope over, and one other person on the
+end of it.
 
 Online play for two people, couch co-op for two people on one screen, a hand-authored
 campaign and an endless seeded tower. Built to ship on Steam.
@@ -34,8 +37,13 @@ To play on one screen instead, pick *Couch co-op* — no server needed.
 |---|---|---|---|
 | Move / jump | `A` `D` / `SPACE` | Stick / `A` | Ordinary, generous platforming. |
 | **Grip** | `L-SHIFT` | Right trigger | Lock yourself in place on ground or wall. You become an anchor your partner can swing from. Drains, except on yellow rebar. |
-| **Reel** | `F` | Left trigger | Drag yourself along the rope toward your partner. The fastest way up is usually the other person. |
+| **Reel** | `F` | Left trigger | Haul yourself along the rope toward your partner. It beats gravity, so an anchored partner above you is a ladder. Costs grip stamina. |
 | Emote | `T` | `Y` | Apologise. Or don't. |
+
+The fourth thing you can do isn't a button. Feet on solid ground resist a sideways pull
+but nothing resists being lifted, so whoever is standing is the anchor and whoever is
+hanging gets moved — which is why walking away from a ledge the rope runs over hauls your
+partner up it.
 
 Both players must hold `R` to reset to the last checkpoint.
 
@@ -54,6 +62,23 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run art` | Regenerates all store art and installer icons |
 | `npm run steam:config` | Regenerates the Steamworks achievement/stat/depot config |
 | `npm run dist:win` / `dist:linux` / `dist:mac` | Builds the Steam-ready desktop app |
+
+## The rope
+
+The rope is a verlet chain whose nodes cannot enter geometry, so it drapes over ledges and
+catches on corners. The part that matters is that the **length limit is measured along
+that path**, not along the straight line between the two players: a string-pulling pass
+finds the taut route around whatever the rope is resting on, and each player is hauled
+along *their own end* of it rather than toward their partner.
+
+Three things fall out of that, none of them scripted:
+
+- **The winch.** Rope over a lip, one player in the pit below, the other walks away from
+  the lip: the one below goes up. Measured at about a tile of lift per tile walked.
+- **Wrapping costs slack.** Going round a pillar spends rope, so your effective leash
+  shrinks until you unwind it.
+- **Traction decides who moves.** Standing on the ground resists a sideways haul; nothing
+  resists a lift. Whoever has their feet down is the anchor, without pressing anything.
 
 ## How it is put together
 

@@ -60,9 +60,16 @@ export const ROPE_NODE_DRAG = 0.994;
 export const ROPE_CORRECTION = 0.62;
 export const ROPE_YANK_SPEED = 250;
 
-/** Reel: pull yourself toward your partner along the rope. */
-export const REEL_FORCE = 1450;
-export const REEL_MAX_SPEED = 470;
+/** Reel: pull yourself toward your partner along the rope.
+ *
+ *  This has to beat gravity, or the verb is a lie. At 1450 it did not: a player
+ *  hauling straight up toward an anchored partner netted -550 px/s^2 and climbed
+ *  a sixth of a tile in five seconds, while every menu in the game told them the
+ *  fastest way up was the other person. */
+export const REEL_FORCE = 3100;
+export const REEL_MAX_SPEED = 430;
+/** Reeling is hard work: it drains the same stamina pool gripping does. */
+export const REEL_DRAIN = 16;
 
 /** Cargo — the crate that dangles from the middle of the rope and ruins lives. */
 export const CARGO_W = 26;
@@ -117,7 +124,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 8;
+export const SIM_VERSION = 9;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;
@@ -125,6 +132,14 @@ export const ROPE_GRAVITY = 1500;
 export const CARGO_GRAVITY = 2150;
 /** Restitution applied when the rope snaps taut, so a yank flings you. */
 export const ROPE_RESTITUTION = 0.18;
+/**
+ * How much a player standing on solid ground can resist being hauled sideways
+ * or downward by the rope. Nothing resists being lifted straight up, which is
+ * what lets one player winch the other out of a pit by walking away from the
+ * lip it runs over.
+ */
+export const GROUND_HAUL_RESISTANCE = 0.35;
+
 /** How hard a taut, loaded rope drags on the player it is tied to. */
 export const ROPE_LOAD = 380;
 /** Ticks after a checkpoint reset before control returns. */

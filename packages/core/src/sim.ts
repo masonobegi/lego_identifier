@@ -155,7 +155,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
     updatePlayer(level, world, 0, 0);
     updatePlayer(level, world, 1, 0);
     solveRope(world, level);
-    clampRopeLength(world);
+    clampRopeLength(world, level);
     updateCargo(level, world);
     return;
   }
@@ -166,7 +166,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   updatePlayer(level, world, 0, effective[0]);
   updatePlayer(level, world, 1, effective[1]);
   solveRope(world, level);
-  clampRopeLength(world);
+  clampRopeLength(world, level);
   applyRopeLoad(world);
   updateCargo(level, world);
 

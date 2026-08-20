@@ -1,4 +1,4 @@
-import { CARGO_HP, ROPE_NODES, ROPE_REST } from './constants.js';
+import { CARGO_HP, GRIP_MAX, ROPE_NODES, ROPE_REST } from './constants.js';
 import type { Level } from './level.js';
 import type { CargoState, PlayerState, SimContext, World } from './types.js';
 
@@ -54,7 +54,10 @@ export function placeAtSpawn(world: World, x: number, y: number): void {
     p.jumpHeld = 0;
     p.wallDir = 0;
     p.gripping = 0;
-    p.grip = 1;
+    // A full bar. This was 1, which meant both haulers spawned with no grip
+    // stamina at all and could not use the game's signature verb for the first
+    // three seconds of every life.
+    p.grip = GRIP_MAX;
     p.gripCooldown = 0;
     p.stunned = 0;
     p.dead = 0;
