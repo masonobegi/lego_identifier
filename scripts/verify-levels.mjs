@@ -23,9 +23,11 @@ import {
   ledgeSteps,
   step as simStep,
   TILE,
+  IN_GRIP,
   IN_JUMP,
   IN_LEFT,
   IN_RIGHT,
+  CARGO_H,
   GRIP_MAX,
   PLAYER_H,
   ROPE_NODES,
@@ -67,7 +69,12 @@ function placePair(world, x, y) {
     world.ropePY[i] = cy;
   }
   world.cargo.x = cx;
-  world.cargo.y = cy + 16;
+  // On the ground at their feet, not half sunk into it. `cy + 16` put the
+  // crate's centre level with the haulers' boots, which is twelve pixels of it
+  // inside the floor — and a body inside geometry cannot be swept anywhere, so
+  // it sat there weightless for the whole attempt. That made this gate easier
+  // than the game it is gating.
+  world.cargo.y = cy + (PLAYER_H - CARGO_H) / 2;
   world.cargo.px = world.cargo.x;
   world.cargo.py = world.cargo.y;
   world.cargo.hp = 100;
@@ -90,37 +97,79 @@ function launchColumns(ledge, limit = 6) {
   return [...new Set(cols)];
 }
 
-/** Can the pair get from one ledge to the next, with any reasonable input? */
-export function canMakeStep(ctx, from, to) {
+/**
+ * Can *one named hauler* get from this ledge to the next while the other braces?
+ *
+ * The braced partner is the point. Both haulers driven by the same inputs is
+ * not how this game is played and not what it asks for: they have separate
+ * controllers, they take turns, and holding GRIP so your partner can climb off
+ * you is the co-operative verb the whole thing is built around. Driving them in
+ * lockstep also fails steps that are obviously fine — a target ledge sitting
+ * almost directly above its source has exactly one clear launch column, and two
+ * haulers standing twenty-four pixels apart cannot both be in it.
+ *
+ * Bracing is also the *harder* of the two things a partner can realistically
+ * do, which makes this gate conservative rather than generous. That is not
+ * obvious and it is worth writing down: `scripts/calibrate-jump.mjs` measures
+ * both, and a hauler jumping past a braced partner clears one empty column at
+ * rise 1-3 where one dragging an idle partner clears two. A braced partner is
+ * an immovable anchor and the rope pulls you back to it; an idle one gets
+ * dragged along and pays out slack. So a step this gate passes is a step a pair
+ * can make with the partner doing either thing.
+ */
+function canCross(ctx, from, to, mover) {
+  const other = 1 - mover;
   const centre = (to.x0 + to.x1) / 2;
 
   for (const launch of launchColumns(from)) {
     const steerDir = centre > launch ? 1 : centre < launch ? -1 : 1;
     for (const dir of [steerDir, -steerDir]) {
-      for (const delay of [0, 4, 8, 14, 20]) {
-        for (const hold of [14, 22]) {
-          for (const steerStart of [0, 6, 12]) {
-            for (const steerLen of [12, 999]) {
-              // A fresh world per attempt: a previous attempt that died,
-              // tripped a checkpoint reset or touched the goal would otherwise
-              // poison every attempt after it.
-              const world = createWorld(ctx);
-              placePair(world, launch, from.y);
-              // Only a few ticks to let the rope and crate settle: crumbling
-              // and conveyor footing does not wait around, and neither should
-              // the check.
-              for (let t = 0; t < 4; t++) {
-                simStep(ctx, world, [0, 0]);
-                world.events.length = 0;
-              }
-              for (let t = 0; t < 140; t++) {
-                const jumping = t >= delay && t < delay + hold;
-                const steering = t >= steerStart && t < steerStart + steerLen;
-                const mask = (steering ? (dir > 0 ? IN_RIGHT : IN_LEFT) : 0) | (jumping ? IN_JUMP : 0);
-                simStep(ctx, world, [mask, mask]);
-                world.events.length = 0;
-                if (world.restartTimer > 0) break;
-                for (const p of world.players) {
+      // Ticks spent walking *away* from the target before jumping at it.
+      //
+      // Without this the gate could only test a standing jump, and a standing
+      // jump is not what anybody plays: you back off and take a run at it. The
+      // chunk seam — the wide landing at the bottom of one chunk up to the
+      // first serpentine shelf of the next — is makeable only with a run-up,
+      // and the gate called all thirteen levels broken for want of trying one.
+      // Zero comes first so the common case still returns on the first attempt.
+      for (const runup of [0, 20]) {
+        for (const delay of [0, 4, 8, 14, 20]) {
+          for (const hold of [14, 22, 26]) {
+            for (const steerStart of [0, 6, 12]) {
+              for (const steerLen of [8, 12, 999]) {
+                // A fresh world per attempt: a previous attempt that died,
+                // tripped a checkpoint reset or touched the goal would
+                // otherwise poison every attempt after it.
+                const world = createWorld(ctx);
+                placePair(world, launch, from.y);
+                // Only a few ticks to let the rope and crate settle: crumbling
+                // and conveyor footing does not wait around, and neither
+                // should the check.
+                for (let t = 0; t < 4; t++) {
+                  simStep(ctx, world, [0, 0]);
+                  world.events.length = 0;
+                }
+                const masks = [0, 0];
+                for (let t = 0; t < 160; t++) {
+                  const running = t < runup;
+                  const at = t - runup;
+                  const jumping = !running && at >= delay && at < delay + hold;
+                  const steering = !running && at >= steerStart && at < steerStart + steerLen;
+                  const walk = running
+                    ? dir > 0
+                      ? IN_LEFT
+                      : IN_RIGHT
+                    : steering
+                      ? dir > 0
+                        ? IN_RIGHT
+                        : IN_LEFT
+                      : 0;
+                  masks[mover] = walk | (jumping ? IN_JUMP : 0);
+                  masks[other] = IN_GRIP;
+                  simStep(ctx, world, masks);
+                  world.events.length = 0;
+                  if (world.restartTimer > 0) break;
+                  const p = world.players[mover];
                   if (p.dead || p.grounded !== 1) continue;
                   const px = Math.floor(p.x / TILE);
                   const py = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
@@ -134,6 +183,18 @@ export function canMakeStep(ctx, from, to) {
     }
   }
   return false;
+}
+
+/**
+ * Can the pair get from one ledge to the next?
+ *
+ * Both of them, taking turns — not either of them. The old gate returned on the
+ * first hauler to touch down, which proves a step one of them can make while
+ * the other is still hanging off the rope below it. The game asks for both at
+ * the goal, so the gate has to ask for both on every ledge in between.
+ */
+export function canMakeStep(ctx, from, to) {
+  return canCross(ctx, from, to, 0) && canCross(ctx, from, to, 1);
 }
 
 export function verifyLevel(level, mode, seed, options = {}) {
@@ -174,7 +235,7 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
   console.log(`campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps replayed`);
   if (!r.ok) {
     bad++;
-    console.log(`  ${r.reason ?? ''}`);
+    if (r.reason) console.log(`  ${r.reason}`);
     for (const f of r.failures ?? []) console.log(`  unmakeable step: ${f}`);
   }
 

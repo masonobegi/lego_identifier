@@ -260,17 +260,37 @@ export function drawPlayerTags(
   scale: number,
 ): void {
   const EMOTES = ['!', '?', '♥', '#$%!'];
+
+  // Stack the tags when the pair stands close.
+  //
+  // Both used to be drawn at the same height above their own hauler, and this
+  // is a game whose two players spend most of it within a rope's length of each
+  // other — so the names overlapped constantly, and what a screenshot showed
+  // was `LITTLE MA|AUTOHAULER`. Whichever hauler you are not gets lifted a row,
+  // so your own name stays where you expect it.
+  const labels: string[] = [];
+  const widths: number[] = [];
+  for (let i = 0; i < 2; i++) {
+    labels.push(s.names[i] || (i === 0 ? 'HAULER ONE' : 'HAULER TWO'));
+    ctx.font = `900 ${i === s.localIndex ? 13 : 12}px ${FONT}`;
+    widths.push(ctx.measureText(labels[i]).width);
+  }
+  const apartPx = Math.abs(s.world.players[0].x - s.world.players[1].x) * scale;
+  const crowded = apartPx < (widths[0] + widths[1]) / 2 + 14;
+  const lifted = s.localIndex === 0 ? 1 : 0;
+
   for (let i = 0; i < 2; i++) {
     const p = s.world.players[i];
     const isLocal = i === s.localIndex;
-    const label = s.names[i] || (i === 0 ? 'HAULER ONE' : 'HAULER TWO');
+    const label = labels[i];
 
     ctx.save();
     ctx.translate(p.x, p.y - 30);
     ctx.scale(1 / scale, 1 / scale);
+    ctx.translate(0, crowded && i === lifted ? -21 : 0);
     ctx.font = `900 ${isLocal ? 13 : 12}px ${FONT}`;
     ctx.textAlign = 'center';
-    const textW = ctx.measureText(label).width;
+    const textW = widths[i];
     ctx.globalAlpha = isLocal ? 0.95 : 0.75;
     ctx.fillStyle = 'rgba(9,12,22,0.7)';
     roundRect(ctx, -textW / 2 - 8, -14, textW + 16, 19, 6);

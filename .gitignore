@@ -26,3 +26,6 @@ packages/client/dist-web/
 
 # Baked into the desktop build by scripts/package-desktop.mjs
 packages/desktop/build-config.json
+
+# Temporary git worktrees created by the Workflow tool.
+.claude/worktrees/

@@ -111,27 +111,45 @@ describe('the bot partner', () => {
   });
 
   it('uses the rope verbs rather than only walking and jumping', () => {
-    const match = new LocalMatch(MODE_HAUL, 7, 10);
-    const bots = [new Bot(match.ctx.level), new Bot(match.ctx.level)];
-    match.setBot(0, bots[0]);
-    match.setBot(1, bots[1]);
+    // Counted across several towers, not one.
+    //
+    // Reeling is situational — it only happens when the bot is genuinely
+    // stranded below its partner on a taut rope — and how often a level puts
+    // it in that position varies wildly with the level's shape. Measured over
+    // two minutes each: 107 reels on two of these towers and 2 on the other
+    // three, from the same bot with the same logic. A bar on any single level
+    // is measuring that level; a bar on the sum is measuring the bot.
     let grips = 0;
     let reels = 0;
-    for (let t = 0; t < 120 * 60; t++) {
-      match.update(1000 / 60, [0, 0]);
-      for (const e of match.events) {
-        if (e.kind === 9) grips++;
-        if (e.kind === 17) reels++;
+    for (const [mode, seed] of [
+      [MODE_HAUL, 7],
+      [MODE_GAUNTLET, 33],
+      [MODE_GAUNTLET, 101],
+      [MODE_GAUNTLET, 555],
+      [MODE_GAUNTLET, 11],
+    ] as const) {
+      const match = new LocalMatch(mode, seed, 10);
+      match.setBot(0, new Bot(match.ctx.level));
+      match.setBot(1, new Bot(match.ctx.level));
+      // Two minutes each, not one: reeling is back-loaded — it needs the pair
+      // to have got themselves into trouble first. Halving the run took the
+      // count from 220 to 14.
+      for (let t = 0; t < 120 * 60; t++) {
+        match.update(1000 / 60, [0, 0]);
+        for (const e of match.events) {
+          if (e.kind === 9) grips++;
+          if (e.kind === 17) reels++;
+        }
+        match.events.length = 0;
       }
-      match.events.length = 0;
     }
-    // Bracing is constant; reeling is situational — it only happens when the
-    // bot is genuinely stranded below its partner on a taut rope. The bar for
-    // reeling is deliberately low, because a tight one measures the physics
-    // tuning rather than the bot: a single collision fix moved this count from
-    // 113 to 19 without changing a line of the bot's own logic.
-    expect(grips).toBeGreaterThan(20);
-    expect(reels).toBeGreaterThan(4);
+    // Bracing is constant; reeling is rare and clustered. Both bars are set
+    // well below what was measured, because a tight one measures the physics
+    // tuning rather than the bot — a single collision fix once moved the reel
+    // count from 113 to 19 without touching a line of the bot's own logic.
+    // Measured at 398 and 220.
+    expect(grips, 'grips across five towers').toBeGreaterThan(120);
+    expect(reels, 'reels across five towers').toBeGreaterThan(50);
   });
 
   it('does not vibrate on the spot', () => {

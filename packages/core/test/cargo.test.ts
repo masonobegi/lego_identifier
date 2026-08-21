@@ -83,35 +83,51 @@ describe('the crate', () => {
   });
 
   it('is hauled up the tower rather than left at the bottom of it', () => {
-    const match = new LocalMatch(MODE_HAUL, 7, 10);
-    match.setBot(0, new Bot(match.ctx.level));
-    match.setBot(1, new Bot(match.ctx.level));
+    for (const [mode, seed] of [
+      [MODE_HAUL, 7],
+      [MODE_GAUNTLET, 33],
+    ] as const) {
+      const match = new LocalMatch(mode, seed, 10);
+      match.setBot(0, new Bot(match.ctx.level));
+      match.setBot(1, new Bot(match.ctx.level));
 
-    const startPair = (match.world.players[0].y + match.world.players[1].y) / 2;
-    let sum = 0;
-    let worst = 0;
-    const ticks = 90 * 60;
-    for (let t = 0; t < ticks; t++) {
-      match.update(1000 / 60, [0, 0]);
-      match.events.length = 0;
-      // How far below the pair the crate is trailing, in rows. Measured as a
-      // gap rather than as distance climbed on purpose: a checkpoint reset
-      // teleports the crate up the tower with everything else, so "the crate
-      // ended up higher than it started" is satisfied by a crate that was
-      // never hauled an inch.
-      const w = match.world;
-      const lag = (w.cargo.y - (w.players[0].y + w.players[1].y) / 2) / TILE;
-      sum += lag;
-      if (lag > worst) worst = lag;
+      const startPair = (match.world.players[0].y + match.world.players[1].y) / 2;
+      let spell = 0;
+      let worstSpell = 0;
+      const ticks = 90 * 60;
+      for (let t = 0; t < ticks; t++) {
+        match.update(1000 / 60, [0, 0]);
+        match.events.length = 0;
+        // The longest *unbroken* spell the crate spends far behind, rather
+        // than its average distance or its worst moment.
+        //
+        // Average is the wrong measure and this test learned it the hard way:
+        // a crate hanging a full rope-length below a climbing pair is not
+        // lagging, it is doing its job, and that alone puts the average near
+        // ten rows. A single worst moment is wrong too — the crate swings.
+        // What distinguishes hauling from abandonment is *duration*: coming
+        // along behind you reads as seconds, being left behind reads as the
+        // rest of the run.
+        const w = match.world;
+        const lag = (w.cargo.y - (w.players[0].y + w.players[1].y) / 2) / TILE;
+        if (lag > 12) {
+          spell++;
+          if (spell > worstSpell) worstSpell = spell;
+        } else {
+          spell = 0;
+        }
+      }
+
+      const climbed = (startPair - (match.world.players[0].y + match.world.players[1].y) / 2) / TILE;
+      expect(climbed, `mode ${mode} seed ${seed}: rows climbed by the pair`).toBeGreaterThan(15);
+      // Measured at 5.0s and 1.9s. It was 20.4s with the crate unable to
+      // shuffle out from under a ledge, and the entire ninety seconds back
+      // when the crate spawned buried in the floor and never moved at all.
+      expect(
+        worstSpell / 60,
+        `mode ${mode} seed ${seed}: longest unbroken spell more than 12 rows behind, in seconds`,
+      ).toBeLessThan(11);
     }
-
-    const climbed = (startPair - (match.world.players[0].y + match.world.players[1].y) / 2) / TILE;
-    expect(climbed, 'rows climbed by the pair').toBeGreaterThan(15);
-    // Measured on this run: 3.7 average and 16.0 worst with the crate placed
-    // on the ground; 8.8 and 42.3 with it buried in the floor, and that only
-    // because the rope had already been stopped from stretching to infinity.
-    expect(sum / ticks, 'average rows the crate trails the pair by').toBeLessThan(6);
-    expect(worst, 'worst rows the crate trails the pair by').toBeLessThan(28);
   });
 
   /**

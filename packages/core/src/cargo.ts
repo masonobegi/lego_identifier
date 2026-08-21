@@ -8,6 +8,7 @@ import {
   CARGO_IMPACT_SCALE,
   CARGO_REGEN,
   CARGO_REGEN_DELAY,
+  CARGO_SHUFFLE,
   CARGO_MAX_FALL,
   CARGO_TETHER,
   CARGO_W,
@@ -21,7 +22,7 @@ import {
   WIND_ACCEL,
 } from './constants.js';
 import { T_WIND, type Level, tileAt } from './level.js';
-import { collider, moveCollider } from './physics.js';
+import { collider, moveCollider, rectHitsTiles } from './physics.js';
 import { hazardAt } from './hazards.js';
 import { pushEvent } from './events.js';
 import { ROPE_MID, anchorX, anchorY } from './rope.js';
@@ -31,6 +32,8 @@ const HW = CARGO_W / 2;
 const HH = CARGO_H / 2;
 const G_STEP = CARGO_GRAVITY * DT * DT;
 const CARGO_MAX_FALL_STEP = CARGO_MAX_FALL * DT;
+/** Sideways pixels per tick when the crate is shuffling out from under a lip. */
+const SHUFFLE_STEP = CARGO_SHUFFLE * DT;
 const WIND_STEP = WIND_ACCEL * DT * DT;
 
 function damage(world: World, amount: number, x: number, y: number): void {
@@ -130,6 +133,35 @@ export function updateCargo(level: Level, world: World): void {
     c.x = collider.x;
     c.y = collider.y;
     if (collider.hitY === 1) c.grounded = 1;
+
+    // Jammed under a ledge: shuffle out from under it.
+    //
+    // The tether pulls in a straight line toward the rope, and a straight line
+    // up is exactly the wrong direction when the thing above you is the ledge
+    // your partners just climbed. The crate wedges against the underside and
+    // stays there — measured on the campaign: twenty seconds pinned beneath a
+    // twelve-wide platform, fifteen rows below a pair who could not have
+    // reached it if they had tried, with the rope stretched to 1.65 times its
+    // own length hauling uselessly upward the whole time.
+    //
+    // A hauler in that situation walks the crate sideways until it clears the
+    // lip, so the crate does too. It only ever moves toward whichever side has
+    // headroom, so this cannot push it somewhere worse, and if both sides are
+    // blocked it stays where it is and the pair have to come back down.
+    if (collider.hitY === -1 && dy > 0) {
+      const toward = mx > c.x ? 1 : -1;
+      for (const side of [toward, -toward]) {
+        const at = c.x + side * (HW + 2);
+        if (rectHitsTiles(level, world, at - HW, c.y - HH - TILE, at + HW, c.y + HH)) continue;
+        collider.set(c.x, c.y, HW, HH);
+        collider.dropThrough = false;
+        moveCollider(level, world, collider, side * SHUFFLE_STEP, 0);
+        c.px += collider.x - c.x;
+        c.x = collider.x;
+        break;
+      }
+    }
+
     world.ropeX[ROPE_MID] += dx * corr * 0.7;
     world.ropeY[ROPE_MID] += dy * corr * 0.7;
   }

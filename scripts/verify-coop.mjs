@@ -25,6 +25,7 @@
  * exact mechanic the rope was built for.
  */
 import {
+  CARGO_H,
   GRIP_MAX,
   IN_GRIP,
   IN_JUMP,
@@ -65,7 +66,12 @@ function placePair(world, ax, bx, y) {
     world.ropePY[i] = cy;
   }
   world.cargo.x = (world.players[0].x + world.players[1].x) / 2;
-  world.cargo.y = cy + 16;
+  // On the ground at their feet, not half sunk into it. `cy + 16` put the
+  // crate's centre level with the haulers' boots, which is twelve pixels of it
+  // inside the floor — and a body inside geometry cannot be swept anywhere, so
+  // it sat there weightless for the whole attempt. That made this gate easier
+  // than the game it is gating.
+  world.cargo.y = cy + (PLAYER_H - CARGO_H) / 2;
   world.cargo.px = world.cargo.x;
   world.cargo.py = world.cargo.y;
   world.cargo.hp = 100;

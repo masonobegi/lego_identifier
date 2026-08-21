@@ -49,16 +49,35 @@ V_STEP = 3
 LAUNCH_REACH = 2
 
 
-def reachable(lower, upper):
-    """Can a player standing on `lower` jump onto `upper` three rows above?
+# How many columns of the lower foothold must work as a launch position.
+#
+# One is not enough, and the difference is the whole of this constant. A
+# seven-wide platform sitting one column across from the seven-wide platform
+# three rows below it is legal by the letter of the old rule — column ten is
+# clear of a target starting at column eleven, and within reach of its edge —
+# and it is a frame-perfect move: rise to the very top of the jump without
+# drifting into the shelf beside you, then step one column sideways onto a
+# single tile of toehold. Measured on the campaign, that exact shape was the
+# only step a braced pair could not make, and it appeared in eleven of the
+# thirteen towers as well. Two columns turns it back into a jump.
+MIN_LAUNCH_COLUMNS = 2
 
-    Only if some column of the lower foothold is clear of the upper one and
-    within LAUNCH_REACH of its edge — you cannot rise through a platform, so
-    standing directly underneath it is useless."""
+
+def launch_columns(lower, upper):
+    """Columns of `lower` a player can stand in and still jump onto `upper`.
+
+    You cannot rise through a platform, so standing directly underneath one is
+    useless: a launch column has to be clear of the upper foothold and within
+    LAUNCH_REACH of one of its edges."""
     _, a0, a1 = lower
     _, b0, b1 = upper
-    return any((b0 - LAUNCH_REACH <= x <= b0 - 1) or (b1 + 1 <= x <= b1 + LAUNCH_REACH)
-               for x in range(a0, a1 + 1))
+    return [x for x in range(a0, a1 + 1)
+            if (b0 - LAUNCH_REACH <= x <= b0 - 1) or (b1 + 1 <= x <= b1 + LAUNCH_REACH)]
+
+
+def reachable(lower, upper):
+    """Can a player standing on `lower` jump onto `upper` three rows above?"""
+    return len(launch_columns(lower, upper)) >= MIN_LAUNCH_COLUMNS
 
 
 class C:

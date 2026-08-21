@@ -348,6 +348,13 @@ export class Renderer {
       ctx.fillRect(view.x0, top, view.x1 - view.x0, view.y1 - top);
       // The tower's base plate. In ink, so it reads as the bottom of the
       // structure rather than as a stray rule drawn across the frame.
+      //
+      // There are deliberately no matching uprights, though the silhouette
+      // would seem to want them. The level's boundary is two columns of solid
+      // wall outside the face you can see, so a rule drawn there lands in the
+      // middle of a flat tan field with nothing on either side of it to
+      // separate — it reads as a line ruled round the picture, which is worse
+      // than the soft edge it was meant to fix.
       ctx.fillStyle = palette.ink;
       ctx.fillRect(view.x0, level.heightPx, view.x1 - view.x0, 5);
     }
