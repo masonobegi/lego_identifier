@@ -21,6 +21,7 @@ import {
   PLAYER_HALF_W,
   ROPE_YANK_SPEED,
   IN_REEL,
+  BETRAYAL_DEBOUNCE,
 } from './constants.js';
 import type { Level } from './level.js';
 import { collider, moveCollider, rectHitsTiles, pointSolid } from './physics.js';
@@ -400,8 +401,13 @@ export function clampRopeLength(world: World, level: Level): void {
       const my = (a.y + b.y) * 0.5;
       pushEvent(world, EV_ROPE_YANK, mx, my, paying, 0);
       // Being ripped off solid ground by your partner is the signature failure
-      // of this game, so it is counted and reported on the results screen.
-      if ((a.grounded === 1) !== (b.grounded === 1)) world.betrayals++;
+      // of this game, so it is counted and reported on the results screen —
+      // once per incident. One shove off a ledge is one betrayal, however many
+      // ticks the resulting fall takes.
+      if ((a.grounded === 1) !== (b.grounded === 1) && world.yankHold === 0) {
+        world.betrayals++;
+        world.yankHold = BETRAYAL_DEBOUNCE;
+      }
     }
   }
 }

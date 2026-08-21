@@ -3,6 +3,8 @@ import {
   CARGO_DAMPING,
   CARGO_GRAVITY,
   CARGO_H,
+  CARGO_HAZARD_BITE,
+  CARGO_HAZARD_GRACE,
   CARGO_HP,
   CARGO_IMPACT_MIN,
   CARGO_IMPACT_SCALE,
@@ -175,8 +177,13 @@ export function updateCargo(level: Level, world: World): void {
   if (c.grounded) c.rotV *= 0.82;
   c.rot += c.rotV;
 
-  if (hazardAt(level, world, c.x - HW + 4, c.y - HH + 4, c.x + HW - 4, c.y + HH - 4)) {
-    damage(world, 34, c.x, c.y);
+  if (c.hurt > 0) c.hurt--;
+  if (
+    c.hurt === 0 &&
+    hazardAt(level, world, c.x - HW + 4, c.y - HH + 4, c.x + HW - 4, c.y + HH - 4)
+  ) {
+    damage(world, CARGO_HAZARD_BITE, c.x, c.y);
+    c.hurt = CARGO_HAZARD_GRACE;
   }
   if (c.y > level.heightPx + 400) damage(world, CARGO_HP, c.x, c.y);
 }

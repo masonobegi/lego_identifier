@@ -63,6 +63,7 @@ export interface MatchResult {
   cargoBreaks: number;
   betrayals: number;
   bonds: number;
+  /** How many checkpoints were reached, not the index of the last one. */
   checkpoints: number;
 }
 

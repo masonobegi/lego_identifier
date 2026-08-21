@@ -367,6 +367,26 @@ seam is makeable only with a run-up. With one in the search space, all thirteen
 pass: both haulers, taking turns, braced partner, real crate. That took the gate
 from six minutes to eleven, which is a fair price for it meaning what it says.
 
+## What the rope is actually doing
+
+Worth measuring, because "the rope is the game" is the sort of claim that is easy to make
+and easy to be wrong about. Over three minutes of the campaign, climbed by two policies
+that follow the same route a beat apart:
+
+| Rope length | Two haulers in step | One hauler lagging |
+| --- | --- | --- |
+| Under its 118px rest length (slack) | 93% of ticks | 29% |
+| Past 90% of its 232px limit | 0.8% | 24% |
+| Yanks hard enough to fire a sound | once | constantly |
+
+That is the design working rather than the rope being decoration: a pair who stay level
+with each other never feel it, and a pair who do not feel it all the time. The same
+asymmetry shows up in the crate — the reckless policy that climbs together loses half a
+crate in three minutes, and the cautious policy that takes turns loses four, because
+taking turns leaves the load hanging low where the spikes are.
+
+Nothing in the game says any of this out loud. It is taught by the rope.
+
 ## Level design rules
 
 These were not obvious, and getting them wrong produced a tower that looked completely
@@ -374,13 +394,39 @@ reasonable and could not be climbed past the fifth platform. They are now enforc
 `tools/gen_chunks.py` at authoring time and re-derived from the built level data by
 `scripts/verify-levels.mjs` on every build.
 
-**Footholds sit exactly three rows apart.** A tile is 24px and a player is 32px tall, so a
-two-row step leaves a single tile of clearance — less than the player. They clip the
-underside of the platform they are jumping to and the route silently dies.
+**Footholds sit exactly three rows apart.** Enough clearance for a 32px player between
+24px tiles, and inside the measured jump envelope with room to spare.
 
-**Consecutive footholds are never vertically aligned.** You cannot rise through a
-platform, so to climb onto one you must first be standing clear of it. The lower foothold
-has to stick out past the upper one's edge, within two columns of it.
+**Consecutive footholds overlap by at least three columns.** This is the rule the tower
+is built on, and it is the reverse of the rule it used to be built on.
+
+Footholds used to be rock, and you cannot rise through rock, so to climb onto one you had
+to be standing *clear* of it — which meant `climb()` placed every platform one column past
+the one below, the maximum spread that is still legal. Every gate was green. The tower was
+also unplayable, and nothing in the repo could tell the difference: `scripts/playtest.mjs`
+measured 23.4% of plausible casual jump attempts landing, and five different two-player
+policies each climbing between three and nine rows of 651 in three minutes, reaching none
+of the twenty checkpoints.
+
+Footholds are one-way platforms now — you pass up through them and land on them coming
+down — so standing underneath one went from useless to being the easiest launch in the
+game, a jump with no sideways component to get wrong. Overlapping them rather than
+gapping them took the same measurement to 69.7% and the same policies to between 185 and
+352 rows, reaching four to eight checkpoints. The geometry is the only thing that changed.
+
+The corollary is that **a solid material may never cover the overlap band**. Ice and
+conveyors are solid, and a solid tile three rows above you blocks your head, so painting
+one across the columns a step is proved through does not make that step harder, it deletes
+it. `restyle()` keeps the band as a one-way platform and gives the rest of the foothold
+the material; `check()` re-derives it and fails the build if it ever stops being true.
+
+**Hazards go on the route, not around it.** For a long time every hazard in the game was
+painted through `deco()`, which by construction refuses to touch the route, so the tower
+was 92.7% plain concrete and you could climb the entire campaign without passing within a
+tile of anything that could hurt you. `hazard()` and `underhang()` paint onto the route
+itself and stop dead at the launch band, so the way past is always there and always
+somewhere specific. The underside matters most: the crate hangs a rope's length below the
+pair, so that is where the teeth belong in a game about carrying something fragile.
 
 **The route is never made of something you cannot stand on.** Bounce pads throw you
 straight back off; crumbling crates are gone a third of a second after you touch them.
@@ -392,8 +438,8 @@ headroom above it. A single stray ceiling spike in the wrong place is otherwise 
 seal a chunk.
 
 **Every chunk carries the same two landing platforms**, one at row 1 and one at row h-2,
-offset from each other horizontally. Stacked, they land three rows apart with clear rows
-between, so any chunk can follow any other — which is what makes the seeded endless tower
+overlapping each other by four columns. Stacked, they land three rows apart with clear
+rows between, so any chunk can follow any other — which is what makes the seeded endless tower
 possible without a generator that can produce impossible geometry.
 
 The movement envelope those rules encode is measured, not guessed:

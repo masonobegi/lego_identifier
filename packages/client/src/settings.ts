@@ -21,6 +21,16 @@ export interface Settings {
    * ws://127.0.0.1:8787 saved forever and can never reach the public one.
    */
   serverPinned: boolean;
+  /**
+   * Whether the second hauler is the Autohauler.
+   *
+   * Persisted because it is reachable from two places now: the couch screen,
+   * where it is chosen, and the daily haul on the title screen, which starts a
+   * run without passing through it. A solo player who picked the bot last night
+   * and taps today's haul this morning should not get a second hauler who does
+   * not move.
+   */
+  botPartner: boolean;
 }
 
 /** Where the public matchmaking server lives. Overridable in settings so a
@@ -65,9 +75,29 @@ export const DEFAULT_SETTINGS: Settings = {
   colour: 0,
   serverUrl: DEFAULT_SERVER,
   serverPinned: false,
+  botPartner: false,
 };
 
 export const PROFILE_STATS_KEY = 'stats';
+
+/**
+ * What you did on the daily tower, and how many days running you have shown up.
+ *
+ * Only one day is kept. A history would be a leaderboard without anybody else
+ * on it, and the point of the daily is the tower you and your friend are both
+ * on today, not a museum of the ones you already did.
+ */
+export interface DailyRecord {
+  /** UTC day number the rest of this record is about. */
+  day: number;
+  /** Best finish time in ticks, or 0 if it has not been finished. */
+  bestTicks: number;
+  /** Furthest checkpoint count reached today, finished or not. */
+  bestCheckpoints: number;
+  attempts: number;
+  /** Consecutive days with at least one attempt. */
+  streak: number;
+}
 
 export interface Profile {
   runs: number;
@@ -81,6 +111,7 @@ export interface Profile {
   metres: number;
   unlockedHats: number[];
   seenTutorial: boolean;
+  daily: DailyRecord;
 }
 
 export const DEFAULT_PROFILE: Profile = {
@@ -95,6 +126,7 @@ export const DEFAULT_PROFILE: Profile = {
   metres: 0,
   unlockedHats: [0],
   seenTutorial: false,
+  daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0 },
 };
 
 export function loadSettings(): Settings {

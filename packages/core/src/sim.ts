@@ -165,6 +165,8 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
     }
   }
 
+  if (world.yankHold > 0) world.yankHold--;
+
   if (world.restartTimer > 0) {
     world.restartTimer--;
     if (world.restartTimer === 0) {

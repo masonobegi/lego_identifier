@@ -43,6 +43,18 @@ export interface CargoState {
   grounded: number;
   /** Ticks since the crate last took damage, for self-repair. */
   calm: number;
+  /**
+   * Ticks of grace after a hazard bites, during which spikes cannot bite again.
+   *
+   * Hazard contact used to be evaluated every tick, so a spike did 34 damage
+   * sixty times a second and three frames of brushing past one destroyed a
+   * crate with full health. That is not a hazard, it is a trapdoor, and it
+   * made the underside of the route unusable for level design: any spike the
+   * crate could be dragged through was an instant loss. One bite per contact
+   * is both fairer and far more readable — you hear it, you see the bar drop,
+   * and you have time to haul the thing clear.
+   */
+  hurt: number;
 }
 
 /** Presentation-only events emitted by a tick. Rendered, never simulated. */
@@ -74,6 +86,17 @@ export interface World {
   restartTimer: number;
   bonds: number;
   betrayals: number;
+  /**
+   * Ticks before another betrayal can be counted.
+   *
+   * Without this the counter incremented on every tick the rope was yanking
+   * hard with exactly one hauler on the ground — which is a state that lasts
+   * as long as the fall does, so one shove off a ledge scored somewhere
+   * between ten and forty betrayals. The results screen was reporting a frame
+   * count under a heading that reads as a number of incidents, and the
+   * headline stat of the funniest screen in the game was noise.
+   */
+  yankHold: number;
   cargoBreaks: number;
   events: SimEvent[];
 }

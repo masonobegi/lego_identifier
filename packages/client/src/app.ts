@@ -10,6 +10,9 @@ import {
   INTENT_JOIN,
   INTENT_QUICKPLAY,
   LocalMatch,
+  DAILY_FLOORS,
+  dailyDay,
+  dailySeed,
   MODE_GAUNTLET,
   MODE_HAUL,
   NetClient,
@@ -78,7 +81,14 @@ export class App {
   lobbyMode = MODE_HAUL;
   lobbyTowerLength = DEFAULT_TOWER_LENGTH;
   /** Local play with a bot on the second rope end rather than a second person. */
-  botPartner = false;
+  get botPartner(): boolean {
+    return this.settings.botPartner;
+  }
+
+  set botPartner(value: boolean) {
+    this.settings.botPartner = value;
+    this.persist();
+  }
 
   net: NetClient | null = null;
   local: LocalMatch | null = null;
@@ -665,14 +675,49 @@ export class App {
 
   /* ---------------------------------------------------------------- local */
 
-  startCouch(): void {
+  /**
+   * True while the current local run is today's daily tower.
+   *
+   * The daily is a Gauntlet on a fixed seed, so nothing about the match itself
+   * distinguishes it — the flag is what lets the results screen know which
+   * record to write, and it is deliberately cleared by anything that reseeds
+   * the tower, because a restart on a fresh random seed is not the daily any
+   * more however you got there.
+   */
+  dailyRun = false;
+
+  /** Today, by the game's reckoning. Exposed so the menus can name it. */
+  get today(): number {
+    return dailyDay(Date.now());
+  }
+
+  startDaily(): void {
+    const day = this.today;
+    this.startCouch(MODE_GAUNTLET, dailySeed(day), DAILY_FLOORS);
+    this.dailyRun = true;
+    const d = this.profile.daily;
+    if (d.day !== day) {
+      // A streak survives one missed day being yesterday and nothing more.
+      this.profile.daily = {
+        day,
+        bestTicks: 0,
+        bestCheckpoints: 0,
+        attempts: 0,
+        streak: d.day === day - 1 ? d.streak + 1 : 1,
+      };
+    }
+    this.profile.daily.attempts++;
+    this.persist();
+  }
+
+  startCouch(mode = this.lobbyMode, seed = (Math.random() * 0x7fffffff) | 0, floors = this.lobbyTowerLength): void {
     this.audio.unlock();
     this.disposeSession();
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
-    const seed = (Math.random() * 0x7fffffff) | 0;
-    this.local = new LocalMatch(this.lobbyMode, seed, this.lobbyTowerLength);
+    this.dailyRun = false;
+    this.local = new LocalMatch(mode, seed, floors);
     if (this.botPartner) this.local.setBot(1, new Bot(this.local.ctx.level));
     this.renderer.reset(this.local.world);
     this.profile.runs++;
@@ -688,6 +733,8 @@ export class App {
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
+    // A restart reseeds the tower, so whatever this run is, it is not today's.
+    this.dailyRun = false;
     this.local.restart((Math.random() * 0x7fffffff) | 0);
     this.renderer.reset(this.local.world);
     this.show('none');
@@ -703,11 +750,28 @@ export class App {
       cargoBreaks: world.cargoBreaks,
       betrayals: world.betrayals,
       bonds: world.bonds,
-      checkpoints: Math.max(0, world.checkpoint),
+      checkpoints: world.checkpoint + 1,
     };
+    if (this.dailyRun) this.recordDaily(this.lastResult);
     this.checkAchievements(world);
     this.persist();
     this.show('results');
+  }
+
+  /**
+   * Fold a finished daily run into today's record.
+   *
+   * Best time only counts a run that reached the top; a run that ended early
+   * has a `finishTick` too, and it is the tick it gave up on, which would
+   * otherwise post a world record for quitting.
+   */
+  private recordDaily(result: MatchResult): void {
+    const d = this.profile.daily;
+    if (d.day !== this.today) return;
+    d.bestCheckpoints = Math.max(d.bestCheckpoints, result.checkpoints);
+    if (this.finishedRun && (d.bestTicks === 0 || result.finishTick < d.bestTicks)) {
+      d.bestTicks = result.finishTick;
+    }
   }
 
   leave(): void {

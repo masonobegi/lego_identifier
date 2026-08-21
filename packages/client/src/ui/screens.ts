@@ -5,6 +5,7 @@ import {
   INTENT_QUICKPLAY,
   MODE_GAUNTLET,
   MODE_HAUL,
+  dailyLabel,
   isValidRoomCode,
   normaliseRoomCode,
 } from '@haulmates/core';
@@ -153,6 +154,7 @@ function titleScreen(app: App): HTMLElement {
         { primary: !offlineBuild(), disabled: offlineBuild() },
       ),
       button(app, 'Play on this machine', '', () => app.show('couch'), { primary: offlineBuild() }),
+      button(app, "Today's haul", dailyBlurb(app), () => app.startDaily()),
       button(app, 'How to play', '', () => app.show('controls')),
       button(app, 'Customise', '', () => app.show('customise')),
       button(app, 'Achievements', `${app.achievements.earned.length} / ${ACHIEVEMENTS.length}`, () => app.show('achievements')),
@@ -165,6 +167,22 @@ function titleScreen(app: App): HTMLElement {
       `v${app.version}${steamAvailable() ? ' · STEAM' : ''}`,
     ),
   );
+}
+
+/**
+ * What the daily button says underneath itself.
+ *
+ * Deliberately the one caption on the title screen with a number in it. The
+ * rest of that menu is terse on purpose; this one earns its line because it is
+ * the only item whose state changes between visits, and the state is the whole
+ * reason to press it.
+ */
+function dailyBlurb(app: App): string {
+  const d = app.profile.daily;
+  if (d.day !== app.today) return `${dailyLabel(app.today)} — not attempted`;
+  const streak = d.streak > 1 ? ` · ${d.streak} days running` : '';
+  if (d.bestTicks > 0) return `Delivered in ${formatTime(d.bestTicks / 60)}${streak}`;
+  return `${d.bestCheckpoints} checkpoints in ${d.attempts} ${d.attempts === 1 ? 'try' : 'tries'}${streak}`;
 }
 
 /* ------------------------------------------------------------------ online */
@@ -429,13 +447,25 @@ function resultsScreen(app: App): HTMLElement {
 
   const seconds = r.finishTick / 60;
   const totalDeaths = r.deaths[0] + r.deaths[1];
+  // Every one of these used to be a statement about the stat sheet and none of
+  // them was a statement about the run. Quit twelve seconds in, having climbed
+  // nothing, and the card read "Flawless. Nobody will believe you." — which was
+  // true of the numbers and a lie about the evening. So the flattering ones now
+  // have to get past `app.finishedRun`, and a run that ended early gets told
+  // what actually happened to it.
+  const done = app.finishedRun;
   const verdicts = [
-    { when: () => r.cargoBreaks === 0 && totalDeaths === 0, text: 'Flawless. Nobody will believe you.' },
-    { when: () => r.cargoBreaks === 0, text: 'The crate survived. You did not, repeatedly.' },
+    { when: () => done && r.cargoBreaks === 0 && totalDeaths === 0, text: 'Flawless. Nobody will believe you.' },
+    { when: () => done && r.cargoBreaks === 0, text: 'The crate survived. You did not, repeatedly.' },
+    { when: () => done && r.bonds > r.betrayals * 2, text: 'Genuinely good teamwork. Suspicious.' },
+    { when: () => done && totalDeaths > 40, text: 'A triumph of persistence over talent.' },
+    { when: () => done, text: 'Delivered. Mostly.' },
+    { when: () => r.checkpoints === 0, text: 'You did not leave the yard.' },
     { when: () => r.betrayals > 20, text: 'You dragged each other off that tower like it was the point.' },
-    { when: () => totalDeaths > 40, text: 'A triumph of persistence over talent.' },
-    { when: () => r.bonds > r.betrayals * 2, text: 'Genuinely good teamwork. Suspicious.' },
-    { when: () => true, text: 'Delivered. Mostly.' },
+    { when: () => r.cargoBreaks > 3, text: `${r.cargoBreaks} crates. The client has been informed.` },
+    { when: () => totalDeaths > 40, text: 'The tower is still there. So, remarkably, are you.' },
+    { when: () => r.checkpoints >= 16, text: 'So close you could read the sign.' },
+    { when: () => true, text: `${r.checkpoints} checkpoints. The crate is somebody else's problem now.` },
   ];
   const verdict = verdicts.find((v) => v.when())!.text;
 
@@ -452,7 +482,7 @@ function resultsScreen(app: App): HTMLElement {
       stat(String(r.cargoBreaks), 'Crates destroyed', r.cargoBreaks > 0 ? 'bad' : 'good'),
       stat(String(r.betrayals), 'Times you yanked each other off a ledge', r.betrayals > 10 ? 'bad' : ''),
       stat(String(r.bonds), 'Moments spent braced for your partner', 'good'),
-      stat(String(r.checkpoints + 1), 'Checkpoints reached', ''),
+      stat(String(r.checkpoints), 'Checkpoints reached', ''),
     ),
     h(
       'div',
@@ -803,6 +833,7 @@ function couchScreen(app: App): HTMLElement {
       button(app, 'Start', app.botPartner ? 'You and the Autohauler' : 'Both haulers on one screen', () => app.startCouch(), {
         primary: true,
       }),
+      button(app, "Today's haul", dailyBlurb(app), () => app.startDaily()),
       button(app, 'Rebind keys', '', () => app.show('controls'), ),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),

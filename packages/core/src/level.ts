@@ -1,6 +1,6 @@
 import { CHUNK_W, TILE } from './constants.js';
 import { dcos } from './math.js';
-import { Rng, hashSeed } from './rng.js';
+import { Rng } from './rng.js';
 
 /* ------------------------------------------------------------------ tiles */
 
@@ -354,8 +354,4 @@ export function generateTower(seed: number, pool: ChunkDef[], length: number): C
   }
   out.push(rng.pick(goals));
   return out;
-}
-
-export function dailySeed(dateIso: string): number {
-  return hashSeed('haulmates-daily-' + dateIso);
 }

@@ -24,9 +24,19 @@ haul against.
 > sitting in the rock. It is now on the ground, it weighs something, and a run does not
 > finish until it is at the top with you. See *The crate was in the floor*.
 
+> And a fourth, which was the biggest of them. The tower was provably climbable and
+> nobody could climb it. Every gate in the repo answered "could a perfect player finish
+> this", and the answer was yes; the question that decides whether anyone keeps playing is
+> how often an *ordinary* attempt succeeds, and nothing here could ask it. Measured, once
+> something could: 23.4% of plausible casual jump attempts landed, and five different
+> two-player policies each climbed between three and nine rows of a 651-row tower in three
+> minutes, reaching none of the twenty checkpoints. It is 70% and roughly 380 rows now, and
+> the thing that changed is a single line in the level generator. See *Level design rules*.
+
 Online play for two people, couch co-op for two on one screen, a bot partner for when
-nobody is around, a hand-authored campaign and an endless seeded tower. Built to ship on
-Steam.
+nobody is around, a hand-authored campaign, an endless seeded tower, and a daily haul —
+one procedurally assembled tower per calendar day, the same one for everybody, gone at
+midnight. Built to ship on Steam.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
@@ -85,6 +95,7 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run build` | Builds core, server and web client |
 | `npm run verify` | Everything above, plus the packaged desktop self-test |
 | `npm run verify:levels` | Proves every tower can actually be climbed |
+| `npm run playtest` | Measures how often ordinary attempts succeed, which is a different question |
 | `npm run levels` | Re-generates the chunk library from `tools/gen_chunks.py` |
 | `npm run calibrate` | Measures what a jump can reach, for the level design rules |
 | `npm run art` | Regenerates all store art and installer icons |

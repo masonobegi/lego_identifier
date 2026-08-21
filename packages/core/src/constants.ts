@@ -31,7 +31,25 @@ export const ICE_FRICTION = 130;
 export const ICE_ACCEL = 700;
 
 /** Jumping. */
-export const JUMP_VELOCITY = -585;
+/**
+ * Jump strength. Raised from -585 alongside making the route one-way.
+ *
+ * The two changes together are what turned this from a game nobody could play
+ * into one somebody can. Measured as the fraction of plausible casual jump
+ * attempts that land — every launch column, a spread of timings and hold
+ * lengths, no memorised launch marks:
+ *
+ *     solid route, -585   24.4%   worst step  2%
+ *     solid route, -645   30.5%   worst step  2%
+ *     one-way route, -585 43.5%   worst step 22%
+ *     one-way route, -645 55.3%   worst step 25%
+ *
+ * Jump height alone barely moved it, and never fixed the near-impossible step,
+ * because the binding constraint was never height — it was that a solid
+ * platform cannot be risen through, so the only legal launch columns were the
+ * one or two clear of the shelf above. See `climb()` in tools/gen_chunks.py.
+ */
+export const JUMP_VELOCITY = -645;
 export const JUMP_CUT = 0.42;
 export const COYOTE_TICKS = 7;
 export const JUMP_BUFFER_TICKS = 8;
@@ -138,6 +156,33 @@ export const CARGO_SHUFFLE = 190;
  * none, and finishes on nine health out of a hundred — the bar tells the story
  * of the whole climb instead of resetting every time you look away.
  */
+/**
+ * Ticks before a second betrayal can be counted. A yank hard enough to rip
+ * somebody off a ledge is one incident, not one per frame of the fall.
+ */
+export const BETRAYAL_DEBOUNCE = 45;
+
+/**
+ * What one bite from a spike costs the crate, and how long before it can bite
+ * again.
+ *
+ * This was 34 applied *every tick of contact*, so a spike did two thousand
+ * damage a second and three frames of brushing past one destroyed a crate at
+ * full health. That is not a hazard, it is a trapdoor, and it is why the
+ * underside of the route — where the crate rides — carried no hazards at all:
+ * anything the load could be dragged through was an instant loss, so nothing
+ * was ever put there.
+ *
+ * One bite per contact, and the value swept against `npm run playtest`. There
+ * is a cliff between 20 and 26: at 26 the two-player policies fall from ~375
+ * rows of the campaign in three minutes to ~92, losing eleven crates. At 20
+ * they hold their distance and lose between half a crate and four, depending
+ * entirely on whether they stay level with each other — which is the lesson
+ * the game is trying to teach, arrived at by the crate rather than by a hint.
+ */
+export const CARGO_HAZARD_BITE = 20;
+export const CARGO_HAZARD_GRACE = 30;
+
 export const CARGO_IMPACT_MIN = 820;
 export const CARGO_IMPACT_SCALE = 0.06;
 export const CARGO_REPAIR_PER_TICK = 0.55;
@@ -180,7 +225,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 16;
+export const SIM_VERSION = 17;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

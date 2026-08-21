@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CARGO_H,
+  CARGO_HAZARD_GRACE,
   CARGO_HP,
   CARGO_W,
   EV_CARGO_HIT,
@@ -11,8 +12,10 @@ import {
   TILE,
   Bot,
   LocalMatch,
+  isDeadlyTile,
   isSolidTile,
   step,
+  updateCargo,
 } from '../src/index.js';
 import type { CargoState, Level } from '../src/index.js';
 
@@ -166,14 +169,24 @@ describe('the crate', () => {
           world.ropePX[i] = world.ropeX[i];
           world.ropePY[i] = level.goalY;
         }
-        // Either up here with them, or twelve rows down the shaft.
-        world.cargo.x = level.goalX;
-        world.cargo.y = level.goalY + (bringIt ? 0 : 12 * TILE);
-        world.cargo.px = world.cargo.x;
-        world.cargo.py = world.cargo.y;
-        world.cargo.hp = 100;
+        // Either up here with them, or twelve rows down the shaft — and held
+        // there, because the rope will otherwise fetch it. Footholds are one-way
+        // platforms now, so an over-stretched rope hauls the crate straight up
+        // through them instead of leaving it snagged on a lip, which is the
+        // behaviour this game wants and the reason simply dropping it down the
+        // shaft no longer stages the scenario. Pinning it each tick is the
+        // scenario: the crate is somewhere else, and the pair are on the goal.
+        const hold = (): void => {
+          world.cargo.x = level.goalX;
+          world.cargo.y = level.goalY + (bringIt ? 0 : 12 * TILE);
+          world.cargo.px = world.cargo.x;
+          world.cargo.py = world.cargo.y;
+          world.cargo.hp = 100;
+        };
+        hold();
 
         for (let t = 0; t < 240; t++) {
+          if (!bringIt) hold();
           step(match.ctx, world, [0, 0]);
           world.events.length = 0;
         }
@@ -216,6 +229,46 @@ describe('the crate', () => {
       }
       // Measured at 69.3 with the cap and 312.8 without it.
       expect(worst, `mode ${mode} seed ${seed}: worst single impact`).toBeLessThan(CARGO_HP);
+    }
+  });
+  it('lets a spike bite the crate once per contact, not once per frame', () => {
+    // Hazard contact used to be evaluated every tick, so a spike did 34 damage
+    // sixty times a second and three frames of brushing one destroyed a crate
+    // at full health. That is not a hazard, it is a trapdoor, and it made the
+    // underside of the route — where the crate rides — unusable for level
+    // design: any spike the load could be dragged past was an instant loss.
+    //
+    // Driven through `updateCargo` rather than the whole tick, because staging
+    // this in a live match means putting two haulers next to a spike, and what
+    // that measures is how long they survive.
+    const match = new LocalMatch(MODE_HAUL, 4242, 8);
+    const level = match.ctx.level;
+    const spike = level.tiles.findIndex((t) => isDeadlyTile(t));
+    expect(spike).toBeGreaterThanOrEqual(0);
+
+    const world = match.world;
+    const c = world.cargo;
+    const x = (spike % level.w) * TILE + TILE / 2;
+    const y = Math.floor(spike / level.w) * TILE + TILE / 2;
+    const hits: number[] = [];
+    for (let t = 0; t < 180; t++) {
+      // Held in the teeth, so the only thing varying is the damage rule.
+      c.x = x;
+      c.y = y;
+      c.px = x;
+      c.py = y;
+      c.hp = CARGO_HP;
+      updateCargo(level, world);
+      for (const e of world.events) if (e.kind === EV_CARGO_HIT) hits.push(t);
+      world.events.length = 0;
+    }
+
+    // Three seconds in the spikes is a handful of bites, not a hundred and
+    // eighty. Without the grace window this was 180.
+    expect(hits.length).toBeGreaterThan(1);
+    expect(hits.length).toBeLessThanOrEqual(180 / CARGO_HAZARD_GRACE + 1);
+    for (let i = 1; i < hits.length; i++) {
+      expect(hits[i] - hits[i - 1]).toBeGreaterThanOrEqual(CARGO_HAZARD_GRACE);
     }
   });
 });

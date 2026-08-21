@@ -301,7 +301,7 @@ export class Room {
       .u32(w.cargoBreaks)
       .u32(w.betrayals)
       .u32(w.bonds)
-      .u32(Math.max(0, w.checkpoint));
+      .u32(w.checkpoint + 1);
     this.broadcast(msg.finish());
     log.info(`room ${this.code}: finished in ${(w.finishTick * DT).toFixed(1)}s`);
   }

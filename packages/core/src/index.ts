@@ -5,6 +5,7 @@ export * from './types.js';
 export * from './level.js';
 export * from './chunks.js';
 export * from './modes.js';
+export * from './daily.js';
 export * from './route.js';
 export * from './physics.js';
 export * from './rope.js';

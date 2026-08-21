@@ -4,6 +4,7 @@ import {
   TILE,
   buildCampaign,
   buildTower,
+  isDeadlyTile,
   isSolidTile,
   tileAt,
   type ChunkDef,
@@ -60,14 +61,30 @@ describe('chunk library', () => {
     }
   });
 
-  it('offsets the two landings so a seam can actually be climbed', () => {
-    // A player cannot rise through a platform, so the landing above must not
-    // sit directly over the one below.
-    const launches: number[] = [];
-    for (let x = TOP.c0; x <= TOP.c1; x++) {
-      if ((x >= BOTTOM.c0 - 2 && x <= BOTTOM.c0 - 1) || (x >= BOTTOM.c1 + 1 && x <= BOTTOM.c1 + 2)) launches.push(x);
+  it('overlaps the two landings so a seam can be jumped straight up', () => {
+    // This used to assert the opposite — that the landings were *offset*,
+    // because you cannot rise through rock and so had to stand clear of the
+    // thing you were climbing onto. Footholds are one-way platforms now, and
+    // the overlap is the point: the columns where the two landings sit above
+    // one another are the columns a seam can be crossed from without any
+    // sideways component at all, which is the most forgiving move in the game.
+    const overlap = Math.min(TOP.c1, BOTTOM.c1) - Math.max(TOP.c0, BOTTOM.c0) + 1;
+    expect(overlap).toBeGreaterThanOrEqual(3);
+  });
+
+  it('makes every seam landing a platform you can pass up through', () => {
+    for (const chunk of CHUNKS) {
+      const top = chunk.rows[1];
+      const bottom = chunk.rows[chunk.rows.length - 2];
+      const goal = GOAL_CHUNK(chunk);
+      const start = START_CHUNK(chunk);
+      for (let x = Math.max(TOP.c0, BOTTOM.c0); x <= Math.min(TOP.c1, BOTTOM.c1); x++) {
+        // The goal chunk caps the tower and the start chunk sits on the
+        // ground, so each is missing the landing nobody climbs through.
+        if (!goal) expect(top[x]).toBe('=');
+        if (!start) expect(bottom[x]).toBe('=');
+      }
     }
-    expect(launches.length).toBeGreaterThan(0);
   });
 });
 
@@ -128,6 +145,30 @@ describe('assembled towers', () => {
  * level, and neither eyeballing the ASCII art nor playing the first minute
  * will tell you. See scripts/verify-levels.mjs.
  */
+describe('danger', () => {
+  it('puts hazards where the climb actually goes', () => {
+    // The tower was 92.7% plain concrete and every hazard in it was painted by
+    // a helper that refuses to touch the route, so you could climb the entire
+    // campaign without passing within a tile of anything that could hurt you.
+    // The level gate could not see that: a level with no hazards at all passes
+    // "is it climbable" perfectly. So the danger is measured here instead.
+    const level = buildCampaign();
+    const r = analyse(level);
+    const steps = ledgeSteps(level, r.route, r.standable);
+    let hot = 0;
+    for (const step of steps) {
+      let danger = false;
+      for (let x = step.from.x0 - 1; x <= step.from.x1 + 1 && !danger; x++) {
+        for (let dy = -1; dy <= 2; dy++) {
+          if (isDeadlyTile(tileAt(level, x, step.from.y + dy))) danger = true;
+        }
+      }
+      if (danger) hot++;
+    }
+    expect(hot / steps.length).toBeGreaterThan(0.15);
+  });
+});
+
 describe('climbability', () => {
   it('lets a player reach the goal of the campaign', () => {
     const level: Level = buildCampaign();

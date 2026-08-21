@@ -20,6 +20,10 @@
   --p1: #FF6A00;
   --p2: #C8E82A;
   --gold: #F2B01C;
+  /* Gold is a fill. This is gold you can read: the same hue taken down far
+     enough to sit on paper, for the places the old dark palette used --gold
+     as a text colour and got away with it. */
+  --gold-ink: #7A4E06;
   --bad: #D6301C;
   --good: #5C7A3A;
   --concrete: #C6BCA6;
@@ -264,7 +268,7 @@ input.text, select.text {
   font: inherit;
   font-weight: 800;
   color: var(--text);
-  background: #0c1020;
+  background: var(--panel-2);
   border: 3px solid var(--edge);
   border-radius: 10px;
   padding: 13px 15px;
@@ -297,7 +301,7 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   display: flex;
   align-items: center;
   gap: 14px;
-  background: #0c1020;
+  background: var(--panel-2);
   border: 3px dashed var(--gold);
   border-radius: 14px;
   padding: 16px 20px;
@@ -307,7 +311,7 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   font-size: clamp(34px, 7vw, 58px);
   font-weight: 900;
   letter-spacing: 0.22em;
-  color: var(--gold);
+  color: var(--gold-ink);
   text-indent: 0.22em;
   font-variant-numeric: tabular-nums;
 }
@@ -320,7 +324,7 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   border: 3px solid var(--edge);
   border-radius: 14px;
   padding: 16px;
-  background: #0f1426;
+  background: var(--panel-2);
   position: relative;
   overflow: hidden;
 }
@@ -339,23 +343,23 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   text-transform: uppercase;
   padding: 5px 10px;
   border-radius: 999px;
-  background: #232c48;
-  color: var(--muted);
+  background: var(--concrete);
+  color: var(--ink);
 }
-.tag.ready { background: color-mix(in srgb, var(--good) 25%, #101a12); color: var(--good); }
-.tag.waiting { background: #2a2033; color: var(--gold); }
+.tag.ready { background: color-mix(in srgb, var(--good) 30%, var(--paper)); color: #2E3D1D; }
+.tag.waiting { background: color-mix(in srgb, var(--gold) 40%, var(--paper)); color: var(--gold-ink); }
 
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 .swatch { width: 26px; height: 26px; border-radius: 8px; border: 3px solid transparent; cursor: pointer; }
-.swatch[aria-pressed='true'] { border-color: #fff; }
+.swatch[aria-pressed='true'] { border-color: var(--ink); }
 
 /* ----------------------------------------------------------------- results */
 
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 20px 0 24px; }
-.stat { background: #0f1426; border: 3px solid var(--edge); border-radius: 12px; padding: 14px; }
+.stat { background: var(--panel-2); border: 3px solid var(--edge); border-radius: 12px; padding: 14px; }
 .stat .n { font-size: 30px; font-weight: 900; font-variant-numeric: tabular-nums; }
 .stat .l { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
-.stat.gold .n { color: var(--gold); }
+.stat.gold .n { color: var(--gold-ink); }
 .stat.bad .n { color: var(--bad); }
 .stat.good .n { color: var(--good); }
 
@@ -365,14 +369,14 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: -0.01em;
-  color: var(--gold);
+  color: var(--gold-ink);
   margin: 6px 0 2px;
 }
 
 /* -------------------------------------------------------------------- misc */
 
 .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-.ctrl { background: #0f1426; border: 3px solid var(--edge); border-radius: 12px; padding: 14px; }
+.ctrl { background: var(--panel-2); border: 3px solid var(--edge); border-radius: 12px; padding: 14px; }
 .ctrl .keys { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .ctrl .name { font-weight: 900; text-transform: uppercase; font-size: 14px; letter-spacing: 0.04em; }
 .ctrl .desc { font-size: 13px; color: var(--muted); line-height: 1.45; margin-top: 4px; }
@@ -381,16 +385,16 @@ kbd {
   font: inherit;
   font-size: 12px;
   font-weight: 800;
-  background: #232c48;
-  border: 2px solid #3c4870;
+  background: var(--paper);
+  border: 2px solid var(--edge);
   border-bottom-width: 4px;
   border-radius: 7px;
   padding: 4px 9px;
   color: var(--text);
 }
 
-.notice { border-left: 4px solid var(--gold); background: rgba(255, 176, 58, 0.08); padding: 12px 14px; border-radius: 0 10px 10px 0; font-size: 13px; color: #ffd9a0; margin-bottom: 18px; line-height: 1.5; }
-.notice.bad { border-color: var(--bad); background: rgba(255, 77, 109, 0.1); color: #ffc2cd; }
+.notice { border-left: 4px solid var(--gold); background: color-mix(in srgb, var(--gold) 16%, var(--paper)); padding: 12px 14px; border-radius: 0 10px 10px 0; font-size: 13px; color: var(--ink); margin-bottom: 18px; line-height: 1.5; }
+.notice.bad { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, var(--paper)); color: var(--ink); }
 
 #toast {
   position: absolute;
