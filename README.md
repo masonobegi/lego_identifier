@@ -88,6 +88,7 @@ Both players must hold `R` to reset to the last checkpoint.
 | `npm run levels` | Re-generates the chunk library from `tools/gen_chunks.py` |
 | `npm run calibrate` | Measures what a jump can reach, for the level design rules |
 | `npm run art` | Regenerates all store art and installer icons |
+| `npm run shots` | Re-photographs the game for the README and the store page |
 | `npm run steam:config` | Regenerates the Steamworks achievement/stat/depot config |
 | `npm run dist:win` / `dist:linux` / `dist:mac` | Builds the Steam-ready desktop app |
 

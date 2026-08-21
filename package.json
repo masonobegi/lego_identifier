@@ -38,7 +38,8 @@
     "calibrate": "node scripts/calibrate-jump.mjs",
     "web": "node scripts/bundle-web.mjs",
     "verify:server": "node scripts/verify-server.mjs",
-    "verify:docker": "node scripts/verify-docker.mjs"
+    "verify:docker": "node scripts/verify-docker.mjs",
+    "shots": "node scripts/gen-screenshots.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
