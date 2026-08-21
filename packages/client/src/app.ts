@@ -117,6 +117,7 @@ export class App {
     this.achievements.hydrate(load<string[]>('achievements', []));
 
     this.attract = new LocalMatch(MODE_HAUL, 0x51ade, DEFAULT_TOWER_LENGTH);
+    this.placeAttract();
     this.renderer.reset(this.attract.world);
 
     this.input.attach();
@@ -253,6 +254,43 @@ export class App {
     }
   }
 
+  /**
+   * Stand the attract pair near the top of the tower rather than at the spawn.
+   *
+   * The campaign starts in the Yard, which is the palest biome in the game, and
+   * the menu panel is paper — so pale-on-pale behind a dim left the backdrop as
+   * grey mush with nothing readable in it. The Spire is the dark one, and a
+   * near-black city behind a paper-and-hazard panel is the same inversion the
+   * whole art direction is built on.
+   */
+  private placeAttract(): void {
+    const world = this.attract.world;
+    const level = this.attract.ctx.level;
+    const y = level.heightPx * 0.06;
+    for (let i = 0; i < 2; i++) {
+      const p = world.players[i];
+      p.x = level.spawnX + (i ? 30 : -30);
+      p.y = y;
+      p.vx = 0;
+      p.vy = 0;
+    }
+    const n = world.ropeX.length;
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t;
+      world.ropeY[i] = y;
+      world.ropePX[i] = world.ropeX[i];
+      world.ropePY[i] = y;
+    }
+    world.cargo.x = level.spawnX;
+    world.cargo.y = y + 40;
+    world.cargo.px = world.cargo.x;
+    world.cargo.py = world.cargo.y;
+    world.spawnX = level.spawnX;
+    world.spawnY = y;
+    this.renderer.reset(world);
+  }
+
   private runAttract(dt: number): void {
     // Behind the menus the two haulers flail about on the first floor. It is
     // an advert for the game made out of the game.
@@ -271,7 +309,10 @@ export class App {
     const events = this.attract.drainEvents();
     this.renderer.consume(events, this.renderOptions());
     for (const e of events) this.playEventSound(e, this.attract.world);
-    if (this.attract.world.tick > 3600) this.attract.restart(0x51ade);
+    if (this.attract.world.tick > 3600) {
+      this.attract.restart(0x51ade);
+      this.placeAttract();
+    }
     this.renderer.renderAttract(dt, this.attract.ctx.level, this.attract.world, this.attract.prev, this.renderOptions());
   }
 

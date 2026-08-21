@@ -2,19 +2,28 @@
    Everything is self-contained: no webfonts, no remote assets, so the same
    bundle works offline inside the Steam build. */
 
+/* The menus are painted in the game's own colours, not a dark UI kit.
+   HAULMATES inverts the usual platformer palette — pale paper, warm concrete,
+   near-black haulers in hi-vis — and the interface used to ignore that
+   completely: a floating navy card with a gradient orange logo, which is what
+   every game-jam menu looks like and matched nothing you see when you press
+   play. These are the values straight out of the renderer's THE YARD palette,
+   so the menu and the game are the same object. */
 :root {
-  --ink: #05070f;
-  --panel: #131829;
-  --panel-2: #1b2137;
-  --edge: #2c3552;
-  --text: #e8ecf7;
-  --muted: #8c97b6;
-  --p1: #ff7a4d;
-  --p2: #4fd6e0;
-  --gold: #ffb03a;
-  --bad: #ff4d6d;
-  --good: #6ee787;
-  --shadow: 0 6px 0 rgba(0, 0, 0, 0.55);
+  --ink: #1B1714;
+  --paper: #F4EFE2;
+  --panel: #F4EFE2;
+  --panel-2: #E8E1D0;
+  --edge: #1B1714;
+  --text: #1B1714;
+  --muted: #6B6255;
+  --p1: #FF6A00;
+  --p2: #C8E82A;
+  --gold: #F2B01C;
+  --bad: #D6301C;
+  --good: #5C7A3A;
+  --concrete: #C6BCA6;
+  --shadow: 0 5px 0 rgba(27, 23, 20, 0.85);
   --display: ui-sans-serif, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
@@ -23,7 +32,7 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--ink);
+  background: #B2A68C;
   color: var(--text);
   font-family: var(--display);
   overflow: hidden;
@@ -65,11 +74,25 @@ html, body {
   overflow-y: auto;
   overflow-x: hidden;
   padding: clamp(20px, 3vw, 40px);
-  background: linear-gradient(180deg, rgba(19, 24, 41, 0.97), rgba(9, 12, 22, 0.98));
+  background: var(--paper);
   border: 3px solid var(--edge);
-  border-radius: 18px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  /* Squared off and hard-edged, like something bolted to the tower rather than
+     floating in front of it. The hazard band along the top is the same device
+     every ledge in the game wears. */
+  box-shadow: 0 18px 0 rgba(27, 23, 20, 0.18), 0 30px 90px rgba(27, 23, 20, 0.45);
   animation: rise 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  /* A hazard band across the top, boxed by the panel's own ink border. Every
+     surface in this game you are allowed to stand on wears one. */
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--gold) 0 9px,
+    var(--ink) 9px 18px
+  );
+  background-size: 100% 12px;
+  background-repeat: no-repeat;
+  background-position: left top;
+  padding-top: calc(clamp(20px, 3vw, 40px) + 12px);
   scrollbar-width: thin;
   scrollbar-color: var(--edge) transparent;
 }
@@ -90,8 +113,10 @@ html, body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: radial-gradient(120% 90% at 50% 0%, rgba(24, 32, 60, 0.55), rgba(3, 5, 12, 0.88));
-  backdrop-filter: blur(3px);
+  /* Warm ink, not navy. A blue dim over this game's warm concrete turns the
+     whole backdrop grey, and a grey backdrop behind a paper panel is mush. */
+  background: radial-gradient(120% 90% at 50% 0%, rgba(27, 23, 20, 0.42), rgba(12, 10, 8, 0.82));
+  backdrop-filter: blur(2px);
 }
 
 /* -------------------------------------------------------------------- logo */
@@ -101,29 +126,48 @@ html, body {
    font size in width. */
 .logo {
   text-align: center;
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   white-space: nowrap;
-  font-size: clamp(30px, 13vw, 80px);
+  font-size: clamp(30px, 11vw, 72px);
   font-weight: 900;
-  letter-spacing: -0.045em;
+  letter-spacing: 0.01em;
   line-height: 0.92;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #fff 20%, var(--gold) 60%, #d9781c 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 5px 0 rgba(0, 0, 0, 0.6));
-  transform: rotate(-1.2deg);
+  color: var(--ink);
+  /* Stencil bridges — two horizontal cuts through the letterforms, the same
+     device the capsule art and the painted floor numbers use. It is what stops
+     the title reading as a font and starts it reading as something sprayed
+     through a plate. */
+  -webkit-mask-image: linear-gradient(180deg, #000 0 32%, transparent 32% 37%, #000 37% 64%, transparent 64% 69%, #000 69% 100%);
+  mask-image: linear-gradient(180deg, #000 0 32%, transparent 32% 37%, #000 37% 64%, transparent 64% 69%, #000 69% 100%);
+  /* No drop shadow. With the mask cutting the word into three horizontal
+     slices, a shadow on each slice shows through the gap above it and the
+     title reads as doubled rather than stencilled. The capsule's wordmark is
+     flat ink for the same reason. */
 }
 
-.logo .rope { color: var(--p1); -webkit-text-fill-color: var(--p1); }
+
 
 .tagline {
   text-align: center;
   color: var(--muted);
-  font-size: clamp(13px, 1.5vw, 17px);
+  font-size: clamp(11px, 1.2vw, 13px);
+  font-weight: 800;
   margin: 0 0 26px;
-  letter-spacing: 0.02em;
+  padding-top: 8px;
+  border-top: 3px solid var(--ink);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+/* The version, set like something stamped on the side of a crate. */
+.stamp {
+  text-align: center;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  margin: 22px 0 0;
 }
 
 h2.title {
@@ -153,7 +197,7 @@ button.btn {
   color: var(--text);
   background: var(--panel-2);
   border: 3px solid var(--edge);
-  border-radius: 12px;
+  border-radius: 2px;
   padding: 15px 22px;
   cursor: pointer;
   box-shadow: var(--shadow);
@@ -164,22 +208,34 @@ button.btn {
   gap: 12px;
 }
 
+/* Hover paints a hazard chevron down the left edge — the same yellow-and-black
+   band the ledges wear, so pointing at a button looks like pointing at
+   something you could stand on. */
 button.btn:hover:not(:disabled), button.btn:focus-visible {
-  background: #232c48;
-  border-color: #46557f;
+  background: var(--paper);
   transform: translateY(-2px);
   outline: none;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--gold) 0 7px,
+    var(--ink) 7px 14px
+  );
+  background-size: 14px 100%;
+  background-repeat: repeat-y;
+  background-position: left top;
+  padding-left: 34px;
 }
 
-button.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.55); }
-button.btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+button.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 rgba(27, 23, 20, 0.85); }
+button.btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
+/* No gradient. The one loud thing on the screen is a flat block of hi-vis. */
 button.btn.primary {
-  background: linear-gradient(180deg, #ff9a5e, #f2662f);
-  border-color: #ffc79c;
-  color: #21100a;
+  background: var(--p1);
+  border-color: var(--ink);
+  color: var(--ink);
 }
-button.btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #ffab77, #ff7a3f); }
+button.btn.primary:hover:not(:disabled) { background-color: var(--p1); }
 
 button.btn.ghost { background: transparent; box-shadow: none; border-color: transparent; color: var(--muted); }
 button.btn.ghost:hover { color: var(--text); border-color: var(--edge); }
@@ -193,7 +249,7 @@ button.btn .k {
 }
 
 button.btn .hint { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: none; letter-spacing: 0; margin-top: 3px; }
-button.btn.primary .hint { color: rgba(33, 16, 10, 0.75); }
+button.btn.primary .hint { color: rgba(27, 23, 20, 0.72); }
 button.btn .label { display: block; }
 
 .icon { font-size: 22px; line-height: 1; }

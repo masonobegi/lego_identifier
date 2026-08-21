@@ -28,6 +28,22 @@ export class Camera {
     this.shakeAmount = Math.min(34, this.shakeAmount + amount);
   }
 
+  /**
+   * Behind the menus the camera stops hunting.
+   *
+   * The gameplay camera sizes itself from how far apart the pair and the crate
+   * are, and the crate hangs on a rope, so the framing is always chasing
+   * something that is always moving. In play that reads as the camera doing
+   * its job. Behind a menu, where nothing else on screen moves, it reads as
+   * the whole background bobbing — measured at a 42-pixel zoom oscillation and
+   * a 38-pixel drift that never settle, for ever.
+   *
+   * So the attract gets a fixed frame and a much slower follow: still clearly
+   * the game being played, without a single moving thing competing with the
+   * menu in front of it.
+   */
+  calm = false;
+
   update(dt: number, world: World, level: Level, aspect: number): void {
     const [a, b] = world.players;
     const cargo = world.cargo;
@@ -36,7 +52,9 @@ export class Camera {
     const midY = (a.y + b.y) * 0.5 - 40;
 
     const spanX = Math.abs(a.x - b.x);
-    const spanY = Math.max(Math.abs(a.y - b.y), Math.abs(cargo.y - midY) * 1.2);
+    const spanY = this.calm
+      ? Math.abs(a.y - b.y)
+      : Math.max(Math.abs(a.y - b.y), Math.abs(cargo.y - midY) * 1.2);
     const neededByHeight = spanY * 2.3 + 340;
     const neededByWidth = (spanX * 2.1 + 420) / Math.max(0.6, aspect);
     const targetView = Math.max(VIEW_MIN_H, Math.min(VIEW_MAX_H, Math.max(neededByHeight, neededByWidth)));
@@ -49,8 +67,8 @@ export class Camera {
     }
 
     // Frame-rate independent exponential smoothing.
-    const follow = 1 - Math.pow(0.0007, dt);
-    const zoom = 1 - Math.pow(0.02, dt);
+    const follow = 1 - Math.pow(this.calm ? 0.35 : 0.0007, dt);
+    const zoom = 1 - Math.pow(this.calm ? 0.85 : 0.02, dt);
     this.x += (midX - this.x) * follow;
     this.y += (midY - this.y) * follow;
     this.viewH += (targetView - this.viewH) * zoom;

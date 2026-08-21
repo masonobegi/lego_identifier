@@ -68,7 +68,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, s: 
 
 function drawTopBar(ctx: CanvasRenderingContext2D, vw: number, s: HudState): void {
   const biome = biomeFor(s.level.biome[Math.max(0, Math.min(s.level.h - 1, Math.floor(s.world.players[0].y / TILE)))]);
-  panel(ctx, 18, 16, 286, 62);
+  const deathRow = s.world.players[0].deaths + s.world.players[1].deaths > 0;
+  panel(ctx, 18, 16, 286, deathRow ? 74 : 62);
 
   ctx.font = `900 13px ${FONT}`;
   ctx.fillStyle = '#8c97b6';
@@ -85,10 +86,23 @@ function drawTopBar(ctx: CanvasRenderingContext2D, vw: number, s: HudState): voi
   ctx.textAlign = 'right';
   ctx.fillText(biome.name, 290, 38);
 
+  // Count the failure that actually happens.
+  //
+  // This read `0 DEATHS` through entire runs, and it was not lying — you rarely
+  // die in this game. What happens is the crate goes, and losing the crate is
+  // what sends you back to the checkpoint. Reporting deaths and not crates
+  // meant the HUD's only number was the one thing that never moved.
   ctx.font = `800 12px ${FONT}`;
-  ctx.fillStyle = '#8c97b6';
+  const lost = s.world.cargoBreaks;
   const deaths = s.world.players[0].deaths + s.world.players[1].deaths;
-  ctx.fillText(`${deaths} DEATH${deaths === 1 ? '' : 'S'}`, 290, 66);
+  ctx.fillStyle = lost > 0 ? '#ff4d6d' : '#8c97b6';
+  ctx.fillText(lost === 1 ? '1 CRATE LOST' : `${lost} CRATES LOST`, 290, 66);
+  // Deaths are the smaller story, so they only get space once there are any.
+  if (deaths > 0) {
+    ctx.font = `800 11px ${FONT}`;
+    ctx.fillStyle = '#8c97b6';
+    ctx.fillText(`${deaths} DEATH${deaths === 1 ? '' : 'S'}`, 290, 78);
+  }
   ctx.textAlign = 'left';
 }
 

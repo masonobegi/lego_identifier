@@ -134,34 +134,35 @@ function titleScreen(app: App): HTMLElement {
   return h(
     'div',
     { class: 'screen narrow' },
-    h('h1', { class: 'logo' }, 'HAUL', h('span', { class: 'rope' }, 'MATES')),
-    h('p', { class: 'tagline' }, 'A two-player co-op disaster about a rope, a crate, and the end of a friendship.'),
+    h('h1', { class: 'logo' }, 'HAULMATES'),
+    h('p', { class: 'tagline' }, 'A two-player co-op disaster'),
     h(
       'div',
       { class: 'menu' },
+      // A caption on every item is what makes a menu read as written by a
+      // machine: six buttons in a column, each with a title and a small joke
+      // underneath it. Real menus are terse. These say something only where
+      // there is something a player cannot work out from the label — whether
+      // online play is available in this build, and how many achievements are
+      // left — and are silent otherwise.
       button(
         app,
         'Play online',
-        offlineBuild()
-          ? 'Not in this build — online play needs a matchmaking server'
-          : 'Two players, one rope, anywhere in the world',
+        offlineBuild() ? 'Needs a matchmaking server' : '',
         () => app.show('online'),
-        { primary: !offlineBuild(), icon: '🌐', disabled: offlineBuild() },
+        { primary: !offlineBuild(), disabled: offlineBuild() },
       ),
-      button(app, 'Play on this machine', 'A friend beside you, or a bot on the other end of the rope', () => app.show('couch'), {
-        icon: '🛋️',
-        primary: offlineBuild(),
-      }),
-      button(app, 'How to play', 'Four buttons. Infinite ways to ruin things.', () => app.show('controls'), { icon: '🎮' }),
-      button(app, 'Customise', 'Colours and hats you have earned', () => app.show('customise'), { icon: '🎩' }),
-      button(app, 'Achievements', `${app.achievements.earned.length} of ${ACHIEVEMENTS.length} earned`, () => app.show('achievements'), { icon: '🏆' }),
-      button(app, 'Settings', 'Audio, accessibility, controls, server', () => app.show('settings'), { icon: '⚙️' }),
-      desktopAvailable() ? button(app, 'Quit', '', () => quitGame(), { icon: '🚪' }) : null,
+      button(app, 'Play on this machine', '', () => app.show('couch'), { primary: offlineBuild() }),
+      button(app, 'How to play', '', () => app.show('controls')),
+      button(app, 'Customise', '', () => app.show('customise')),
+      button(app, 'Achievements', `${app.achievements.earned.length} / ${ACHIEVEMENTS.length}`, () => app.show('achievements')),
+      button(app, 'Settings', '', () => app.show('settings')),
+      desktopAvailable() ? button(app, 'Quit', '', () => quitGame()) : null,
     ),
     h(
       'p',
-      { class: 'tagline', style: { marginTop: '22px', marginBottom: '0', fontSize: '12px' } },
-      `v${app.version}${steamAvailable() ? ' · Steam' : ''} · Best played with someone you can shout at`,
+      { class: 'stamp' },
+      `v${app.version}${steamAvailable() ? ' · STEAM' : ''}`,
     ),
   );
 }
@@ -224,14 +225,11 @@ function onlineScreen(app: App): HTMLElement {
       { class: 'menu' },
       button(app, 'Host a haul', 'Get a code and send it to your friend', () => app.connect(INTENT_CREATE), {
         primary: true,
-        icon: '🪢',
       }),
-      button(app, 'Join with a code', 'Your friend already has one open', () => app.show('join'), { icon: '🔑' }),
-      button(app, 'Quick match', 'Rope yourself to a stranger', () => app.connect(INTENT_QUICKPLAY), { icon: '🎲' }),
+      button(app, 'Join with a code', 'Your friend already has one open', () => app.show('join'), ),
+      button(app, 'Quick match', 'Rope yourself to a stranger', () => app.connect(INTENT_QUICKPLAY), ),
       desktopAvailable()
-        ? button(app, 'Host from this machine', 'Runs the server here — for a LAN, or when the public one is down', () => void app.hostLocally(), {
-            icon: '🖧',
-          })
+        ? button(app, 'Host from this machine', 'Runs the server here — for a LAN, or when the public one is down', () => void app.hostLocally(), )
         : null,
     ),
     app.hostedPort > 0
@@ -277,7 +275,6 @@ function joinScreen(app: App): HTMLElement {
   const go = h(
     'button',
     { class: 'btn primary', disabled: !isValidRoomCode(app.pendingCode), onclick: submit },
-    h('span', { class: 'icon' }, '🪢'),
     h('span', {}, h('span', { class: 'label' }, 'Join haul')),
   );
 
@@ -392,7 +389,7 @@ function lobbyScreen(app: App): HTMLElement {
         '← Leave',
       ),
       h('div', { class: 'spacer' }),
-      button(app, ready ? 'Not ready' : 'Ready', '', () => app.setReady(!ready), { primary: !ready, icon: ready ? '⏸' : '✓' }),
+      button(app, ready ? 'Not ready' : 'Ready', '', () => app.setReady(!ready), { primary: !ready }),
     ),
   );
 }
@@ -409,10 +406,10 @@ function pauseScreen(app: App): HTMLElement {
     h(
       'div',
       { class: 'menu' },
-      button(app, 'Resume', '', () => app.resume(), { primary: true, icon: '▶' }),
-      button(app, 'How to play', '', () => app.show('controls'), { icon: '🎮' }),
-      button(app, 'Settings', '', () => app.show('settings'), { icon: '⚙️' }),
-      button(app, online ? 'Leave the haul' : 'Back to menu', '', () => app.leave(), { icon: '🚪' }),
+      button(app, 'Resume', '', () => app.resume(), { primary: true }),
+      button(app, 'How to play', '', () => app.show('controls'), ),
+      button(app, 'Settings', '', () => app.show('settings'), ),
+      button(app, online ? 'Leave the haul' : 'Back to menu', '', () => app.leave(), ),
     ),
   );
 }
@@ -426,7 +423,7 @@ function resultsScreen(app: App): HTMLElement {
       'div',
       { class: 'screen narrow' },
       h('h2', { class: 'title' }, 'Run over'),
-      h('div', { class: 'row' }, button(app, '← Back to menu', '', () => app.leave(), {})),
+      h('div', { class: 'row' }, button(app, '← Back to menu', '', () => app.leave(), )),
     );
   }
 
@@ -464,8 +461,8 @@ function resultsScreen(app: App): HTMLElement {
       // left alive drags the player straight back here.
       button(app, '← Back to menu', '', () => app.leave(), { key: 'ESC' }),
       h('div', { class: 'spacer' }),
-      app.net ? button(app, 'Rematch', 'Same friend, fresh regrets', () => app.rematch(), { primary: true, icon: '🔁' }) : null,
-      !app.net ? button(app, 'Play again', '', () => app.restartLocal(), { primary: true, icon: '🔁' }) : null,
+      app.net ? button(app, 'Rematch', 'Same friend, fresh regrets', () => app.rematch(), { primary: true }) : null,
+      !app.net ? button(app, 'Play again', '', () => app.restartLocal(), { primary: true }) : null,
     ),
   );
 }
@@ -574,17 +571,17 @@ function settingsScreen(app: App): HTMLElement {
               app.applySettings();
               app.refresh();
               toast('Back to the built-in server');
-            }, { icon: '↺' }),
+            }, ),
           )
         : null,
       h(
         'div',
         { class: 'row' },
-        button(app, 'Rebind controls', '', () => app.show('controls'), { icon: '⌨️' }),
+        button(app, 'Rebind controls', '', () => app.show('controls'), ),
         button(app, 'Reset to defaults', '', () => {
           app.resetSettings();
           toast('Settings reset');
-        }, { icon: '↺' }),
+        }, ),
       ),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'auto')),
@@ -767,11 +764,11 @@ function customiseScreen(app: App): HTMLElement {
 
 function couchScreen(app: App): HTMLElement {
   const pads = app.input.padCount;
-  const partner = (label: string, hint: string, bot: boolean, icon: string): HTMLElement =>
+  const partner = (label: string, hint: string, bot: boolean): HTMLElement =>
     button(app, label, hint, () => {
       app.botPartner = bot;
       app.refresh();
-    }, { primary: app.botPartner === bot, icon });
+    }, { primary: app.botPartner === bot });
 
   return h(
     'div',
@@ -795,8 +792,8 @@ function couchScreen(app: App): HTMLElement {
       h(
         'div',
         { class: 'menu two' },
-        partner('A friend', 'Two people, one keyboard or two pads.', false, '👥'),
-        partner('A bot', 'The Autohauler takes the other end of the rope.', true, '🤖'),
+        partner('A friend', 'One keyboard, or two pads', false),
+        partner('A bot', 'The Autohauler', true),
       ),
     ),
     modeSelector(app),
@@ -805,9 +802,8 @@ function couchScreen(app: App): HTMLElement {
       { class: 'menu' },
       button(app, 'Start', app.botPartner ? 'You and the Autohauler' : 'Both haulers on one screen', () => app.startCouch(), {
         primary: true,
-        icon: '▶',
       }),
-      button(app, 'Rebind keys', '', () => app.show('controls'), { icon: '⌨️' }),
+      button(app, 'Rebind keys', '', () => app.show('controls'), ),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );
@@ -857,9 +853,7 @@ function errorScreen(app: App): HTMLElement {
       button(app, 'Back to menu', '', () => app.show('title'), { primary: true }),
       button(app, 'Check the server setting', '', () => app.show('settings')),
       desktopAvailable()
-        ? button(app, 'Host from this machine instead', 'Runs a server here and opens a haul on it', () => void app.hostLocally(), {
-            icon: '🖧',
-          })
+        ? button(app, 'Host from this machine instead', 'Runs a server here and opens a haul on it', () => void app.hostLocally(), )
         : null,
     ),
     h(

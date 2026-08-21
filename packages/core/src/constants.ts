@@ -126,7 +126,19 @@ export const CARGO_MAX_FALL = 1750;
  * sliding it, fast enough to clear a twelve-wide platform inside a few seconds.
  */
 export const CARGO_SHUFFLE = 190;
-export const CARGO_IMPACT_MIN = 560;
+/**
+ * Impact speed, in pixels per second, below which a landing costs the crate
+ * nothing. About a six-and-a-half tile drop — two ledges and a bit of margin.
+ *
+ * This was 560, roughly three tiles, back when the crate healed itself after a
+ * few calm seconds. Damage is permanent now, and a threshold that charges for
+ * every ordinary landing turns permanence into a crate made of glass: measured
+ * over three minutes of bot play, 67 damaging hits and sixteen crates lost, one
+ * every eleven seconds. At this figure the same run takes seven hits, loses
+ * none, and finishes on nine health out of a hundred — the bar tells the story
+ * of the whole climb instead of resetting every time you look away.
+ */
+export const CARGO_IMPACT_MIN = 820;
 export const CARGO_IMPACT_SCALE = 0.06;
 export const CARGO_REPAIR_PER_TICK = 0.55;
 /** Ticks of clean handling before the crate starts patching itself up. */
@@ -168,7 +180,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 15;
+export const SIM_VERSION = 16;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

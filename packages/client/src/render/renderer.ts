@@ -119,6 +119,7 @@ export class Renderer {
   }
 
   reset(world: World): void {
+    this.camera.calm = false;
     this.particles.clear();
     this.trails = [[], []];
     this.flash = 0;
@@ -455,7 +456,10 @@ export class Renderer {
     this.time += dt;
     const biomeIndex = level.biome[clampRow(level, world.players[0].y)];
     const palette = options.highContrast ? applyHighContrast(biomeFor(biomeIndex)) : biomeFor(biomeIndex);
-    this.camera.shakeScale = options.shake;
+    // No shake and no hunting behind the menus: the only thing that should be
+    // asking for your eye on this screen is the menu.
+    this.camera.shakeScale = 0;
+    this.camera.calm = true;
     this.camera.update(dt, world, level, this.width / this.height);
     this.particles.update(dt);
     this.emitAmbient(dt, level, world);

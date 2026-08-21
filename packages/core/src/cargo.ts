@@ -6,8 +6,6 @@ import {
   CARGO_HP,
   CARGO_IMPACT_MIN,
   CARGO_IMPACT_SCALE,
-  CARGO_REGEN,
-  CARGO_REGEN_DELAY,
   CARGO_SHUFFLE,
   CARGO_MAX_FALL,
   CARGO_TETHER,
@@ -54,12 +52,18 @@ export function updateCargo(level: Level, world: World): void {
   const c = world.cargo;
   if (c.shake > 0) c.shake *= 0.9;
 
-  // Handle it carefully for a while and the straps get retightened. Without
-  // this, a long climb is a slow accumulation of unavoidable chip damage.
-  if (c.hp > 0 && c.hp < CARGO_HP) {
-    c.calm++;
-    if (c.calm > CARGO_REGEN_DELAY) c.hp = Math.min(CARGO_HP, c.hp + CARGO_REGEN);
-  }
+  // Damage to the crate is permanent until you reach a checkpoint.
+  //
+  // It used to heal itself after a few calm seconds, which quietly took the
+  // teeth out of the whole thing: the crate could not accumulate a history, so
+  // no individual mistake ever cost you anything you could still feel two
+  // minutes later. Now the bar only goes one way, and the only thing that puts
+  // it back is a checkpoint — which turns every checkpoint from a save point
+  // into a repair stop, and makes the stretch between two of them a resource
+  // you are spending rather than a distance you are covering.
+  //
+  // `calm` is still counted because the crate's own wobble reads off it.
+  if (c.hp > 0 && c.hp < CARGO_HP) c.calm++;
 
   let vx = (c.x - c.px) * CARGO_DAMPING;
   let vy = (c.y - c.py) * CARGO_DAMPING;
