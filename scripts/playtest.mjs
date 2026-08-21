@@ -8,11 +8,23 @@
  * keeps playing, which is how often an ordinary attempt succeeds.
  *
  * It turns out to matter enormously. Measured on the build where every gate
- * was green: 23.4% of plausible casual jump attempts landed, and five
- * different plausible two-player policies each climbed between three and nine
- * rows of a 651-row tower in three minutes, reaching none of the twenty
- * checkpoints. The game was provably completable and functionally unplayable
- * at the same time, and nothing in the repo could tell the difference.
+ * was green: 23.4% of plausible casual jump attempts landed, and five different
+ * plausible two-player policies each climbed between three and nine rows of a
+ * 651-row tower in three minutes, reaching none of the twenty checkpoints. The
+ * game was provably completable and functionally unplayable at the same time,
+ * and nothing in the repo could tell the difference. It is 67% and around 210
+ * rows now, and every step of the way here was a number out of this file.
+ *
+ * The model of a player is the load-bearing part, and getting it wrong has
+ * cost more time than anything it has found. In order, the versions that were
+ * wrong: one that walked toward a fixed column, so it never aimed at a ledge;
+ * one that re-picked its target in mid-air, so it dropped the ledge it was
+ * flying at; one with no noise, so a step it could not do once it could never
+ * do, and the tower appeared to have walls in it; one with no eyes for blades,
+ * so a timed hazard read as an impassable one; and one that fled blades so
+ * eagerly it never jumped. A person is sloppy, has memory of nothing, varies,
+ * and can see. Model any of those wrong and this file will confidently
+ * describe a different game.
  *
  * Two numbers come out of here, and tuning changes are judged on them:
  *
@@ -42,6 +54,8 @@ import {
   IN_RIGHT,
   IN_GRIP,
   IN_REEL,
+  sawX,
+  sawY,
   tautPathLength,
   analyseLevel,
   ledgeSteps,
@@ -124,9 +138,15 @@ export function reachRate(level, mode, seed, limit = 24) {
             if (world.restartTimer > 0) break;
             const p = world.players[0];
             if (p.dead || p.grounded !== 1) continue;
-            const px = Math.floor(p.x / TILE);
             const py = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
-            if (py === s.to.y && px >= s.to.x0 && px <= s.to.x1) {
+            // Landed anywhere higher than you set off from, not on one exact
+            // row. Requiring the named ledge was the first version and it
+            // scores an own goal: the footholds overlap now, so a full-hold
+            // jump often sails past the ledge the route names and lands on the
+            // one above it. That is the best possible outcome and it was being
+            // counted as a miss — three of the four "hardest steps in the
+            // campaign" turned out to be steps that were easy to overshoot.
+            if (py < s.from.y) {
               ok++;
               landed++;
               break;
@@ -165,7 +185,16 @@ export function reachRate(level, mode, seed, limit = 24) {
  * aims at the next ledge does not climb however forgiving the jump is. A
  * measurement that cannot tell a good change from a bad one is worse than none.
  */
-function routeFollower(level, phase = 0) {
+/** A deterministic stand-in for a person being slightly different each go. */
+function noise(seed) {
+  let s = (seed | 0) || 1;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) | 0;
+    return ((s >>> 8) & 0xffff) / 0x10000;
+  };
+}
+
+export function makeFollower(level, phase = 0) {
   const r = analyseLevel(level);
   const cells = r.route;
   const stand = r.standable;
@@ -182,6 +211,58 @@ function routeFollower(level, phase = 0) {
   // One latched target per player: the ledge they picked while they still had
   // their feet on something.
   const held = [null, null];
+  // ...and where on the ledge they happen to be standing when they go.
+  const spot = [0, 0];
+  const rnd = noise(phase * 2654435761 + 12345);
+
+  /**
+   * Is a blade about to be where I am?
+   *
+   * People wait for blades. Without this the instrument does not, and a tower
+   * with timed hazards in it reads as a tower with walls in it — runs stalled
+   * at exactly 453 rows of 651, and the four "hardest steps in the campaign"
+   * at 15-19% of attempts landing turned out to be, every one of them, a step
+   * with a saw sweeping the ledge. Which is the hazard doing its job. What was
+   * wrong was a model of a person with no eyes.
+   */
+  const bladeComing = (world, p) => {
+    for (const saw of level.saws) {
+      // Where it will be when I get there, not anywhere it goes in the next
+      // second. Smearing forty ticks of a blade's travel across the ledge marks
+      // the whole ledge dangerous the whole time, and a follower that believes
+      // that never jumps at all: it read 92 rows against 374 without the check.
+      for (let ahead = 0; ahead <= 18; ahead += 6) {
+        const sx = sawX(saw, world.tick + ahead);
+        const sy = sawY(saw, world.tick + ahead);
+        if (Math.abs(sy - p.y) < TILE * 1.5 && Math.abs(sx - p.x) < TILE * 1.8) return true;
+      }
+    }
+    return false;
+  };
+
+  /** Which way to shuffle to get out from under a blade, or 0 to stay put. */
+  const bladeFlee = (world, p) => {
+    for (const saw of level.saws) {
+      const sx = sawX(saw, world.tick);
+      const sy = sawY(saw, world.tick);
+      if (Math.abs(sy - p.y) > TILE * 1.5 || Math.abs(sx - p.x) > TILE * 2.6) continue;
+      return sx > p.x ? -1 : 1;
+    }
+    return 0;
+  };
+
+  // People are noisy, and a policy that is not will get stuck forever.
+  //
+  // With a fixed cadence and a fixed aim, a pair that cannot make one
+  // particular step cannot ever make it: the inputs at that ledge are the same
+  // on the thousandth attempt as on the first, so the run ends there. Measured
+  // over forty-five simulated minutes, that read as the tower having a wall in
+  // it — two of three runs stopped dead at exactly the same row. It is not a
+  // wall. It is a limit cycle, and the only thing wrong is the model of the
+  // person: nobody stands on the same pixel and presses jump on the same frame
+  // three hundred times. A little jitter in where they stand and how long they
+  // hold it is what lets a human blunder past a step they cannot do on purpose,
+  // and the instrument has to blunder too or it measures its own period.
 
   return (world, i, t, extra = 0) => {
     const p = world.players[i];
@@ -209,25 +290,30 @@ function routeFollower(level, phase = 0) {
         }
       }
       held[i] = best;
+      // Shuffle about a bit rather than standing on one mark forever.
+      if (rnd() < 0.04) spot[i] = Math.round((rnd() - 0.5) * 5);
     }
     const target = held[i];
     if (!target) return 0;
 
     // Walk toward it, but only as far as the footing goes — a bad player still
     // has eyes and does not stroll off the side of the platform they are on.
-    let aim = target.x;
+    let aim = target.x + spot[i];
     if (grounded && standable(col, row)) {
       const l = ledge(col, row);
       aim = Math.max(l.x0, Math.min(l.x1, aim));
     }
-    const dx = aim - col;
+    // Get out from under a blade before worrying about where you were going.
+    const flee = grounded ? bladeFlee(world, p) : 0;
+    const dx = flee !== 0 ? flee : aim - col;
     let mask = dx > 0 ? IN_RIGHT : dx < 0 ? IN_LEFT : 0;
     // Jump on a rough cadence rather than on a computed launch mark, offset per
     // player so the pair does not move in lockstep, and per run so that two
     // tunings are not compared on one pair of hands. The campaign is a fixed
     // tower — its seed changes nothing — so the only honest way to run it more
     // than once is to vary the people playing it.
-    if ((t + extra + phase) % (32 + (phase % 5)) < 10) mask |= IN_JUMP;
+    const beat = (t + extra + phase) % (32 + (phase % 5));
+    if (beat < 8 + Math.floor(rnd() * 6) && !bladeComing(world, p)) mask |= IN_JUMP;
     return mask;
   };
 }
@@ -276,7 +362,7 @@ const POLICIES = {
 function runPolicy(mode, seed, towerLength, seconds, make, bot) {
   const m = new LocalMatch(mode, seed, towerLength);
   if (bot) m.setBot(1, new Bot(m.ctx.level));
-  const follow = routeFollower(m.ctx.level, seed % 29);
+  const follow = makeFollower(m.ctx.level, seed % 29);
   const policy = make ? make(follow, m.ctx.level) : (w, t) => [follow(w, 0, t, 0), 0];
   const w = m.world;
   const y0 = w.players[0].y;

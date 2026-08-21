@@ -152,6 +152,19 @@ const LEDGE_SCAN = 14;
 const HEADROOM_MAX = 7;
 /** Ticks the bot will hold a big climb waiting for slack before trying anyway. */
 const ROPE_PATIENCE = 260;
+/**
+ * How long the bot will wait for the crate to settle before going anyway.
+ *
+ * Every other wait in here is bounded and this one was not, which is the same
+ * bug the `waiting` rule had and for the same reason: a hold with no timeout is
+ * a deadlock waiting for a partner who never obliges. A human walking along the
+ * floor drags the crate, the crate never stops moving, and the bot stands on
+ * its launch mark for as long as you care to watch it — measured at 302 ticks
+ * of a 360-tick test with a valid, `sure` straight-up leap in hand the whole
+ * time. Four seconds is long enough to let a swing die down and short enough
+ * that a partner in motion is not a life sentence.
+ */
+const CRATE_PATIENCE = 240;
 /** Jump strength the arc check assumes, as a fraction of the real one. */
 const ARC_MARGIN = 0.95;
 /** Ticks ahead the bot looks for a saw on its own square. */
@@ -238,6 +251,7 @@ export class Bot {
   private lastY = 0;
   private anchoring = false;
   private ropeWait = 0;
+  private crateWait = 0;
   /** True while holding position for a partner, with hysteresis on both edges. */
   private holding = false;
   /** Ticks spent holding position for a partner, so patience can run out. */
@@ -459,7 +473,11 @@ export class Bot {
     // the rope, the rope yanks whatever is on the end of it, and a crate doing
     // a thousand pixels a second into the underside of the ledge you just left
     // is most of the damage in a bad run.
-    const swinging = this.settleCrate && rise > 0 && Math.abs(world.cargo.y - world.cargo.py) > this.crateCalm;
+    const restless =
+      this.settleCrate && rise > 0 && Math.abs(world.cargo.y - world.cargo.py) > this.crateCalm;
+    if (restless && !airborne) this.crateWait++;
+    else this.crateWait = 0;
+    const swinging = restless && this.crateWait < CRATE_PATIENCE;
     // One hauler in the air at a time, and it is always the same one who yields.
     //
     // The rule itself is sound: two people jumping off the same ledge in

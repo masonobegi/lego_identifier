@@ -265,12 +265,25 @@ async function main() {
     return {
       p0moved: Math.round(Math.abs(w.players[0].x - window.__before.p0x)),
       p1moved: Math.round(Math.abs(w.players[1].x - window.__before.p1x)),
+      gap: Math.round(Math.abs(w.players[0].x - w.players[1].x)),
     };
   });
   check('player two moves when player two presses a key', split.p1moved > 60, JSON.stringify(split));
-  // Player one is roped to player two, so a little drag is the game working.
-  // Being *driven* is not: that was the bug, and it moved him step for step.
-  check("player one is not driven by player two's keys", split.p0moved < 25, JSON.stringify(split));
+  // Player one is roped to player two, so drag is the game working. Being
+  // *driven* is not: that was the bug, and it moved him step for step.
+  //
+  // This used to be an absolute bound of 25px, which quietly assumed player two
+  // could not walk far enough to take the rope past its 118px rest length. On
+  // the current spawn ledge — wide, open, and no longer a two-column perch — it
+  // can: player two walks 182px, and player one is pulled 78 of them, which
+  // leaves the pair exactly a rest length apart. That is a leash behaving like a
+  // leash. The invariant that actually distinguishes the bug is the ratio, plus
+  // the fact that the drag stops at the rope's length rather than continuing.
+  check(
+    "player one is not driven by player two's keys",
+    split.p0moved < split.p1moved * 0.55 && split.gap >= 100,
+    JSON.stringify(split),
+  );
 
   /* ------------------------------------------ finishing a run lets you leave */
   // Leaving the results screen used to only change screens, leaving the
@@ -318,6 +331,11 @@ async function main() {
     await solo.keyboard.up('KeyD');
     await sleep(900);
   }
+  // Then let go and let the pair settle. The bot waits for the rope to slacken
+  // and the crate to stop swinging before it takes off, both deliberately, and
+  // both of which the walking human was preventing — so measuring the instant
+  // the keys came up asked it to do the one thing it is written not to.
+  await sleep(6000);
   await solo.screenshot({ path: `${SHOTS}/13-bot.png` });
   const botRun = await solo.evaluate(() => {
     const local = window.HAULMATES.local;

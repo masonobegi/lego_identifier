@@ -469,11 +469,27 @@ function resultsScreen(app: App): HTMLElement {
   ];
   const verdict = verdicts.find((v) => v.when())!.text;
 
+  // The line that makes you press Play again.
+  const best = app.targetTicks;
+  let against: string | null = null;
+  if (done && best > 0) {
+    const delta = (r.finishTick - best) / 60;
+    against =
+      delta < 0
+        ? `${formatTime(-delta)} faster than your best. That is the new one.`
+        : delta < 30
+          ? `${formatTime(delta)} off your best of ${formatTime(best / 60)}. Go again.`
+          : `Your best is still ${formatTime(best / 60)}.`;
+  } else if (done) {
+    against = 'First one home. Everything from here is a personal best to beat.';
+  }
+
   return h(
     'div',
     { class: 'screen' },
     h('h2', { class: 'title' }, app.finishedRun ? 'Delivered' : 'Run over'),
     h('div', { class: 'verdict' }, verdict),
+    against ? h('p', { class: 'sub' }, against) : null,
     h(
       'div',
       { class: 'stats' },

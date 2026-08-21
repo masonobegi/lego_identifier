@@ -304,13 +304,26 @@ class C:
     # on the way up and land on on the way down.
     PASS_THROUGH = set('=')
 
-    def band(self, index):
+    #: Columns of clearance either side of the pass-through band.
+    #
+    # A hauler is 20px wide in a 24px tile, so a body centred on the last column
+    # of the band has a shoulder in the next one along. If that next column is
+    # solid — ice, a conveyor — the jump is a head-butt, and the band is one
+    # column narrower than it looks. Measured before this margin existed, the
+    # four worst steps in the campaign were all the same shape: a band that ran
+    # right up against a strip of ice, at 8% to 18% of casual attempts landing
+    # against 63% everywhere else.
+    BODY_MARGIN = 1
+
+    def band(self, index, margin=0):
         """Columns of path[index] the step from below is climbed through."""
         if index <= 0:
             return set()
         _, a0, a1 = self.path[index - 1]
         _, b0, b1 = self.path[index]
-        return set(range(max(a0, b0), min(a1, b1) + 1))
+        lo = max(a0, b0) - margin
+        hi = min(a1, b1) + margin
+        return set(range(max(b0, lo), min(b1, hi) + 1))
 
     def restyle(self, indices, ch):
         """Repaint chosen path platforms — ice, crumbling crates, conveyors.
@@ -326,14 +339,33 @@ class C:
             f'{self.id}: {ch!r} cannot be stood on, so it cannot be part of the route')
         for i in indices:
             r, c0, c1 = self.path[i]
-            keep = set() if ch in self.PASS_THROUGH else self.band(i)
+            keep = set() if ch in self.PASS_THROUGH else self.band(i, self.BODY_MARGIN)
             painted = [c for c in range(c0, c1 + 1) if c not in keep]
             assert painted, (
                 f'{self.id}: path[{i}] is all pass-through band, so {ch!r} '
                 f'would have nowhere to go')
             for c in painted:
-                self.rows[r][c] = ch
+                self.rows[r][c] = self._belt(ch, c, keep) if ch in 'cC' else ch
         return self
+
+    @staticmethod
+    def _belt(ch, col, keep):
+        """A conveyor that pushes you toward the climb, not off the edge.
+
+        `restyle` paints a material on the columns the route does not need,
+        which for a conveyor means the outside of the foothold — so a
+        right-pusher would land on the right-hand end and carry anybody who
+        stepped on it straight off. It did, at row 105 of the campaign, and
+        every run stopped within a few rows of it.
+
+        The direction is not a property of the material, it is a property of
+        where the material ends up: outside the band on the left, push right;
+        outside on the right, push left. Either way the belt herds you back
+        toward the columns you have to launch from, which is a better mechanic
+        than the one that was intended and much better than a trapdoor."""
+        if not keep:
+            return ch
+        return 'c' if col < min(keep) else 'C'
 
     @staticmethod
     def _free_run(c0, c1, safe, side, length, spare=None):
@@ -392,11 +424,24 @@ class C:
         # the step above, and somewhere to come down on from the step below.
         # Protecting only the first put spikes exactly where you land, and the
         # casual-landing rate on the worst step in the campaign halved.
+        # Two things must survive on a foothold: somewhere to take off from for
+        # the step above, and somewhere to come down on from the step below.
+        # Neither may be touched.
+        #
+        # The first version let a hazard eat into that as long as four columns
+        # of it survived, which sounds generous and is not, because the columns
+        # it ate were the ones next to the route. Three spikes ended up one
+        # column from the route cell at row 267 of the campaign, and a pair
+        # landing there from below has a single column of tolerance: 360 of the
+        # 366 deaths in a twenty-minute run were on those three tiles, and every
+        # policy stalled at exactly 381 rows of 651. The level gate could not see
+        # it — the route was still provably climbable, and it is, if you land
+        # perfectly every time.
         safe = set(launch_columns(self.path[index], self.path[index + 1])) | self.band(index)
-        painted = self._free_run(c0, c1, safe, side, length)
-        assert painted, (
-            f'{self.id}: path[{index}] at row {r} is all launch band, so a '
-            f'hazard on it would be a wall')
+        painted = self._free_run(c0, c1, safe, side, length, spare=len(safe))
+        if not painted:
+            self.skipped.append(f'hazard path[{index}] row {r}')
+            return self
         for c in painted:
             self.rows[r - 1][c] = ch
             self.protected.add((r - 1, c))
@@ -443,6 +488,54 @@ class C:
         for c in painted:
             self.rows[r + 1][c] = ch
             self.protected.add((r + 1, c))
+        return self
+
+    def sweep(self, index, period=200, phase=0, reach=None, side=1):
+        """A blade that crosses the route, by rule rather than by eye.
+
+        The tower's spikes have to keep clear of every column the climb is
+        proved through, and once footholds overlap generously that is most of a
+        foothold — so a static hazard on the route is either somewhere nobody
+        goes or a tile you can land on by accident, and the second one is not
+        difficulty, it is a coin flip. Three spikes a single column from a route
+        cell accounted for 360 of the 366 deaths in a twenty-minute run.
+
+        A blade is the honest way to put danger where the climb actually is,
+        because it is avoidable in *time* instead of in space: the footing stays
+        exactly where the gate proved it, and what you have to do is wait. Two
+        people on a rope having to wait for the same gap, one of them holding
+        the other back, is the game.
+
+        It sweeps the width of the foothold at head height, so it threatens the
+        pair standing on it and the crate hanging under the one above.
+        """
+        r, c0, c1 = self.path[index]
+        span = c1 - c0 + 1
+        # Half the ledge, never all of it.
+        #
+        # A blade that sweeps the whole foothold has no answer: there is nowhere
+        # to stand while it goes past, so waiting is death and jumping is a
+        # coin flip, and the pair is simply chewed up — measured at 470 to 576
+        # deaths across a forty-five minute run, against 22 to 109 before the
+        # blades existed. Half a ledge is the entire mechanic: the far side is a
+        # refuge, the near side is a timing problem, and two people on one rope
+        # have to crowd onto the same half and then go together.
+        travel = reach if reach is not None else max(3, (span - 2) // 2)
+        start = c0 + 1 if side > 0 else c1 - 1 - travel
+        self.ents.append(dict(type='saw', x=start, y=r - 1, r=1,
+                              ax=travel, ay=0, period=period, phase=phase))
+        return self
+
+    def crusher(self, index, drop=4, period=170, phase=0, side=1):
+        """A press that slams down onto one end of a route foothold.
+
+        Same bargain as `sweep`: the footing is untouched and the timing is the
+        obstacle. Parked at an end rather than the middle so the ledge is never
+        cut in two even at the bottom of the stroke."""
+        r, c0, c1 = self.path[index]
+        x = c1 - 4 if side > 0 else c0 + 1
+        self.ents.append(dict(type='crusher', x=x, y=r - 1 - drop, w=4, h=3,
+                              ax=0, ay=drop, period=period, phase=phase, smooth=1))
         return self
 
     def wall_spikes(self, row, side, length=3):
@@ -529,7 +622,7 @@ class C:
         # climbs through, so it is exempt.
         for i in range(1, len(self.path) - (1 if is_goal else 0)):
             r = self.path[i][0]
-            for c in self.band(i):
+            for c in self.band(i, self.BODY_MARGIN):
                 assert self.rows[r][c] in self.PASS_THROUGH, (
                     f'{self.id}: path[{i}] row {r} col {c} is {self.rows[r][c]!r}, '
                     f'which cannot be risen through — the step below it is '
@@ -618,6 +711,7 @@ c.saw(x=8, y=13, r=1, ax=22, ay=0, period=200)
 c.saw(x=30, y=22, r=1, ax=-20, ay=0, period=230, phase=60)
 c.wall_spikes(8, -1, 2)
 c.hazard(4, '^', side=-1, length=3).underhang(6, side=-1, length=3)
+c.sweep(4, period=240)
 chunks.append(c.check())
 
 # ================================================== BIOME 1 — THE FOUNDRY ====
@@ -628,6 +722,7 @@ c.put(2, 19, '!')
 c.ledge(26, 2, 5, '#', '~').ledge(20, 33, 5, '#', '~').ledge(11, 2, 4, '#', '~')
 c.wall_spikes(23, 1, 2)
 c.hazard(3, '^', side=1, length=3).underhang(5, length=3).underhang(8, side=-1, length=2)
+c.sweep(6, period=220)
 chunks.append(c.check())
 
 c = C('foundry_conveyor', 1, 2, 33)
@@ -637,6 +732,7 @@ c.deco(23, 4, 'ccccc').deco(14, 30, 'CCCCC')
 c.ledge(24, 32, 5, '#', '~')
 c.restyle([4, 7], 'c')
 c.hazard(2, '^', side=-1, length=3).underhang(6, length=3)
+c.crusher(8, period=180)
 chunks.append(c.check())
 
 c = C('foundry_press', 1, 2, 33)
@@ -647,6 +743,7 @@ c.mover(x=31, y=17, w=4, h=3, ax=0, ay=6, period=190, phase=70, deadly=True)
 c.ledge(28, 2, 4, '#', '~')
 c.hazard(3, '^', side=1, length=2).hazard(7, '^', side=-1, length=2)
 c.underhang(5, length=3).underhang(9, side=-1, length=2)
+c.sweep(3, period=200, phase=60)
 chunks.append(c.check())
 
 c = C('foundry_saws', 1, 2, 33)
@@ -658,6 +755,7 @@ c.wall_spikes(20, -1, 2)
 c.spurs([3, 6], side=-1, length=6, gap=2, drop=2)
 c.hazard(2, '^', side=1, length=4).hazard(8, '^', side=-1, length=4)
 c.underhang(5, length=4)
+c.crusher(6, period=170)
 chunks.append(c.check())
 
 c = C('foundry_moving', 1, 2, 33)
@@ -668,6 +766,7 @@ c.mover(x=26, y=21, w=5, h=1, ax=-16, ay=0, period=240, phase=120)
 c.ledge(27, 33, 4, '#', '~')
 c.restyle([3, 6], 'C')
 c.hazard(8, '^', side=1, length=3).underhang(4, side=-1, length=3)
+c.sweep(2, period=205)
 chunks.append(c.check())
 
 # ================================================== BIOME 2 — THE FREEZER ====
@@ -687,6 +786,7 @@ c.put(2, 19, '!')
 c.col(3, 6, 27, 'W').col(36, 6, 27, 'W')
 c.deco(5, 13, 'vvvvvv').deco(5, 23, 'vvvv')
 c.hazard(4, '^', side=-1, length=3).underhang(2, length=3).underhang(7, side=-1, length=3)
+c.sweep(5, period=210, phase=70)
 chunks.append(c.check())
 
 c = C('freeze_crumble', 2, 3, 33)
@@ -698,6 +798,7 @@ c.col(2, 6, 26, '*').col(37, 6, 26, '*')
 c.wall_spikes(12, -1, 2)
 c.hazard(2, '^', side=1, length=3).hazard(6, '^', side=-1, length=3)
 c.underhang(4, length=3).underhang(8, side=-1, length=3)
+c.sweep(7, period=195, side=-1)
 chunks.append(c.check())
 
 c = C('freeze_saws', 2, 3, 33)
@@ -719,6 +820,7 @@ c.deco(16, 4, 'xxxx').deco(24, 30, 'xxx')
 c.spurs([2, 6], side=1, length=7, gap=1, drop=2)
 c.hazard(3, '^', side=1, length=3).hazard(7, '^', side=-1, length=3)
 c.underhang(5, length=3).underhang(9, side=-1, length=2)
+c.sweep(4, period=190)
 chunks.append(c.check())
 
 # ==================================================== BIOME 3 — THE SPIRE ====
@@ -734,6 +836,7 @@ c.wall_spikes(9, -1, 2)
 c.restyle([5], 'c')
 c.hazard(2, '^', side=1, length=3).hazard(6, '^', side=-1, length=3)
 c.underhang(4, length=3).underhang(8, side=-1, length=3)
+c.sweep(2, period=180).crusher(6, period=165)
 chunks.append(c.check())
 
 c = C('spire_crushers', 3, 3, 33)
@@ -745,6 +848,7 @@ c.saw(x=19, y=23, r=1, ax=0, ay=5, period=120)
 c.ledge(28, 2, 4, '#', '~').ledge(28, 33, 4, '#', '~')
 c.hazard(3, '^', side=-1, length=4).hazard(7, '^', side=1, length=4)
 c.underhang(5, length=4).underhang(9, side=-1, length=3)
+c.sweep(3, period=175).sweep(8, period=185, side=-1, phase=70)
 chunks.append(c.check())
 
 c = C('spire_final', 3, 3, 33)
@@ -759,6 +863,7 @@ c.wall_spikes(18, 1, 2)
 c.restyle([3], 'i')
 c.hazard(2, '^', side=1, length=3).hazard(5, '^', side=-1, length=3)
 c.hazard(8, '^', side=1, length=3).underhang(6, length=4)
+c.sweep(2, period=170).crusher(5, period=160, side=-1)
 chunks.append(c.check())
 
 c = C('spire_goal', 3, 0, 24, tags=['goal'])

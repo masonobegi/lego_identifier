@@ -207,6 +207,19 @@ function neighbour(level: Level, tx: number, ty: number): number {
   return level.tiles[ty * level.w + tx];
 }
 
+/**
+ * Does the tile next door continue the plank?
+ *
+ * `isFilled` is about occlusion and deliberately says a platform is not filled,
+ * which is right for the solid-tile edging that uses it and wrong here: it made
+ * every tile of a sixteen-tile plank believe it was a one-tile plank, so each
+ * drew its own pair of end brackets and its own hazard tape. Ice and conveyors
+ * count, because `restyle()` paints them along a plank run.
+ */
+function plankEnd(t: number): boolean {
+  return t !== T_PLATFORM && t !== T_ICE && t !== T_CONV_L && t !== T_CONV_R;
+}
+
 function isFilled(t: number): boolean {
   return t === T_SOLID || t === T_GRIP || t === T_ICE || t === T_CONV_L || t === T_CONV_R || t === T_BOUNCE || t === T_CRUMBLE;
 }
@@ -315,6 +328,13 @@ function drawStaticTile(
       return;
     }
     case T_ICE: {
+      // An icy plank where it is part of a plank run, an ice block where it is
+      // not. `restyle()` gives the outer columns of a route foothold to ice, so
+      // most ice in the game is now a strip along a board rather than a slab.
+      if (!plankEnd(left) || !plankEnd(right)) {
+        drawPlank(ctx, x, y, plankEnd(left), plankEnd(right), '#3b6a8c', '#d6f2ff', '#1d3448', '#8fd4f0', rnd, null);
+        return;
+      }
       ctx.fillStyle = '#3b6a8c';
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = '#69a8cc';
@@ -347,6 +367,12 @@ function drawStaticTile(
     }
     case T_CONV_L:
     case T_CONV_R: {
+      // Same shape as the plank it is bolted into; the belt itself is the
+      // animated overlay drawn in the `reads` pass.
+      if (!plankEnd(left) || !plankEnd(right)) {
+        drawPlank(ctx, x, y, plankEnd(left), plankEnd(right), '#2b3040', '#5b6480', '#1d212c', '#8b95b5', rnd, null);
+        return;
+      }
       ctx.fillStyle = '#2b3040';
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = '#454d66';
@@ -377,13 +403,34 @@ function drawStaticTile(
       return;
     }
     case T_PLATFORM: {
-      ctx.fillStyle = shade(p.tileBody, 26);
-      ctx.fillRect(x, y, TILE, 7);
-      ctx.fillStyle = p.tileTop;
-      ctx.fillRect(x, y, TILE, 2);
-      ctx.fillStyle = p.tileEdge;
-      ctx.fillRect(x + 3, y + 7, 3, 5);
-      ctx.fillRect(x + TILE - 6, y + 7, 3, 5);
+      // A scaffold plank, and the most important tile in the game.
+      //
+      // Every foothold in the tower is one of these now — the whole climb is
+      // built out of them — and it used to be drawn as a seven-pixel band in a
+      // *lightened* body colour with two small stubs hanging off it. One of
+      // those on its own reads fine. Six hundred rows of them read as a field
+      // of pale dashes: nothing in the frame looked like something you could
+      // stand on, and the tower had no weight at all.
+      //
+      // Hazard tape goes on the ends of a plank and plain ink along the middle
+      // of it, which is where a yard actually puts the tape: on the edge you
+      // can walk off. Taping the whole board was the first attempt and it
+      // turned the screen into ten copies of the loudest thing in the palette.
+      // A warning that is everywhere is not a warning, it is a texture.
+      const capL = plankEnd(left);
+      const capR = plankEnd(right);
+      const tape =
+        highContrast || !(capL || capR)
+          ? null
+          : () => {
+              const chevron = chevronPattern(ctx, p);
+              if (chevron) fillChevron(ctx, chevron, blockWorldY + y, x, y + 1, TILE, 4);
+              else {
+                ctx.fillStyle = p.ink;
+                ctx.fillRect(x, y + 1, TILE, 4);
+              }
+            };
+      drawPlank(ctx, x, y, capL, capR, p.tileBody, tape ? null : p.ink, p.ink, p.tileEdge, rnd, tape);
       return;
     }
     case T_LAVA: {
@@ -409,6 +456,63 @@ function drawStaticTile(
     }
     default:
       return;
+  }
+}
+
+/**
+ * The scaffold plank the whole tower is built from.
+ *
+ * Factored out because a route foothold is not always a plain one-way platform:
+ * `restyle()` gives parts of one to ice or a conveyor, and those were drawn as
+ * full-height blocks — so a strip of ice in the middle of a plank read as a
+ * different kind of object dropped on top of the level, twice the thickness of
+ * the boards either side of it. Same silhouette, different surface, is what a
+ * material change should look like.
+ *
+ * `nose` is the walking surface, `body` the board, `bolt` the fixings. Passing
+ * a null nose means "tape it", which only the ends of a run ask for.
+ */
+export function drawPlank(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  capL: boolean,
+  capR: boolean,
+  body: string,
+  nose: string | null,
+  ink: string,
+  bolt: string,
+  rnd: number,
+  tape: (() => void) | null,
+): void {
+  ctx.fillStyle = 'rgba(30,26,20,0.16)';
+  ctx.fillRect(x, y + 10, TILE, 3);
+
+  ctx.fillStyle = body;
+  ctx.fillRect(x, y + 1, TILE, 9);
+
+  if (nose === null && tape) tape();
+  else {
+    ctx.fillStyle = nose ?? ink;
+    ctx.fillRect(x, y + 1, TILE, 4);
+  }
+
+  ctx.fillStyle = ink;
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillRect(x, y + 5, TILE, 1);
+  ctx.fillRect(x, y + 9, TILE, 2);
+
+  ctx.fillStyle = bolt;
+  ctx.fillRect(x + 4 + Math.floor(rnd * 12), y + 6, 2, 2);
+
+  ctx.fillStyle = ink;
+  if (capL) {
+    ctx.fillRect(x, y, 2, 11);
+    ctx.fillRect(x + 1, y + 11, 4, 2);
+  }
+  if (capR) {
+    ctx.fillRect(x + TILE - 2, y, 2, 11);
+    ctx.fillRect(x + TILE - 5, y + 11, 4, 2);
   }
 }
 

@@ -579,7 +579,9 @@ export class App {
     client.onResult = (result) => {
       this.lastResult = result;
       this.finishedRun = true;
+      this.targetTicks = client.mode === MODE_HAUL ? this.profile.bestCampaignTicks : 0;
       this.profile.finishes++;
+      this.recordBest(result, client.mode, client.towerLength);
       this.checkAchievements(client.world);
       this.persist();
       this.show('results');
@@ -752,7 +754,17 @@ export class App {
       bonds: world.bonds,
       checkpoints: world.checkpoint + 1,
     };
+    // Read the target *before* recording, so "your best" on the card is the
+    // one you were racing rather than the one you just set.
+    this.targetTicks = this.dailyRun
+      ? this.profile.daily.day === this.today
+        ? this.profile.daily.bestTicks
+        : 0
+      : this.local!.ctx.mode === MODE_HAUL
+        ? this.profile.bestCampaignTicks
+        : 0;
     if (this.dailyRun) this.recordDaily(this.lastResult);
+    this.recordBest(this.lastResult, this.local!.ctx.mode, this.lobbyTowerLength);
     this.checkAchievements(world);
     this.persist();
     this.show('results');
@@ -765,6 +777,28 @@ export class App {
    * has a `finishTick` too, and it is the tick it gave up on, which would
    * otherwise post a world record for quitting.
    */
+  /**
+   * Fold a finished run into the profile's personal bests.
+   *
+   * `bestCampaignTicks` and `bestGauntletHeight` have been in the profile since
+   * it was written and nothing ever set them or read them — a personal best the
+   * game kept for nobody. Beating your own time with the same friend is the
+   * whole return loop in a game like this, and it was the one thing the results
+   * screen could not tell you.
+   */
+  private recordBest(result: MatchResult, mode: number, floors: number): void {
+    if (!this.finishedRun) return;
+    if (mode === MODE_HAUL) {
+      const best = this.profile.bestCampaignTicks;
+      if (best === 0 || result.finishTick < best) this.profile.bestCampaignTicks = result.finishTick;
+    } else if (floors > this.profile.bestGauntletHeight) {
+      this.profile.bestGauntletHeight = floors;
+    }
+  }
+
+  /** The time to beat for the run just finished, in ticks, or 0 if there isn't one. */
+  targetTicks = 0;
+
   private recordDaily(result: MatchResult): void {
     const d = this.profile.daily;
     if (d.day !== this.today) return;

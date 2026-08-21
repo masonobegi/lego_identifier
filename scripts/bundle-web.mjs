@@ -161,6 +161,14 @@ if (!process.argv.includes('--no-check')) {
     await page.keyboard.up('KeyD');
     await page.waitForTimeout(800);
   }
+  // Let the pair settle before asking whether the bot went anywhere.
+  //
+  // It waits for the rope to slacken and the crate to stop swinging before it
+  // takes off, both of which are deliberate and both of which the human was
+  // preventing by walking. Measuring the instant the keys came up asked the bot
+  // to jump while its partner was still dragging the load ten tiles away, which
+  // is the one thing it is written not to do.
+  await page.waitForTimeout(6000);
   const state = await page.evaluate(() => ({
     tick: window.HAULMATES.local.localTick,
     y: window.HAULMATES.local.world.players[1].y,

@@ -414,7 +414,10 @@ game, a jump with no sideways component to get wrong. Overlapping them rather th
 gapping them took the same measurement to 69.7% and the same policies to between 185 and
 352 rows, reaching four to eight checkpoints. The geometry is the only thing that changed.
 
-The corollary is that **a solid material may never cover the overlap band**. Ice and
+The corollary is that **a solid material may never cover the overlap band, plus a column
+of margin either side**. A hauler is 20px wide in a 24px tile, so a body centred on the
+last column of the band has a shoulder in the next one along, and if that column is solid
+the jump is a head-butt. Ice and
 conveyors are solid, and a solid tile three rows above you blocks your head, so painting
 one across the columns a step is proved through does not make that step harder, it deletes
 it. `restyle()` keeps the band as a one-way platform and gives the rest of the foothold
@@ -423,19 +426,41 @@ the material; `check()` re-derives it and fails the build if it ever stops being
 **Hazards go on the route, not around it.** For a long time every hazard in the game was
 painted through `deco()`, which by construction refuses to touch the route, so the tower
 was 92.7% plain concrete and you could climb the entire campaign without passing within a
-tile of anything that could hurt you. `hazard()` and `underhang()` paint onto the route
-itself and stop dead at the launch band, so the way past is always there and always
-somewhere specific. The underside matters most: the crate hangs a rope's length below the
-pair, so that is where the teeth belong in a game about carrying something fragile.
+tile of anything that could hurt you.
 
-**The route is never made of something you cannot stand on.** Bounce pads throw you
-straight back off; crumbling crates are gone a third of a second after you touch them.
-Both appear all over the levels, but never as the only thing holding the route up.
+Putting them back took three goes, and the first two are worth writing down.
 
-**Decoration can never touch the route.** Hazards are placed by eye and the route is
-placed by rule, so the painter refuses to write into a foothold or the two rows of
-headroom above it. A single stray ceiling spike in the wrong place is otherwise enough to
-seal a chunk.
+*Spikes on a foothold* have to keep clear of every column the climb is proved through —
+both the launch band for the step above and the landing band from the step below. The
+first version allowed a hazard to eat into that as long as four columns survived, which
+sounds generous and is not: the columns it ate were the ones next to the route. Three
+spikes ended up one column from a route cell, and 360 of the 366 deaths in a twenty-minute
+run were on those three tiles. The rule is now absolute, and once footholds overlap
+generously there is often nowhere left for a static hazard at all — so the generator says
+out loud which ones it could not place rather than dropping them silently.
+
+*Blades* are the honest way to put danger where the climb is, because they are avoidable
+in **time** rather than in space: the footing stays exactly where the gate proved it, and
+what you have to do is wait. But a blade that sweeps a whole foothold has no answer —
+waiting is death and jumping is a coin flip, measured at 470 to 576 deaths across a
+forty-five-minute run. `sweep()` covers at most half a ledge, so the far side is always a
+refuge, and two people on one rope have to crowd onto the same half and then go together.
+Density matters as much as shape: at 28% of route ledges the tower was exhausting, and it
+is tuned to 20%.
+
+*Underhangs* hang over open air, never over the foothold below. Keeping clear of that
+foothold's launch columns was the first rule and it was subtly wrong — it let an underhang
+land in the middle of the platform below and cut it in two, turning an eleven-column ledge
+into a two-column island. Air cannot be split. What they threaten is the crate, which
+rides a rope's length under the pair, which is where the teeth belong in a game about
+carrying something fragile.
+
+*Conveyors* pick their direction from where they end up, not from the author. `restyle()`
+paints a material on the columns the route does not need, which for a conveyor means the
+outside of a foothold — so a right-pusher landed on a right-hand end and carried anybody
+who stepped on it straight off. Now a belt outside the band on the left pushes right and
+one on the right pushes left, so it always herds you back toward the columns you have to
+launch from.
 
 **Every chunk carries the same two landing platforms**, one at row 1 and one at row h-2,
 overlapping each other by four columns. Stacked, they land three rows apart with clear
