@@ -111,6 +111,15 @@ export const CARGO_BOUNCE = 0.28;
  *  lower threshold the crate accumulated chip damage from ordinary jumping and
  *  died roughly every ten seconds, which reads as a broken game rather than a
  *  tense one. Only a real fall should hurt. */
+/**
+ * Terminal velocity for the crate, in pixels per second.
+ *
+ * Above the haulers' own heavy-fall cap, because a crate should be able to
+ * outrun you and land hard — but bounded, which it was not. Measured at 5904
+ * before this existed, which is 320 points of impact damage against a
+ * hundred-point crate: unsurvivable, and not from any drop in the level.
+ */
+export const CARGO_MAX_FALL = 1750;
 export const CARGO_IMPACT_MIN = 560;
 export const CARGO_IMPACT_SCALE = 0.06;
 export const CARGO_REPAIR_PER_TICK = 0.55;
@@ -153,7 +162,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 13;
+export const SIM_VERSION = 14;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

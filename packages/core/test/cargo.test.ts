@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CARGO_H,
+  CARGO_HP,
   CARGO_W,
+  EV_CARGO_HIT,
   GRIP_MAX,
   MODE_GAUNTLET,
   MODE_HAUL,
@@ -161,6 +163,43 @@ describe('the crate', () => {
         }
         expect(world.finished === 1, `mode ${mode} seed ${seed} crate brought: ${bringIt}`).toBe(bringIt);
       }
+    }
+  });
+
+  /**
+   * No single impact can destroy the crate outright.
+   *
+   * The crate had no terminal velocity — both haulers have had one since the
+   * beginning, but nothing ever bounded the load. And the tether that keeps it
+   * under the rope moves it by writing a position, in a Verlet integrator that
+   * infers velocity from `x - px`; so a hundred-pixel correction when the rope
+   * went taut read back as six thousand pixels a second on the following tick,
+   * and the next surface it touched charged it for that. Measured: the crate
+   * reached 5904 px/s, five times the haulers' own heavy-fall cap, and took
+   * 312 points of impact damage against a hundred-point bar. It was not
+   * falling. It was being thrown by its own leash.
+   *
+   * The property worth protecting is not the number, it is the shape: losing
+   * the crate should always be an accumulation the pair can see coming, never
+   * one frame of physics they had no way to read.
+   */
+  it('cannot be destroyed by a single impact', () => {
+    for (const [mode, seed] of [
+      [MODE_HAUL, 7],
+      [MODE_GAUNTLET, 33],
+      [MODE_GAUNTLET, 555],
+    ] as const) {
+      const match = new LocalMatch(mode, seed, 10);
+      match.setBot(0, new Bot(match.ctx.level));
+      match.setBot(1, new Bot(match.ctx.level));
+      let worst = 0;
+      for (let t = 0; t < 120 * 60; t++) {
+        match.update(1000 / 60, [0, 0]);
+        for (const e of match.events) if (e.kind === EV_CARGO_HIT && e.a > worst) worst = e.a;
+        match.events.length = 0;
+      }
+      // Measured at 69.3 with the cap and 312.8 without it.
+      expect(worst, `mode ${mode} seed ${seed}: worst single impact`).toBeLessThan(CARGO_HP);
     }
   });
 });

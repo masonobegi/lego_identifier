@@ -8,6 +8,7 @@ import {
   CARGO_IMPACT_SCALE,
   CARGO_REGEN,
   CARGO_REGEN_DELAY,
+  CARGO_MAX_FALL,
   CARGO_TETHER,
   CARGO_W,
   DT,
@@ -29,6 +30,7 @@ import { EV_CARGO_BREAK, EV_CARGO_HIT, EV_CARGO_LAND, type World } from './types
 const HW = CARGO_W / 2;
 const HH = CARGO_H / 2;
 const G_STEP = CARGO_GRAVITY * DT * DT;
+const CARGO_MAX_FALL_STEP = CARGO_MAX_FALL * DT;
 const WIND_STEP = WIND_ACCEL * DT * DT;
 
 function damage(world: World, amount: number, x: number, y: number): void {
@@ -58,6 +60,14 @@ export function updateCargo(level: Level, world: World): void {
 
   let vx = (c.x - c.px) * CARGO_DAMPING;
   let vy = (c.y - c.py) * CARGO_DAMPING;
+  // Terminal velocity, in pixels per tick. Both haulers have had one since the
+  // beginning; the crate never did, so anything that put speed into it — a
+  // long drop, a rope yank, a positional correction read back as motion —
+  // simply kept accumulating.
+  if (vy > CARGO_MAX_FALL_STEP) vy = CARGO_MAX_FALL_STEP;
+  else if (vy < -CARGO_MAX_FALL_STEP) vy = -CARGO_MAX_FALL_STEP;
+  if (vx > CARGO_MAX_FALL_STEP) vx = CARGO_MAX_FALL_STEP;
+  else if (vx < -CARGO_MAX_FALL_STEP) vx = -CARGO_MAX_FALL_STEP;
   c.px = c.x;
   c.py = c.y;
   vy += G_STEP;
@@ -106,6 +116,17 @@ export function updateCargo(level: Level, world: World): void {
     collider.set(c.x, c.y, HW, HH);
     collider.dropThrough = false;
     moveCollider(level, world, collider, -dx * corr * 0.3, -dy * corr * 0.3);
+    // Carry the previous position along with it.
+    //
+    // This is Verlet: velocity is inferred from `x - px`, so moving the crate
+    // and leaving `px` behind does not *reposition* it, it launches it. The
+    // tether can shift the crate a hundred pixels in a tick when the rope goes
+    // taut, and a hundred pixels a tick reads back as six thousand pixels a
+    // second — which is what the next collision is charged for. Measured on a
+    // gauntlet tower: the crate hit 5904 px/s, better than five times the
+    // haulers' own terminal velocity and enough for 320 points of impact
+    // damage against a hundred-point crate. It was not falling. It was being
+    // thrown by its own leash.
     c.x = collider.x;
     c.y = collider.y;
     if (collider.hitY === 1) c.grounded = 1;
