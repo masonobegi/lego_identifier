@@ -16,6 +16,14 @@ haul against.
 > noticed. See *The rope does not work yet* in [docs/DESIGN.md](docs/DESIGN.md) for what
 > was broken, what the fix was, and the two plausible-sounding fixes that made it worse.
 
+> So was a third one. The crate — the thing the game is named after hauling — spawned two
+> rows *inside* the floor, on every spawn, in every level. A body inside geometry cannot be
+> swept anywhere, so it never moved again: the pair could climb forty-four rows and leave
+> it sitting at the spawn point, and the rope stretched to seven times its own length
+> trying to drag it. Nothing failed, nothing went red, and it rendered perfectly well
+> sitting in the rock. It is now on the ground, it weighs something, and a run does not
+> finish until it is at the top with you. See *The crate was in the floor*.
+
 Online play for two people, couch co-op for two on one screen, a bot partner for when
 nobody is around, a hand-authored campaign and an endless seeded tower. Built to ship on
 Steam.
@@ -98,33 +106,52 @@ On top of the route it runs three rules about the rope, which are the co-operati
 of the game played back at you:
 
 - **It waits.** The hauler in front stops when the rope goes tight or it gets more than
-  three rows above you, rather than dragging you off a ledge.
+  three rows above you, rather than dragging you off a ledge. Its patience is bounded, and
+  that bound is load-bearing: two haulers who are both being considerate deadlock, each
+  correctly concluding that the polite thing is to stand still. Measured at four minutes of
+  no progress, no deaths and no reset before the timeout was added.
 - **It braces.** When you are climbing, it holds GRIP so the rope has a fixed end to
-  pivot on. Measured: with bracing on, a bot pair climbs nearly twice as far before the
-  crate gives out.
+  pivot on.
 - **It reels.** Stranded below you on a taut rope, it hauls itself up instead of waiting
-  to be rescued.
+  to be rescued. How often that happens is a fact about the level, not the bot: over two
+  minutes each, the same bot reeled 107 times on two towers and twice on the other three.
 
-Two details took most of the work. Jumps get a **run-up** — the reach figures in
-`route.ts` were measured from a player at running speed, and a bot that walks back to line
-up on the launch column arrives with its velocity pointing the wrong way and falls two
-tiles short of everything. And the launch column is chosen by **flying the arc**: plain
-ballistics against the tile grid with the body's real box, over every column on the ledge,
-because the route only names one cell per ledge and that cell often has a ceiling nine
-pixels above the hauler's head.
+The launch column is chosen by **flying the arc**: plain ballistics against the tile grid
+with the body's real box, over every column on the ledge, because the route only names one
+cell per ledge and that cell often has a ceiling nine pixels above the hauler's head.
 
-Left completely alone — two bots, nobody driving — a pair climbs about an eighth of the
-campaign and a third of a generated tower before the crate gives out on a ledge lip and
-sends them back to a checkpoint. Where they stop is a fact about the crate, not the bot:
-it hangs from the middle of the rope, climbing shortens the rope, and past a certain lip
-the yank puts the crate into the underside of the ledge they just left. The bot made that
-measurable for the first time.
+It also has run-up machinery, which it turns out never to use — see below. That is the
+single biggest thing still wrong with it.
 
-Two things it still does badly, measured rather than hidden. It fidgets while it waits —
-about ten direction changes a second as the rope tugs it in and out of its deadzone, down
-from twenty-three before the route cursor was made monotonic, and guarded at eighteen by a
-test. And it cannot use bounce pads or grip walls at all, because the route analysis it
-follows deliberately ignores both as shortcuts.
+Left completely alone — two bots, nobody driving — a pair reaches about an eighth of the
+campaign route in two and a half minutes, and then stops making progress. That figure used
+to be explained by the crate giving out on a ledge lip; it is not that any more, because
+the crate now shuffles out from under lips and breaks nought to two times in three minutes.
+The real reason is narrower and more embarrassing.
+
+**The bot never takes a run-up at the jumps that need one.** `planLeap` sorts candidate
+launch columns by how little walking they cost, so the column it is already standing on
+wins; when the target ledge overlaps that column there is no horizontal component, and
+every running takeoff is skipped by a guard. It then plans a standing straight-up jump, its
+ballistic arc check says the jump flies, and it does not — because that check knows nothing
+about the rope hauling down on it. Measured on the campaign: an arc found for 21 of 21
+route cells with zero fallbacks, a run-up used **0%** of the time, and 176 seconds spent on
+a single route cell out of 276.
+
+That diagnosis is corroborated from the other side. `npm run verify:levels` brute-forces
+input scripts through the real simulation, and its chunk-seam step was unmakeable with
+every standing-jump script it tried — then became makeable the moment a twenty-tick run-up
+was added to the search.
+
+One thing it used to do badly and no longer does: it fidgeted while it waited, about
+twenty-six direction changes a second as the rope tugged it in and out of its deadzone. Two
+earlier attempts to fix that by widening the deadzone each halved how far the pair climbed.
+Hysteresis fixed it properly — stopping still happens at the old threshold, so it lands on
+its mark as precisely as before, and only *starting* is harder. Reversals went from 25.9 a
+second to **0.5**, and the climb went *up*, from 32 rows to 44.
+
+It still cannot use bounce pads or grip walls at all, because the route analysis it follows
+deliberately ignores both as shortcuts.
 
 It is a partner, not a speedrunner, and it will not save you from yourself.
 

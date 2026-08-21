@@ -167,6 +167,13 @@ One fix is in: bracing on solid ground no longer drains stamina, so an anchor
 lasts as long as it is needed rather than five seconds. That was necessary and
 is not sufficient — the anchor now holds, and the partner still cannot climb.
 
+> That rule has since been narrowed. Bracing with a *slack* rope is still free;
+> bracing while your partner dangles on a taut one now bills you at 35% of the
+> drain rate, which is about fourteen seconds on a full bar. Free-for-ever
+> turned out to be its own failure: a mutual hold is a position two haulers can
+> keep until the heat death of the universe, and they did. See *The crate was in
+> the floor* below.
+
 ### What the fix turned out to be
 
 **The winch was mostly a wrong expectation.** A rope hooked over a beam, with
@@ -239,6 +246,126 @@ stop pretending otherwise.
 both go in".** A partner merely standing on the lip is enough to reel against;
 gripping only makes them immovable. That is a better rule than the one that was
 designed, and it was found by testing rather than chosen.
+
+## The crate was in the floor
+
+The game is named after hauling a crate up a tower. It had never hauled one.
+
+`placeAtSpawn` put the crate twenty-two pixels below the rope's mid node. The
+rope rests in a slack arc, so that node hangs about forty pixels below the
+haulers — which in the campaign is two rows *into* the floor. Measured: the
+crate spawned at row 649.5 with rows 648, 649 and 650 all solid.
+
+A body inside geometry cannot be swept anywhere, because every direction is
+blocked. So it never moved again, on any spawn, on any respawn, in any level.
+
+| | before | after |
+|---|---|---|
+| Rows the crate climbed while the pair climbed 32 | **0** | 26 |
+| Average rows the crate trailed the pair | 8.8 | 3.7 |
+| Worst | 42.3 | 16.0 |
+| Longest unbroken spell more than 12 rows behind | **80.7s of 90** | 5.0s |
+
+Nothing caught it. It rendered perfectly well sitting in the rock; no test
+asserted anything about where it was; and the two systems that could have
+noticed were both looking somewhere else. That is the part worth keeping:
+
+**The rope's length constraint measures hauler to hauler.** So a rope stretched
+to seven times its maximum — 1727 pixels against a 232-pixel limit — reported a
+comfortable 165, because `tautPathLength` string-pulls between the two players
+and never sees the sag down to the crate. The crate was forty-six tiles below a
+pair who had no way to find out.
+
+**The completability gate had the same bug in its own fixture.** It placed the
+crate at `cy + 16`, half sunk into the ledge, where it sat weightless for the
+whole attempt. So the gate proving every tower climbable was proving it with a
+crate that did not weigh anything.
+
+**And the crate was not part of winning.** `checkGoal` asked only that both
+haulers were touching the goal tile. A pair could sprint to the top, leave the
+load three ledges down, and be congratulated. That is the deepest reason nothing
+in the game ever made anybody care where the crate was: nothing in the game ever
+required it.
+
+### What else fell out of fixing it
+
+Once the crate was a physical object with weight on the end of a rope, four
+things that had been invisible became measurable.
+
+**The crate had no terminal velocity.** Both haulers have had a fall cap since
+the beginning; nothing ever bounded the load. Worse, the tether that keeps the
+crate under the rope moves it by writing a position, in a Verlet integrator that
+infers velocity from `x - px` — so a hundred-pixel correction when the rope goes
+taut reads back as six thousand pixels a second on the following tick, and the
+next surface it touches is charged for that. Measured: 5904 px/s, and 312 points
+of impact damage against a hundred-point crate. It was not falling; it was being
+thrown by its own leash.
+
+The textbook fix — carry `px` along with the correction — makes the crate inert,
+because that velocity transfer is exactly how a rope hauls something. Measured
+with it in: the pair climbed five rows instead of forty-one and the crate broke
+nine times in ninety seconds, bouncing on the spot. So the transfer stays and the
+speed is bounded instead. No single impact can now exceed the whole bar, which
+is the property worth protecting: losing the crate should always be an
+accumulation the pair can see coming, never one frame of physics they had no way
+to read.
+
+**A crate pulled straight up jams under the ledge you just climbed.** The tether
+pulls in a straight line toward the rope, and straight up is the wrong direction
+when the thing above you is a twelve-wide platform. It was pinned for twenty
+seconds, fifteen rows below a pair who could not have reached it. It now shuffles
+sideways toward whichever side has headroom, the way a person would walk it out
+from under a lip.
+
+**Two haulers who are both being considerate deadlock.** Each correctly concludes
+that the polite thing to do is stand still and wait for the other. Both are right.
+The pair then sits there — measured at four minutes with no progress, no deaths
+and no reset, because the braced one was holding the dangling one up for free.
+Nothing in either hauler's *position* distinguishes that from a rescue going well,
+so it cannot be detected, only timed out. Patience is now bounded, holding weight
+now costs stamina, and the bot's stuck-check watches route progress rather than
+pixels moved — a bot alternating LEFT and RIGHT sixty times a second passes a
+check on pixels with room to spare.
+
+**Bracing is the *harder* thing a partner can do.** This one is genuinely
+counterintuitive and it changed how the gate is read. A hauler jumping past a
+braced partner clears one empty column at rise 1-3; one dragging an *idle*
+partner clears two. The anchor pulls you back to it, and dead weight pays out
+slack. So a gate that braces the partner — which the completability gate now does
+— is proving the levels under the worse of the two realistic cases.
+
+That number came out of `scripts/calibrate-jump.mjs`, which had been driving both
+haulers off the same runway with the same inputs, each fighting the other for the
+whole arc. Every authoring rule in `tools/gen_chunks.py` is derived from what
+that script reports.
+
+### The gate now asks what the game asks
+
+The completability gate had three holes, and every one of them made it easier
+than the game.
+
+1. It returned on the **first** hauler to touch down — proving a step one of them
+   can make while the other hangs off the rope below it.
+2. It drove **both haulers with the same inputs**, which is not a situation any
+   level puts a player in. They have separate controllers and they take turns.
+3. It placed the crate **inside the floor**, as above.
+
+Fixed, it said all thirteen levels were unclimbable. Two of those three failures
+were the gate's fault. One was not:
+
+**A seven-wide foothold sitting one column across from the seven-wide foothold
+three rows below it.** Column ten is clear of a target starting at column eleven
+and within reach of its edge, so the authoring rule allowed it — and it is a
+frame-perfect move: rise to the very top of the jump without drifting into the
+shelf beside you, then step one column sideways onto a single tile of toehold. It
+was in the campaign and in eleven of the thirteen towers. Requiring two launch
+columns rather than one turns it back into a jump.
+
+The gate's own remaining fault was that it could only test a **standing** jump.
+Nobody plays a standing jump — you back off and take a run at it — and the chunk
+seam is makeable only with a run-up. With one in the search space, all thirteen
+pass: both haulers, taking turns, braced partner, real crate. That took the gate
+from six minutes to eleven, which is a fair price for it meaning what it says.
 
 ## Level design rules
 
