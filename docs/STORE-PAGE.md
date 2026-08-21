@@ -55,20 +55,33 @@ bad connection.
 [*][b]COUCH CO-OP[/b] — two controllers or a split keyboard on one screen.
 [*][b]A FRIENDSHIP REPORT[/b] at the end of every run, including the exact number of times
 you yanked your partner off solid ground. It knows. It counted.
+[*][b]THE AUTOHAULER[/b] — a bot for the other end of the rope when nobody is around. It
+waits for you, it braces so you can climb off it, and it reels itself up when it is
+stranded. It is a partner, not a substitute for one.
 [/list]
+
+[h2]THE CRATE HAS TO ARRIVE TOO[/h2]
+
+You do not finish by reaching the top. You finish by reaching the top [b]with the
+crate[/b]. Sprint ahead, leave the load three ledges down, and the game will stand you on
+the goal and tell you exactly how far below you it is.
 
 [h2]HONEST WARNINGS[/h2]
 
 [list]
 [*]You will fall a long way, many times, holding hands the entire journey.
 [*]It is not your partner's fault. It is also not not their fault.
-[*]There is no single-player mode. That is the point.
+[*]This is a two-player game with a bot for the other end of the rope, not a solo game
+with co-op bolted on. The Autohauler will keep you company and it will not carry you.
 [/list]
 
 ## Tags (in priority order)
 
 `Co-op` · `Online Co-Op` · `Local Co-Op` · `Physics` · `Platformer` · `Funny` ·
 `Multiplayer` · `2D` · `Indie` · `Casual` · `Difficult` · `Cute`
+
+Not `Singleplayer`. The bot exists, but tagging for solo players sets an expectation the
+game is deliberately not built to meet, and a refund is worse than a lost click.
 
 ## Features to tick
 
@@ -108,4 +121,5 @@ No narration. Real gameplay audio only.
 > HAULMATES is out. It is a two-player co-op game about climbing a tower while tied to a
 > friend by a rope that will not stretch, carrying a crate that will not survive.
 >
-> There is no single-player mode. Buy it with someone you can shout at.
+> There is a bot for the other end of the rope. There is not a version of this that is
+> better alone. Buy it with someone you can shout at.
