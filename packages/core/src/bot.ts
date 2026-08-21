@@ -460,9 +460,31 @@ export class Bot {
     // a thousand pixels a second into the underside of the ledge you just left
     // is most of the damage in a bad run.
     const swinging = this.settleCrate && rise > 0 && Math.abs(world.cargo.y - world.cargo.py) > this.crateCalm;
-    // One hauler in the air at a time. Two people jumping off the same ledge
-    // in opposite directions is how a rope becomes a catapult.
-    const bothAirborne = this.stagger && rise > 0 && mate.grounded !== 1 && !mate.dead;
+    // One hauler in the air at a time, and it is always the same one who yields.
+    //
+    // The rule itself is sound: two people jumping off the same ledge in
+    // opposite directions is how a rope becomes a catapult. Applying it
+    // symmetrically is not, because then it is a rule about *both* of them and
+    // each defers to the other. Measured over the 7,309 ticks a stalled
+    // campaign pair spent declining to take off, they could legally jump on
+    // 10.5% of them, and the partner being airborne accounted for 44%. Two
+    // bots with identical courtesy starve each other's takeoff windows.
+    //
+    // Deriving right of way from route position — whoever is behind goes first
+    // — is the rule two people would use and it is measurably worse here,
+    // because the roles then swap several times a step and neither of them is
+    // ever consistently the one who waits. Across ten levels: route 16.33% but
+    // crate breaks 30, against 16.14% and 8 breaks for a fixed role. What the
+    // pair needs is not a fair rule, it is a settled one.
+    //
+    // Fixing it to the slot also gets the human case right for free, because
+    // the bot always takes the second one: a person playing with the Autohauler
+    // is player zero, so the bot is the one who waits for them.
+    //
+    // Turning the gate off for *both* of them measures 12.70% with 24 breaks,
+    // which is what proves the asymmetry is doing the work and not the removal.
+    const yields = index === 1;
+    const bothAirborne = this.stagger && rise > 0 && mate.grounded !== 1 && !mate.dead && yields;
     const heldByRope = (roped && this.ropeWait < ROPE_PATIENCE) || swinging || bothAirborne;
 
     let want = 0;
