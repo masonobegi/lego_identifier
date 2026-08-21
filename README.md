@@ -121,28 +121,31 @@ The launch column is chosen by **flying the arc**: plain ballistics against the 
 with the body's real box, over every column on the ledge, because the route only names one
 cell per ledge and that cell often has a ceiling nine pixels above the hauler's head.
 
-It also has run-up machinery, which it turns out never to use — see below. That is the
-single biggest thing still wrong with it.
+It also has run-up machinery it rarely uses, which looked for a while like the single
+biggest thing wrong with it and measurably is not — see below.
 
-Left completely alone — two bots, nobody driving — a pair reaches about an eighth of the
+Left completely alone — two bots, nobody driving — a pair reaches about a sixth of the
 campaign route in two and a half minutes, and then stops making progress. That figure used
 to be explained by the crate giving out on a ledge lip; it is not that any more, because
 the crate now shuffles out from under lips and breaks nought to two times in three minutes.
-The real reason is narrower and more embarrassing.
+The real reason took three parallel attempts to find, and refuted the obvious one.
 
-**The bot never takes a run-up at the jumps that need one.** `planLeap` sorts candidate
-launch columns by how little walking they cost, so the column it is already standing on
-wins; when the target ledge overlaps that column there is no horizontal component, and
-every running takeoff is skipped by a guard. It then plans a standing straight-up jump, its
-ballistic arc check says the jump flies, and it does not — because that check knows nothing
-about the rope hauling down on it. Measured on the campaign: an arc found for 21 of 21
-route cells with zero fallbacks, a run-up used **0%** of the time, and 176 seconds spent on
-a single route cell out of 276.
+**It runs out of moments when taking off is legal at all.** Over the 7,309 ticks a stalled
+campaign pair spent declining to jump, they were in a state where they could legally take
+off on **10.5%** of them. The rope past its rest length accounted for 77%, holding the
+leash 46%, the partner being airborne 44%. Those are the co-operative rules working exactly
+as written — and two haulers running identical courtesy starve each other, because each
+correctly defers and both are right. One of them now consistently yields, which is worth
+about a point of route and cuts crate breaks by a third; the rest of that budget is still
+spent.
 
-That diagnosis is corroborated from the other side. `npm run verify:levels` brute-forces
-input scripts through the real simulation, and its chunk-seam step was unmakeable with
-every standing-jump script it tried — then became makeable the moment a twenty-tick run-up
-was added to the search.
+Three candidate fixes for this were built in isolation and measured, and the one that won
+the benchmark is not in the game. It scored by *abandoning the crate* — the longest spell
+the load spent more than twelve rows behind the pair went from 5 seconds to 126, and the
+crate-break count improved only because a crate that has been left behind stops taking
+damage. That is the benchmark's fault rather than the candidate's: route progress plus
+breakages can be maximised by leaving the thing you are supposed to be carrying. The
+measurement now carries worst-abandonment alongside.
 
 One thing it used to do badly and no longer does: it fidgeted while it waited, about
 twenty-six direction changes a second as the rope tugged it in and out of its deadzone. Two

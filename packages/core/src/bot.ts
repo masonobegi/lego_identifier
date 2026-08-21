@@ -489,6 +489,15 @@ export class Bot {
 
     let want = 0;
     if (this.unstick > 0) {
+      // Yes, this walks the bot off the ledge, and yes, that is the point.
+      //
+      // Traced on the campaign, one unstick carried the bot from column 18.9
+      // to column 23.2 and down a row — four columns of climbing surrendered
+      // to escape a stall, then re-climbed. That reads like the defect and it
+      // is not: bounding the shuffle to the current ledge, so it turns back at
+      // the edge instead, measures route 16.00% -> 14.75% on the tuned levels
+      // and 17.67% -> 16.13% on held-out ones, with crate breaks going back up
+      // from 4 to 6 and 10 to 15. Leaving the shelf is how it gets out.
       want = this.unstickDir;
       if (!airborne && this.jumpTicks === 0 && this.jumpCooldown === 0) {
         this.jumpTicks = JUMP_HOLD[2];
