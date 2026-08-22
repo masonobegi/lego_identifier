@@ -61,6 +61,38 @@ describe('online match', () => {
     expect(b.desyncs).toBe(0);
   });
 
+  /**
+   * Past the wrap of the authoritative-input ring, which is 2048 ticks — a
+   * little over half a minute — and which nothing in this suite used to reach.
+   *
+   * The ring's "this slot is confirmed" flag was set and never cleared, so on
+   * the second lap every slot still read as confirmed from the first one and
+   * `advanceConfirmed` folded stale input as fast as it could be called. The
+   * shared world fast-forwarded at thousands of ticks a second: forty-five
+   * seconds after the match started, the in-game timer read twenty-two
+   * minutes. Every online match in the build did this, and the longest match
+   * any test here played was seventeen seconds, so all of them were green.
+   *
+   * Ninety seconds of wall clock, which is nearly three laps of the ring.
+   */
+  it('survives the input ring wrapping, twice', () => {
+    const h = createHarness({ latency: () => 25 });
+    const [a, b] = h.clients;
+    h.run(90_000, chaos);
+
+    const room = h.room();
+    // A tick is 1/60s, so ninety seconds of it is 5400 give or take a frame of
+    // scheduling. Anything past the ring's own length again is the runaway.
+    expect(room.tick).toBeGreaterThan(5000);
+    expect(room.tick, `server ran ${room.tick} ticks in 90s`).toBeLessThan(5800);
+    for (const c of [a, b]) {
+      expect(c.confirmedTick).toBeGreaterThan(2048 * 2);
+      expect(c.confirmedTick).toBeLessThanOrEqual(room.tick);
+      expect(c.desyncs, 'desyncs after three laps of the ring').toBe(0);
+    }
+    expect(Math.abs(a.confirmedTick - b.confirmedTick)).toBeLessThan(120);
+  });
+
   it('runs each client ahead of the server so its own input is never mispredicted', () => {
     const h = createHarness({ latency: () => 60 });
     h.run(6000, chaos);

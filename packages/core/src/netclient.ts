@@ -155,7 +155,21 @@ export class NetClient {
 
   private localMask = new Uint8Array(RING);
   private auth = new Uint8Array(RING * 2);
-  private authKnown = new Uint8Array(RING);
+  /**
+   * Which tick each authoritative slot actually holds.
+   *
+   * A flag alone cannot say that, and the flag was never cleared: once the ring
+   * wrapped at tick 2048 every slot still read as confirmed from the previous
+   * lap, so `advanceConfirmed` folded tick after tick of stale input without
+   * ever waiting for the server. Thirty-four seconds into every online match
+   * the shared world began fast-forwarding at thousands of ticks a second; at
+   * forty-five seconds of wall clock the run timer read twenty-two minutes.
+   * Comparing the stamp against the tick being asked about costs one Int32 read
+   * and cannot go stale, because a slot from the previous lap holds a tick
+   * number 2048 lower than the one being asked for.
+   */
+  private authAt = new Int32Array(RING).fill(-1);
+  private usedAt = new Int32Array(RING).fill(-1);
   private used = new Uint8Array(RING * 2);
 
   private accumulatorMs = 0;
@@ -361,7 +375,8 @@ export class NetClient {
     this.started = false;
     this.localMask.fill(0);
     this.auth.fill(0);
-    this.authKnown.fill(0);
+    this.authAt.fill(-1);
+    this.usedAt.fill(-1);
     this.used.fill(0);
   }
 
@@ -371,7 +386,7 @@ export class NetClient {
     this.confirmedTick = this.confirmedWorld.tick;
     this.serverHashes.clear();
     // Anything we predicted before the snapshot is void.
-    for (let t = this.confirmedTick; t <= this.confirmedTick + 4; t++) this.authKnown[t % RING] = 0;
+    for (let t = this.confirmedTick; t <= this.confirmedTick + 4; t++) this.authAt[t % RING] = -1;
     if (this.localTick < this.confirmedTick) {
       this.localTick = this.confirmedTick;
       this.highestSimulated = this.confirmedTick;
@@ -402,7 +417,7 @@ export class NetClient {
       const slot = t % RING;
       this.auth[slot * 2] = data[i * 2];
       this.auth[slot * 2 + 1] = data[i * 2 + 1];
-      this.authKnown[slot] = 1;
+      this.authAt[slot] = t;
     }
     this.advanceConfirmed();
   }
@@ -415,10 +430,14 @@ export class NetClient {
     while (advanced < MAX_ROLLBACK) {
       const t = this.confirmedTick + 1;
       const slot = t % RING;
-      if (!this.authKnown[slot]) break;
+      if (this.authAt[slot] !== t) break;
       const a0 = this.auth[slot * 2];
       const a1 = this.auth[slot * 2 + 1];
-      if (t <= this.highestSimulated && (this.used[slot * 2] !== a0 || this.used[slot * 2 + 1] !== a1)) {
+      if (
+        t <= this.highestSimulated &&
+        this.usedAt[slot] === t &&
+        (this.used[slot * 2] !== a0 || this.used[slot * 2 + 1] !== a1)
+      ) {
         mismatch = true;
         this.predictionMisses++;
       }
@@ -453,9 +472,10 @@ export class NetClient {
       const slot = t % RING;
       const masks: number[] = [0, 0];
       masks[this.localIndex] = this.localMask[slot];
-      masks[remote] = this.authKnown[slot] ? this.auth[slot * 2 + remote] : lastRemote;
+      masks[remote] = this.authAt[slot] === t ? this.auth[slot * 2 + remote] : lastRemote;
       this.used[slot * 2] = masks[0];
       this.used[slot * 2 + 1] = masks[1];
+      this.usedAt[slot] = t;
       step(this.ctx, this.world, masks);
       // Rollback replays ticks that already happened; replaying their sounds and
       // particles would stutter, so presentation events are dropped here.
@@ -565,9 +585,10 @@ export class NetClient {
     const lastRemote = this.auth[(this.confirmedTick % RING) * 2 + remote];
     const masks: number[] = [0, 0];
     masks[this.localIndex] = mine;
-    masks[remote] = this.authKnown[slot] ? this.auth[slot * 2 + remote] : lastRemote;
+    masks[remote] = this.authAt[slot] === t ? this.auth[slot * 2 + remote] : lastRemote;
     this.used[slot * 2] = masks[0];
     this.used[slot * 2 + 1] = masks[1];
+    this.usedAt[slot] = t;
 
     copyWorldInto(this.prev, this.world);
     step(this.ctx, this.world, masks);

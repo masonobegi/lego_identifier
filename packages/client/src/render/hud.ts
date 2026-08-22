@@ -31,6 +31,15 @@ export interface HudState {
    * actually accept.
    */
   soloRestart: boolean;
+  /**
+   * Seconds your partner has been gone, or 0 if they are still here.
+   *
+   * The only thing that used to say a match had stopped was a toast, and a
+   * toast is gone in 2.2 seconds. After that a player sat in front of a frozen
+   * tower with a running clock and nothing on screen to say why, for as long as
+   * they were willing to — the run does not resume and it does not end.
+   */
+  waitingFor: number;
   hint: string;
   hintStrength: number;
 }
@@ -67,6 +76,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, s: 
   drawCargoWarning(ctx, vw, vh, s);
   drawCargoCall(ctx, vw, vh, s);
   drawRestartVote(ctx, vw, vh, s);
+  drawWaiting(ctx, vw, vh, s);
   if (s.showNetgraph && s.net) drawNetgraph(ctx, vw, s.net);
   if (s.hintStrength > 0.01 && s.hint) drawHint(ctx, vw, vh, s);
 
@@ -212,6 +222,35 @@ function drawCargoCall(ctx: CanvasRenderingContext2D, vw: number, vh: number, s:
     ctx.fillStyle = '#8c97b6';
     ctx.fillText(under, vw / 2, y + 26);
   }
+  ctx.textAlign = 'left';
+}
+
+/** Your partner is gone, the world is frozen, and nothing else says so. */
+function drawWaiting(ctx: CanvasRenderingContext2D, vw: number, vh: number, s: HudState): void {
+  if (s.waitingFor <= 0) return;
+  const mins = Math.floor(s.waitingFor / 60);
+  const secs = Math.floor(s.waitingFor % 60);
+  const held = mins > 0 ? `${mins}:${String(secs).padStart(2, '0')}` : `${secs}s`;
+  const text = 'WAITING FOR YOUR PARTNER';
+  const under = `${held} · they can rejoin with the same code · ESC to leave`;
+
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = `900 26px ${FONT}`;
+  const w = Math.max(ctx.measureText(text).width, 380) + 64;
+  const x = (vw - w) / 2;
+  const y = vh / 2 - 70;
+  ctx.fillStyle = 'rgba(12,10,8,0.82)';
+  ctx.fillRect(x, y, w, 92);
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 91);
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText(text, vw / 2, y + 40);
+  ctx.font = `700 13px ${FONT}`;
+  ctx.fillStyle = 'rgba(255,255,255,0.72)';
+  ctx.fillText(under, vw / 2, y + 68);
+  ctx.restore();
   ctx.textAlign = 'left';
 }
 

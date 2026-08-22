@@ -118,6 +118,8 @@ export class App {
   attract: LocalMatch;
   private lastFrame = 0;
   private clockSeconds = 0;
+  /** When the match went to 'paused', in client seconds; 0 when it has not. */
+  private pausedSince = 0;
   private hintText = '';
   private hintStrength = 0;
   private shownHints = new Set<string>();
@@ -679,6 +681,7 @@ export class App {
           }
         : undefined,
       showNetgraph: this.settings.showNetgraph,
+      waitingFor: this.pausedSince > 0 ? (this.clockSeconds - this.pausedSince) : 0,
       soloRestart: Boolean(this.local?.bots.some((bot) => bot !== null)),
       hint: this.hintText,
       hintStrength: Math.min(1, this.hintStrength),
@@ -756,6 +759,7 @@ export class App {
           this.show('lobby');
           break;
         case 'running':
+          this.pausedSince = 0;
           if (this.screen !== 'none') this.show('none');
           if (client.world) this.renderer.reset(client.world);
           setRichPresence('Hauling a crate up a tower', client.roomCode);
@@ -769,7 +773,13 @@ export class App {
           }
           break;
         case 'paused':
+          // The toast is the announcement; the HUD banner is the explanation,
+          // because a toast is gone in 2.2 seconds and this state is not. A
+          // player used to be left in front of a frozen tower with a running
+          // clock and nothing on screen to say why, for as long as they were
+          // willing to sit there — the run neither resumes nor ends on its own.
           toast('Your partner dropped out — waiting for them');
+          if (this.pausedSince === 0) this.pausedSince = this.clockSeconds;
           break;
         case 'ended':
           if (!this.lastResult) this.show('results');
@@ -1054,6 +1064,7 @@ export class App {
   }
 
   private disposeSession(): void {
+    this.pausedSince = 0;
     // Every way out of a run goes through here, which is the only place that
     // catches the ones that end by walking away rather than by arriving.
     this.endDailyAttempt();

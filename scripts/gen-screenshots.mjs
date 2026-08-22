@@ -215,7 +215,16 @@ console.log('Gameplay:');
     const app = window.HAULMATES;
     const w = app.local.world;
     const level = app.local.ctx.level;
-    const y = level.heightPx * 0.78;
+    // The Foundry, not the Yard.
+    //
+    // This is the shot that becomes the store page's first screenshot, and it
+    // used to stage at 0.78 down the tower — the bottom biome, whose whole
+    // palette is ink on cream. Sampling every fourth pixel of the 1920x1080
+    // output, the three commonest colours were three shades of the same cream
+    // and between them 72.7% of the frame. A shopper scrolling a category page
+    // saw an empty sheet of paper. The Foundry has the orange ground, the
+    // crusher, the saw and the lava in one screen.
+    const y = level.heightPx * 0.6;
     for (let i = 0; i < 2; i++) {
       const p = w.players[i];
       p.x = level.spawnX + (i ? 30 : -30);
