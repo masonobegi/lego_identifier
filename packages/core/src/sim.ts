@@ -17,6 +17,7 @@ import { T_CHECKPOINT, T_GOAL, type Level, tileAt } from './level.js';
 import { MAX_RISE } from './route.js';
 import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
+import { updateHolds } from './physics.js';
 import { resolveBoosts, updatePlayer } from './player.js';
 import { placeAtSpawn } from './state.js';
 import { pushEvent } from './events.js';
@@ -157,6 +158,9 @@ function checkGoal(world: World, ctx: SimContext): void {
 export function step(ctx: SimContext, world: World, inputs: number[]): void {
   const level = ctx.level;
   world.tick++;
+  // Before anything moves, so both peers read the same doors all tick, and so
+  // a shutter that is about to close is still open for whoever is inside it.
+  updateHolds(level, world);
   updateCrumble(world);
 
   for (let i = 0; i < world.crumble.length; i++) {

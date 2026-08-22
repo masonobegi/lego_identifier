@@ -77,6 +77,15 @@ export interface World {
   ropePY: Float64Array;
   cargo: CargoState;
   crumble: Int32Array;
+  /**
+   * Whether each room's shutter is standing open this tick.
+   *
+   * Derived, not remembered: `step` recomputes it from where everybody is
+   * before anything moves, so it is the same on every peer that agrees about
+   * positions and it is deliberately absent from the snapshot and from
+   * WORLD_KEYS. A rollback replays the ticks, and replaying them recomputes it.
+   */
+  open: Uint8Array;
   checkpoint: number;
   spawnX: number;
   spawnY: number;

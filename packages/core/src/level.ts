@@ -22,6 +22,24 @@ export const T_WIND = 14;
 export const T_CHECKPOINT = 15;
 export const T_GOAL = 16;
 export const T_DECO = 17;
+/**
+ * A floor plate, and the shutter it opens.
+ *
+ * The tower's only two-person move was the leg up, which is seven moments in a
+ * forty-five minute campaign — every other complaint about this game traced
+ * back to having exactly one co-op verb. A plate is the second: it holds a
+ * shutter open only while something is standing on it, and the rope decides
+ * whether that something can be you. `ROPE_MAX` is a shade under ten tiles, so
+ * a plate placed further than that from the far side of its shutter is a place
+ * one player cannot be while also being through the door.
+ *
+ * A plate is ordinary floor otherwise. The crate can hold one down, which is
+ * the escape hatch that stops a fumbled room being a dead end — and a room that
+ * asks you to haul the crate onto a plate rather than stand on it is the third
+ * thing here two people have to do together.
+ */
+export const T_PLATE = 18;
+export const T_SHUTTER = 19;
 
 /** Characters used when authoring chunks as ASCII art. */
 export const TILE_CHARS: Record<string, number> = {
@@ -43,12 +61,16 @@ export const TILE_CHARS: Record<string, number> = {
   '!': T_CHECKPOINT,
   'F': T_GOAL,
   ':': T_DECO,
+  '_': T_PLATE,
+  'H': T_SHUTTER,
   'S': T_EMPTY,
 };
 
 /** Tiles that block movement from every direction. */
 export function isSolidTile(t: number): boolean {
-  return t === T_SOLID || t === T_GRIP || t === T_ICE || t === T_CONV_R || t === T_CONV_L || t === T_BOUNCE;
+  return (
+    t === T_SOLID || t === T_GRIP || t === T_ICE || t === T_CONV_R || t === T_CONV_L || t === T_BOUNCE || t === T_PLATE
+  );
 }
 
 /** Tiles that kill on contact. */
@@ -172,6 +194,15 @@ export interface Level {
   crumbleSlot: Int32Array;
   /** For each crumble slot, its tile index. */
   crumbleTile: Int32Array;
+  /**
+   * For each tile index, which hold group its plate or shutter belongs to, or
+   * -1. One group per room: the plate in front of you opens the shutter in the
+   * same room, which is the only pairing a player can read off the screen
+   * without being told.
+   */
+  holdGroup: Int32Array;
+  /** How many rooms in this tower have a plate and a shutter in them. */
+  holdGroups: number;
   widthPx: number;
   heightPx: number;
   chunkIds: string[];
@@ -287,6 +318,28 @@ export function assembleLevel(id: string, name: string, chunks: ChunkDef[]): Lev
     for (let x = 0; x < w; x++) tiles[y * w + x] = row ? row[x] : T_EMPTY;
   }
 
+  // One hold group per chunk that has any plate or shutter in it, so a room's
+  // plate can only ever open that room's shutter however the tower is stacked.
+  const holdGroup = new Int32Array(w * h).fill(-1);
+  let holdGroups = 0;
+  {
+    let top = h;
+    for (const c of chunks) {
+      top -= c.rows.length;
+      let used = false;
+      for (let r = 0; r < c.rows.length; r++) {
+        for (let x = 0; x < w; x++) {
+          const i = (top + r) * w + x;
+          const t = builder.rows[top + r]?.[x] ?? T_EMPTY;
+          if (t !== T_PLATE && t !== T_SHUTTER) continue;
+          holdGroup[i] = holdGroups;
+          used = true;
+        }
+      }
+      if (used) holdGroups++;
+    }
+  }
+
   const crumbleSlot = new Int32Array(w * h).fill(-1);
   const crumbleList: number[] = [];
   for (let i = 0; i < tiles.length; i++) {
@@ -318,6 +371,8 @@ export function assembleLevel(id: string, name: string, chunks: ChunkDef[]): Lev
     checkpoints: builder.checkpoints,
     crumbleSlot,
     crumbleTile: Int32Array.from(crumbleList),
+    holdGroup,
+    holdGroups,
     widthPx: w * TILE,
     heightPx: h * TILE,
     chunkIds: builder.chunkIds,

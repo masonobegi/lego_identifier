@@ -1,4 +1,4 @@
-import { TILE } from './constants.js';
+import { CARGO_H, CARGO_W, PLAYER_H, PLAYER_HALF_W, TILE } from './constants.js';
 import {
   T_CONV_L,
   T_CONV_R,
@@ -7,6 +7,8 @@ import {
   T_ICE,
   T_PLATFORM,
   isSolidTile,
+  T_SHUTTER,
+  T_PLATE,
   type Level,
   type Mover,
   moverX,
@@ -39,7 +41,60 @@ export function crumbleSolid(level: Level, world: World, index: number): boolean
 function tileBlocks(level: Level, world: World, tx: number, ty: number): boolean {
   const t = tileAt(level, tx, ty);
   if (t === T_CRUMBLE) return crumbleSolid(level, world, ty * level.w + tx);
+  if (t === T_SHUTTER) return !shutterOpen(level, world, tx, ty);
   return isSolidTile(t);
+}
+
+/** Is the shutter covering this tile standing open? */
+export function shutterOpen(level: Level, world: World, tx: number, ty: number): boolean {
+  if (tx < 0 || ty < 0 || tx >= level.w || ty >= level.h) return false;
+  const g = level.holdGroup[ty * level.w + tx];
+  return g >= 0 && world.open[g] === 1;
+}
+
+/** Every tile the box from (l,t) to (r,b) touches, as a callback. */
+function overTiles(level: Level, l: number, t: number, r: number, b: number, fn: (i: number) => void): void {
+  const x0 = Math.max(0, Math.floor(l / TILE));
+  const x1 = Math.min(level.w - 1, Math.floor(r / TILE));
+  const y0 = Math.max(0, Math.floor(t / TILE));
+  const y1 = Math.min(level.h - 1, Math.floor(b / TILE));
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) fn(ty * level.w + tx);
+}
+
+/**
+ * Work out which shutters are open, from where everybody is standing.
+ *
+ * Called at the top of the tick, before anything moves, so every peer computes
+ * it from the same positions and nothing has to be sent or snapshotted.
+ *
+ * Two ways a shutter is open. Somebody is holding its plate — a hauler stood on
+ * it, or the crate parked on it, which is the answer to a pair who have fumbled
+ * a room and would otherwise be stuck outside it. Or somebody is inside the
+ * shutter itself, in which case it stays open whatever the plate says: a door
+ * that closes on the person walking through it is not a puzzle, it is a
+ * player embedded in a wall with no way out.
+ */
+export function updateHolds(level: Level, world: World): void {
+  if (level.holdGroups === 0) return;
+  world.open.fill(0);
+  const mark = (i: number, want: number): void => {
+    const g = level.holdGroup[i];
+    if (g >= 0 && level.tiles[i] === want) world.open[g] = 1;
+  };
+  const box = (x: number, y: number, hw: number, hh: number, want: number): void => {
+    overTiles(level, x - hw, y - hh, x + hw, y + hh, (i) => mark(i, want));
+  };
+  for (const p of world.players) {
+    if (p.dead) continue;
+    // Standing on a plate: the feet, a hair below them.
+    box(p.x, p.y + PLAYER_H / 2 + 2, PLAYER_HALF_W, 2, T_PLATE);
+    box(p.x, p.y, PLAYER_HALF_W, PLAYER_H / 2, T_SHUTTER);
+  }
+  const c = world.cargo;
+  if (c.hp > 0) {
+    box(c.x, c.y + CARGO_H / 2 + 2, CARGO_W / 2, 2, T_PLATE);
+    box(c.x, c.y, CARGO_W / 2, CARGO_H / 2, T_SHUTTER);
+  }
 }
 
 /** Any full-solid tile overlapping the given AABB? */

@@ -140,6 +140,7 @@ export function createWorld(ctx: SimContext): World {
       hp: CARGO_HP, shake: 0, grounded: 0, calm: 0, hurt: 0,
     },
     crumble: new Int32Array(level.crumbleTile.length),
+    open: new Uint8Array(level.holdGroups),
     checkpoint: -1,
     spawnX: level.spawnX,
     spawnY: level.spawnY,
@@ -178,6 +179,7 @@ export function cloneWorld(src: World): World {
     ropePY: Float64Array.from(src.ropePY),
     cargo,
     crumble: Int32Array.from(src.crumble),
+    open: Uint8Array.from(src.open),
     checkpoint: src.checkpoint,
     spawnX: src.spawnX,
     spawnY: src.spawnY,
@@ -209,6 +211,9 @@ export function copyWorldInto(dst: World, src: World): void {
   dst.ropePX.set(src.ropePX);
   dst.ropePY.set(src.ropePY);
   dst.crumble.set(src.crumble);
+  // Copied so a cloned world is usable before its first step; recomputed by
+  // every step, so it is not part of what a snapshot has to carry.
+  if (dst.open.length === src.open.length) dst.open.set(src.open);
   dst.events.length = 0;
 }
 
