@@ -285,6 +285,101 @@ export function canMakeStep(ctx, from, to) {
   return canCross(ctx, from, to, 0) && canCross(ctx, from, to, 1);
 }
 
+/**
+ * Try, hard, to get one hauler up a gate on their own.
+ *
+ * The build had a proof that the towers are climbable together and no proof at
+ * all that they are unclimbable alone — the one claim the whole design rests
+ * on. It was asserted against the reachability fill, which walks a grid using
+ * MAX_RISE and knows nothing about what the physics will let you do, and the
+ * physics let you do more: GRIP and JUMP on the same tick took a jump through
+ * a branch that returns before the ordinary one, leaving `grounded` set, so the
+ * next tick refilled the coyote window in mid-air and a second press cashed it.
+ * 6.50 tiles against a plain jump's 4.50, on gates cut to six.
+ *
+ * Randomised scripts rather than a tidy sweep, because the sweep is what missed
+ * it: the exploit needed three buttons in a particular order and no
+ * hand-written cadence happened to contain it. GRIP is in the alphabet here for
+ * the same reason. The partner is parked on the launch ledge and never presses
+ * anything — present, so the rope and its weight are real, and useless, so
+ * nothing here can be a boost. Any run that does register one is thrown away.
+ */
+function soloCanCross(ctx, from, to, tries) {
+  let seed = 0x5eed | 0;
+  const rand = () => {
+    seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const BUDGET = 240;
+  const script = new Uint8Array(BUDGET);
+
+  /** Run one scripted attempt; the ledge reached, or null. */
+  const attempt = (lx, mask) => {
+    const world = createWorld(ctx);
+    placePair(world, lx, from.y);
+    for (let t = 0; t < 4; t++) {
+      simStep(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    for (let t = 0; t < BUDGET; t++) {
+      simStep(ctx, world, [mask(t), 0]);
+      world.events.length = 0;
+      if (world.restartTimer > 0 || world.boosts > 0) return null;
+      const p = world.players[0];
+      if (p.dead) return null;
+      if (p.grounded !== 1) continue;
+      const cy = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
+      const cx = Math.floor(p.x / TILE);
+      if (cy === to.y && cx >= to.x0 && cx <= to.x1) return { lx, tick: t };
+    }
+    return null;
+  };
+
+  // The shapes that are known to break this, swept exactly rather than left to
+  // chance. A random script hits "press, release, re-press inside seven ticks"
+  // so rarely that 1500 of them missed the double jump that was live in the
+  // build: the targeted pass below finds it in the first dozen attempts. Run-up
+  // first, because every one of these is worth more with speed behind it.
+  for (let lx = from.x0; lx <= from.x1; lx++) {
+    for (const run of [0, 10, 20, 34]) {
+      const dir = to.x0 + to.x1 > from.x0 + from.x1 ? IN_RIGHT : IN_LEFT;
+      for (const grip of [0, IN_GRIP]) {
+        for (let gap = 0; gap <= 16; gap++) {
+          for (const hold of [6, 14, 22, 30]) {
+            const got = attempt(lx, (t) => {
+              if (t < run) return dir;
+              const k = t - run;
+              let m = dir;
+              if (k === 0) m |= IN_JUMP | grip;
+              else if (k < hold && gap === 0) m |= IN_JUMP;
+              else if (gap > 0 && k >= gap && k < gap + hold) m |= IN_JUMP;
+              return m;
+            });
+            if (got) return got;
+          }
+        }
+      }
+    }
+  }
+
+  for (let n = 0; n < tries; n++) {
+    for (let t = 0; t < BUDGET; ) {
+      const seg = 2 + Math.floor(rand() * 20);
+      let m = 0;
+      const r = rand();
+      if (r < 0.36) m |= IN_LEFT;
+      else if (r < 0.72) m |= IN_RIGHT;
+      if (rand() < 0.6) m |= IN_JUMP;
+      if (rand() < 0.35) m |= IN_GRIP;
+      for (let k = 0; k < seg && t < BUDGET; k++, t++) script[t] = m;
+    }
+    const lx = from.x0 + Math.floor(rand() * (from.x1 - from.x0 + 1));
+    const got = attempt(lx, (t) => script[t]);
+    if (got) return got;
+  }
+  return null;
+}
+
 export function verifyLevel(level, mode, seed, options = {}) {
   // The coop fill, because the levels have gates in them now: steps with the
   // middle foothold taken out, which one player cannot climb and is not
@@ -304,11 +399,19 @@ export function verifyLevel(level, mode, seed, options = {}) {
     // A step taller than any one hauler can jump is a gate, and gates are
     // replayed as the two-person move they are.
     const gate = s.from.y - s.to.y > MAX_RISE;
+    const where = `row ${s.from.y} cols ${s.from.x0}-${s.from.x1} -> row ${s.to.y} cols ${s.to.x0}-${s.to.x1}`;
     if (!(gate ? canGate(ctx, s.from, s.to) : canMakeStep(ctx, s.from, s.to))) {
-      failures.push(
-        `row ${s.from.y} cols ${s.from.x0}-${s.from.x1} -> row ${s.to.y} cols ${s.to.x0}-${s.to.x1}`,
-      );
+      failures.push(where);
       if (failures.length >= 5) break;
+    }
+    // A gate one player can climb is not a gate, and the tower it is in does
+    // not need two people however many of them it has.
+    if (gate && options.solo !== false) {
+      const got = soloCanCross(ctx, s.from, s.to, options.soloTries ?? 1500);
+      if (got) {
+        failures.push(`${where} — ONE PLAYER CLEARED IT from column ${got.lx}`);
+        if (failures.length >= 5) break;
+      }
     }
   }
   return {

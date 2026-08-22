@@ -281,7 +281,24 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       p.jumpBuffer = 0;
       p.gripping = 0;
       p.gripCooldown = GRIP_REGEN_DELAY;
-      if (wall !== 0 && p.grounded !== 1) {
+      // Leaving the ground, and the bookkeeping that goes with it.
+      //
+      // This branch returns before the ordinary jump ever runs, so it used to
+      // skip the two lines that say a jump has been spent. `grounded` stayed
+      // at whatever it was when the grip started, which meant the *next* tick
+      // read it as still standing and refilled the coyote window in mid-air —
+      // and a second press three to seven ticks later cashed it for a full
+      // second jump. Measured on the campaign's flat ledge at row 666: a plain
+      // jump rises 4.50 tiles and GRIP+JUMP followed by JUMP rises 6.50, which
+      // is taller than five of the seven gates. One player could climb the
+      // tower that the entire design says takes two.
+      const standing = p.grounded === 1;
+      p.coyote = 0;
+      p.grounded = 0;
+      // Read before the line above clears it: a hauler braced against a wall
+      // with their feet still on a ledge is jumping off the ledge, and being
+      // thrown sideways instead is not what either of them asked for.
+      if (wall !== 0 && !standing) {
         p.vx = -wall * WALL_JUMP_X;
         p.vy = WALL_JUMP_Y;
       } else {

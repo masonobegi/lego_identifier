@@ -7,6 +7,7 @@ import {
   GRIP_REGEN,
   IN_GRIP,
   IN_JUMP,
+  IN_RIGHT,
   LocalMatch,
   MODE_HAUL,
   MAX_RISE,
@@ -286,6 +287,73 @@ describe('the leg up', () => {
       world.events.length = 0;
     }
     expect(world.boosts).toBe(0);
+  });
+});
+
+/**
+ * The claim the whole design rests on, asked of the simulation rather than of a
+ * model of it.
+ *
+ * Solo-impossibility was only ever asserted against the reachability fill,
+ * which walks a grid using MAX_RISE and knows nothing about what the physics
+ * will actually let you do. It was wrong: pressing GRIP and JUMP on the same
+ * tick took a jump through a branch that returns before the ordinary one, so
+ * the tick after still read as grounded, refilled the coyote window in mid-air,
+ * and a second press cashed it. 6.50 tiles against a plain jump's 4.50, on a
+ * tower whose gates are six. One player could climb the whole thing.
+ *
+ * So this sweeps the buttons instead of trusting the map. It is deliberately
+ * not a tidy unit test: the point is to be the thing that would have caught it.
+ */
+describe('one player, every button', () => {
+  /** The highest a lone hauler gets off a flat ledge, over a sweep of inputs. */
+  function soloCeiling(): number {
+    const { level, floor } = shelf(12);
+    const ctx = { level, seed: 1, mode: 0 };
+    let best = 0;
+    for (const run of [0, 12, 24]) {
+      for (const grip of [0, 1, 2, 3, 5, 8]) {
+        for (const again of [0, 3, 4, 5, 6, 7, 8, 10, 14]) {
+          for (const hold of [8, 16, 24, 30]) {
+            const world = createWorld(ctx);
+            place(world, 24, floor - 1, 6);
+            for (let t = 0; t < 8; t++) {
+              step(ctx, world, [0, 0]);
+              world.events.length = 0;
+            }
+            const y0 = world.players[0].y;
+            let high = y0;
+            for (let t = 0; t < 150; t++) {
+              let m = 0;
+              if (t < run) m |= IN_RIGHT;
+              else {
+                const s = t - run;
+                if (s === 0 && grip > 0) m |= IN_GRIP;
+                if (s > 0 && s < grip) m |= IN_GRIP;
+                if (s < hold) m |= IN_JUMP;
+                if (again > 0 && s >= again && s < again + hold) m |= IN_JUMP;
+                if (again > 0 && s === again - 1) m &= ~IN_JUMP;
+              }
+              step(ctx, world, [m, 0]);
+              world.events.length = 0;
+              if (world.players[0].dead) break;
+              high = Math.min(high, world.players[0].y);
+            }
+            best = Math.max(best, (y0 - high) / TILE);
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  it('cannot out-jump a gate whatever it presses', () => {
+    const ceiling = soloCeiling();
+    // Six rows is what the gates are cut to. The margin is the whole mechanic,
+    // so this asserts the number, not just the inequality: a change that lifts
+    // the solo ceiling towards six should fail here and not in a review.
+    expect(ceiling, 'solo ceiling in tiles').toBeLessThan(5.5);
+    expect(ceiling, 'and a normal jump still works').toBeGreaterThan(4);
   });
 });
 
