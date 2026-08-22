@@ -47,9 +47,11 @@ player can.
 > how often an *ordinary* attempt succeeds, and nothing here could ask it. Measured, once
 > something could: 23.4% of plausible casual jump attempts landed, and five different
 > two-player policies each climbed between three and nine rows of a 651-row tower in three
-> minutes, reaching none of the twenty checkpoints. It is 74% and roughly 200 rows of a
-> tower three times longer now, and the thing that started it was a single line in the level
-> generator. See *Level design rules*.
+> minutes, reaching none of the twenty checkpoints. On a tower nearly twice as long it is
+> 58.5% of attempts, and a pair who know the move climb 255 of its 1179 rows in three
+> minutes, bank six checkpoints, lose no crates and never go more than 27 seconds without
+> gaining a row. The thing that started it was a single line in the level generator. See
+> *Level design rules*.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
 nobody is around, a hand-authored campaign of thirty-four floors and well over a kilometre

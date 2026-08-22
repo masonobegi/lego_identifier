@@ -571,9 +571,10 @@ const POLICIES = {
 /**
  * One policy, one seed, three minutes. Everything above the tower is noise.
  */
-function runPolicy(mode, seed, towerLength, seconds, make, bot) {
+function runPolicy(mode, seed, towerLength, seconds, make, bots) {
   const m = new LocalMatch(mode, seed, towerLength);
-  if (bot) m.setBot(1, new Bot(m.ctx.level));
+  if (bots >= 1) m.setBot(1, new Bot(m.ctx.level));
+  if (bots >= 2) m.setBot(0, new Bot(m.ctx.level));
   // The seed is the pair of hands, whole and unfolded. It used to be taken
   // modulo 29, which on the campaign — one authored tower, where the seed
   // reaches the simulation nowhere else — made seeds 13, 42 and 71 the same
@@ -625,7 +626,7 @@ export function climbTest(mode, seeds, towerLength, seconds = 180) {
   const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
   const rows = [];
   for (const [name, make] of Object.entries(POLICIES)) {
-    const runs = seeds.map((seed) => runPolicy(mode, seed, towerLength, seconds, make, false));
+    const runs = seeds.map((seed) => runPolicy(mode, seed, towerLength, seconds, make, 0));
     rows.push({
       policy: name,
       rows: Math.round(mean(runs.map((r) => r.rows))),
@@ -636,7 +637,7 @@ export function climbTest(mode, seeds, towerLength, seconds = 180) {
     });
   }
   // One human plus the Autohauler, since that is the shipped solo experience.
-  const solo = seeds.map((seed) => runPolicy(mode, seed, towerLength, seconds, null, true));
+  const solo = seeds.map((seed) => runPolicy(mode, seed, towerLength, seconds, null, 1));
   rows.push({
     policy: 'one player + the Autohauler',
     rows: Math.round(mean(solo.map((r) => r.rows))),
@@ -644,6 +645,25 @@ export function climbTest(mode, seeds, towerLength, seconds = 180) {
     checkpoints: mean(solo.map((r) => r.checkpoints)),
     crates: mean(solo.map((r) => r.crates)),
     deaths: mean(solo.map((r) => r.deaths)),
+  });
+  // And a pair who both know the move, which none of the policies above do.
+  //
+  // Every one of them jumps on a cadence and hopes: the leg up fires when the
+  // climber happens to be beside a partner who happens to be holding GRIP, and
+  // with seventy-one two-person moments on the campaign route that is most of
+  // what decides how far they get. They are the right instrument for "can a
+  // pair who are not talking to each other make progress" and the wrong one for
+  // "how long is this game" — and read on their own they answer the second
+  // question with the first one's number. So the ceiling is measured too, by
+  // the one agent in the repo that knows the verbs, on both ends of the rope.
+  const pair = seeds.map((seed) => runPolicy(mode, seed, towerLength, seconds, null, 2));
+  rows.push({
+    policy: 'two Autohaulers, who know the move',
+    rows: Math.round(mean(pair.map((r) => r.rows))),
+    stall: Math.max(...pair.map((r) => r.stall)),
+    checkpoints: mean(pair.map((r) => r.checkpoints)),
+    crates: mean(pair.map((r) => r.crates)),
+    deaths: mean(pair.map((r) => r.deaths)),
   });
   return rows;
 }
