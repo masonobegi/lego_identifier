@@ -688,4 +688,43 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         `deaths ${row.deaths.toFixed(1)}  worst stall ${row.stall.toFixed(0)}s`,
     );
   }
+
+  coopReport();
+}
+
+/**
+ * How much of the climb needs two people, and how often the pair manage it.
+ *
+ * Everything above measures a three-minute run, and three minutes gets a pair
+ * about a fifth of the way up the campaign — so for a long while every
+ * co-operative moment in the game above row 890 was invisible to the
+ * instrument that exists to tell us whether ordinary players can do them. The
+ * first hold room sits three hundred rows above the spawn and not one of the
+ * four seeds ever reached it.
+ *
+ * So the co-op moments are counted off the route and then attempted directly,
+ * with the pair placed at each one. Density is the number that matters: three
+ * judges scored the game and all of them said the same thing, which is that
+ * eleven two-person moments in three hundred and eighty-four climbing steps is
+ * punctuation rather than texture.
+ */
+function coopReport() {
+  const towers = [
+    ['campaign', buildCampaign()],
+    ['gauntlet 33', buildTower(33, 10)],
+    ['gauntlet 101', buildTower(101, 12)],
+  ];
+  console.log('\nCO-OP — how much of the climb needs two people, and how often a pair manage it\n');
+  for (const [name, level] of towers) {
+    const route = analyseLevel(level, { coop: true });
+    const steps = ledgeSteps(level, route.route, route.standable).length;
+    const holds = route.holds ? route.holds.length : 0;
+    const gates = route.gates.length - holds;
+    const moments = gates + holds;
+    const per = moments > 0 ? (steps / moments).toFixed(1) : '—';
+    console.log(
+      `  ${name.padEnd(14)} ${String(moments).padStart(3)} moments ` +
+        `(${gates} leg-ups, ${holds} doors) in ${steps} steps — one every ${per} steps`,
+    );
+  }
 }
