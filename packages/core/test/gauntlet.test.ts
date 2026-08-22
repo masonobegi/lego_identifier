@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { CAMPAIGN_JOBS, CARGO_HP, CHUNKS, TILE_CHARS, T_EMPTY, analyseLevel, buildCampaign, buildTower, tileAt } from '../src/index.js';
+import {
+  CAMPAIGN_JOBS,
+  CARGO_HP,
+  CHUNKS,
+  MODE_HAUL,
+  TILE_CHARS,
+  T_EMPTY,
+  analyseLevel,
+  buildCampaign,
+  buildTower,
+  campaignJob,
+  campaignJobSeed,
+  levelForMatch,
+  tileAt,
+} from '../src/index.js';
 
 /**
  * The Gauntlet had to stop being a reshuffle.
@@ -155,6 +169,24 @@ describe('the campaign job sheets', () => {
     expect(salvage.crateHp).toBeGreaterThan(0);
     expect(salvage.crateHp).toBeLessThan(CARGO_HP);
     expect(plain.crateHp).toBe(0);
+  });
+
+  it('travels as a seed no ordinary caller would ever pass', () => {
+    // The first version of this used the seeds 1, 2 and 3, and a bot test that
+    // had been building the campaign with `LocalMatch(MODE_HAUL, 3, 10)` since
+    // long before job sheets existed started getting a cracked crate. The
+    // campaign's seed had never meant anything, so every caller with one lying
+    // around was free to pass whatever it liked, and this keeps that true.
+    expect(campaignJob(0)).toBe(0);
+    for (const seed of [1, 2, 3, 7, 19, 42, 101, 33, 104729, 0x51ade, -1]) {
+      expect(campaignJob(seed), `seed ${seed} is the ordinary run`).toBe(0);
+    }
+    for (let job = 1; job < CAMPAIGN_JOBS.length; job++) {
+      expect(campaignJob(campaignJobSeed(job)), `job ${job} survives the round trip`).toBe(job);
+      expect(levelForMatch(MODE_HAUL, campaignJobSeed(job), 10).name).toContain(CAMPAIGN_JOBS[job]);
+    }
+    expect(campaignJobSeed(0), 'the plain run asks for nothing').toBe(0);
+    expect(campaignJobSeed(99), 'and neither does a job that does not exist').toBe(0);
   });
 
   it('is still climbable by a pair and still impossible alone', () => {

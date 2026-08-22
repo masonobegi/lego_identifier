@@ -23,6 +23,7 @@ import {
   levelFloors,
   modeName,
   campaignJob,
+  campaignJobSeed,
   shutterOpen,
   towerId,
   type MatchResult,
@@ -809,7 +810,7 @@ export class App {
   connect(
     intent: number,
     code = '',
-    seed = this.lobbyMode === MODE_HAUL ? this.lobbyJob : 0,
+    seed = this.lobbyMode === MODE_HAUL ? campaignJobSeed(this.lobbyJob) : 0,
   ): void {
     this.lobbyIntent = intent;
     this.audio.unlock();
@@ -1025,7 +1026,7 @@ export class App {
 
   startCouch(
     mode = this.lobbyMode,
-    seed = mode === MODE_HAUL ? this.lobbyJob : (Math.random() * 0x7fffffff) | 0,
+    seed = mode === MODE_HAUL ? campaignJobSeed(this.lobbyJob) : (Math.random() * 0x7fffffff) | 0,
     floors = this.lobbyTowerLength,
   ): void {
     this.audio.unlock();

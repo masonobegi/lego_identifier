@@ -28,6 +28,7 @@ import {
   buildCampaign,
   buildTower,
   CAMPAIGN_JOBS,
+  campaignJobSeed,
   createWorld,
   ledgeSteps,
   step as simStep,
@@ -1039,7 +1040,12 @@ function levels() {
     // exactly the claim this file exists to check. The conditions are kept out
     // of the rows a gate or a doorway lives in, and this is what proves that is
     // enough rather than merely plausible.
-    { label: 'crosswind haul', build: () => buildCampaign(CAMPAIGN_JOBS.indexOf('CROSSWIND')), mode: 0, seed: 2 },
+    {
+      label: 'crosswind haul',
+      build: () => buildCampaign(CAMPAIGN_JOBS.indexOf('CROSSWIND')),
+      mode: 0,
+      seed: campaignJobSeed(CAMPAIGN_JOBS.indexOf('CROSSWIND')),
+    },
   ];
   for (let i = 0; i < towers; i++) {
     const seed = (i + 1) * 104729;

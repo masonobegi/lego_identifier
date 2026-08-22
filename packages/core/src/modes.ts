@@ -166,9 +166,26 @@ export function levelForMatch(mode: number, seed: number, towerLength: number): 
   return mode === MODE_GAUNTLET ? buildTower(seed, towerLength) : buildCampaign(campaignJob(seed));
 }
 
+/**
+ * The seed that names a job sheet, and the job a seed names.
+ *
+ * Deliberately not the small integers 1, 2, 3. The first version was, and a
+ * test that had been building the campaign with `LocalMatch(MODE_HAUL, 3, 10)`
+ * since long before job sheets existed started getting a cracked crate — the
+ * seed had never meant anything for the campaign, so every caller that had one
+ * lying around was free to pass whatever it liked. A number nobody would ever
+ * arrive at by accident keeps that true.
+ */
+const JOB_SEED = 0x4a0b0000;
+
+export function campaignJobSeed(job: number): number {
+  return job > 0 && job < CAMPAIGN_JOBS.length ? JOB_SEED + job : 0;
+}
+
 /** Which job sheet a campaign seed names. Anything unrecognised is the plain run. */
 export function campaignJob(seed: number): number {
-  return seed > 0 && seed < CAMPAIGN_JOBS.length ? seed : 0;
+  const job = seed - JOB_SEED;
+  return job > 0 && job < CAMPAIGN_JOBS.length ? job : 0;
 }
 
 export function modeName(mode: number, seed = 0): string {
