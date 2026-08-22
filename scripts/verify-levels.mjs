@@ -841,7 +841,7 @@ export function canMakeStep(ctx, from, to) {
  * they cannot be dragged onto. So a hold room is only beaten alone if the
  * passenger comes out of the far side of it too.
  */
-function soloCanCross(ctx, from, to, tries, both = false) {
+export function soloCanCross(ctx, from, to, tries, both = false) {
   let seed = 0x5eed | 0;
   const rand = () => {
     seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;

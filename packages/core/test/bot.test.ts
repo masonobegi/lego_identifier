@@ -210,6 +210,50 @@ describe('two bots at a gate', () => {
     expect(wasted, 'ticks both of them took the same boost').toBe(0);
     expect(crossed, 'gates a bot pair got up').toBeGreaterThanOrEqual(gates.length - 2);
   }, 120_000);
+
+  /**
+   * And gets the *second* hauler up too, promptly.
+   *
+   * Getting the first one up was never the problem: over the campaign and two
+   * towers, one hauler reached the landing at 96 of 96 gates. The second half
+   * was, because a hauler climbing a six-row face is airborne the whole way, so
+   * the gate branch — which needs both feet down — never saw them, and the only
+   * thing still pulling was the general rescue rule, which asks for a rope past
+   * its rest length. Three rows up on a short diagonal is not that, so the reel
+   * switched off at the moment it was doing the work, the hauler dropped back
+   * to the ledge, and the pair started again. Measured across those 96 gates:
+   * 84 crossings, and a median crossing that took 613 ticks — ten seconds of
+   * two people fumbling one step. It is 91 and 106 ticks now.
+   */
+  it('gets the second hauler up the face rather than dropping them back', () => {
+    const level = buildCampaign();
+    const gates = gatesOf(level).slice(0, 8);
+    const ctx = { level, seed: 1, mode: MODE_HAUL };
+    const times: number[] = [];
+    for (const gate of gates) {
+      const world = createWorld(ctx);
+      const bots = [new Bot(level), new Bot(level)];
+      const col = Math.min(gate.from.x1, Math.max(gate.from.x0, Math.round((gate.to.x0 + gate.to.x1) / 2)));
+      standPair(world, [col, Math.min(gate.from.x1, col + 1)], gate.from.y);
+      for (let t = 0; t < 40 * 60; t++) {
+        step(ctx, world, [bots[0].think(world, 0), bots[1].think(world, 1)]);
+        world.events.length = 0;
+        const up = world.players.every(
+          (p) => !p.dead && p.grounded === 1 && Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1 <= gate.to.y,
+        );
+        if (up) {
+          times.push(t);
+          break;
+        }
+      }
+    }
+    expect(times.length, 'gates both haulers got up').toBeGreaterThanOrEqual(gates.length - 1);
+    times.sort((a, b) => a - b);
+    // Four seconds, against a measured median of 106 ticks and a pre-fix median
+    // of 613. Loose enough not to be a stopwatch, tight enough that the loop
+    // this was written for cannot come back unnoticed.
+    expect(times[times.length >> 1], 'median ticks to get both haulers up').toBeLessThan(240);
+  }, 120_000);
 });
 
 describe('the hold', () => {

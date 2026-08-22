@@ -245,6 +245,12 @@ def seam_rows(h):
     return {0, 1, 2, h - 3, h - 2, h - 1}
 
 
+def _standable(e):
+    """Can a hauler stand on this entity? Saws cannot be stood on; movers and
+    presses are solid platforms unless the chunk says otherwise."""
+    return e['type'] != 'saw' and e.get('solid', True)
+
+
 class C:
     def __init__(self, cid, biome, diff, h, tags=None, walls=True):
         assert (h - 9) % V_STEP == 0, (
@@ -892,14 +898,23 @@ class C:
             overlaps_rows = ey >= lo_row and ey0 <= hi_row
             overlaps_cols = ex1 >= up[1] - 1 and ex0 <= up[2] + 1
             if overlaps_rows and overlaps_cols:
-                # Slide it out of the way rather than out of the game.
+                # Slide it out of the way rather than out of the game — unless
+                # it is something you can stand on.
                 #
                 # The band a gate has to keep clear is eight columns of forty,
-                # and a saw is a pacing decision about a row — so the row is the
+                # and a blade is a pacing decision about a row, so the row is the
                 # part worth keeping. Deleting instead cost forty of the
                 # library's sixty-three blades and presses, which is most of the
                 # foundry, and it cost them silently.
-                dx = self._slide_clear(ex0, ex1, up)
+                #
+                # A press is a different animal: it is a solid platform that
+                # moves, so one parked beside a gate at the gate's own height is
+                # a step, and a lone player takes it. Sliding them was measured
+                # doing exactly that — six of the campaign's gates and two of a
+                # seeded tower's fell to one player, every one of them with a
+                # solid crusher in its rows, and the build gate named all eight.
+                # So blades slide and presses are cleared.
+                dx = None if _standable(e) else self._slide_clear(ex0, ex1, up)
                 if dx is None:
                     self.cleared.append(f"{e['type']} cleared from the gate at row {up[0]}")
                     continue

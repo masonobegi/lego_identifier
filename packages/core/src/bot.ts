@@ -473,10 +473,22 @@ export class Bot {
 
     /* --------------------------------------------------------------- reel */
     // Stranded ourselves: hanging or stuck with the partner well above.
+    //
+    // The rope-length condition is what makes this a rescue rather than a
+    // twitch, and it is wrong for exactly one case: the second half of a gate.
+    // A hauler climbing a six-row face is airborne the whole way, so the gate
+    // branch below — which only runs with both feet down — never sees them, and
+    // this was the only thing still pulling. Three rows up on a short diagonal
+    // is not a rope past its rest length, so the reel switched off at the
+    // moment it was doing the work, the hauler dropped back to the ledge and
+    // started again. Five of the campaign's sixty-two gates were still in that
+    // loop after ninety seconds of two bots, with the first hauler up and
+    // waiting on the lip the whole time.
+    const partnerOnTheLip = !mate.dead && mate.y < p.y - MAX_RISE * TILE * 0.5;
     if (
       p.grip > GRIP_MAX * 0.2 &&
       -mateRows > 2 &&
-      ropeDist > ROPE_REST * 1.05 &&
+      (partnerOnTheLip || ropeDist > ROPE_REST * 1.05) &&
       (airborne || this.stillTicks > STUCK_TICKS)
     ) {
       mask |= IN_REEL;
