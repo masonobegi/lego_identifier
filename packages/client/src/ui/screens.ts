@@ -879,7 +879,7 @@ function customiseScreen(app: App): HTMLElement {
           const has = unlocked.has(hat.id);
           return button(
             app,
-            has ? hat.name : '🔒 Locked',
+            has ? hat.name : 'Locked',
             has ? '' : hat.unlock,
             () => {
               s.hat = hat.id;
@@ -964,7 +964,12 @@ function achievementsScreen(app: App): HTMLElement {
           h(
             'div',
             {},
-            h('div', { class: 'name' }, earned.has(a.id) ? `🏆 ${a.name}` : `🔒 ${a.name}`),
+            // No padlock and no trophy. The pill on the right of the row
+            // already says which it is, so the emoji was saying it twice — and
+            // a stock glyph is the one thing on screen not drawn in the
+            // game's own hand, on a screen made entirely of hazard tape and
+            // stencils.
+            h('div', { class: 'name' }, a.name),
             h('div', { class: 'desc' }, a.description),
           ),
           h('div', { class: 'ctl' }, h('div', { class: `tag ${earned.has(a.id) ? 'ready' : ''}` }, earned.has(a.id) ? 'Earned' : 'Locked')),

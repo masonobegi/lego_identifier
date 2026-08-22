@@ -597,7 +597,15 @@ export class App {
     const items = this.focusables();
     if (items.length === 0) return;
     const primary = this.overlay.querySelector<HTMLElement>('button.btn.primary:not(:disabled)');
-    (previous >= 0 ? items[Math.min(previous, items.length - 1)] : (primary ?? items[0])).focus();
+    const onto = previous >= 0 ? items[Math.min(previous, items.length - 1)] : (primary ?? items[0]);
+    // Focusing a control inside a scrolling panel drags it into view, and on a
+    // screen taller than the window the first control can be a long way down:
+    // How to play is seven cards of prose and its first button is the key
+    // rebinder underneath all of them, so opening it scrolled straight past
+    // its own title and clipped the heading under the panel's top edge. A
+    // screen opens at the top, wherever the focus ring has to sit.
+    onto.focus({ preventScroll: true });
+    if (previous < 0) el.scrollTop = 0;
   }
 
   resume(): void {
