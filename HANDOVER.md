@@ -18,91 +18,84 @@ climb.
 
 - **A second co-op verb, the hold.** A floor plate holds a shutter open only while something
   stands on it; a plate on each side so the pair leapfrog through. Wired through the
-  reachability fill, the build gate, eight rooms, the drawing, two sound cues, the controls
-  screen and the Autohauler.
-- Three exploits the tests found before the design did: the crate can never be parked on a
-  plate (it hangs off the rope's middle and follows you); a shutter that waits for anyone
-  inside it lets one player drag a motionless partner straight through, so it **ejects**
-  instead; and **dying was a key to every door** — the revival rule was about height, so a
-  horizontal door never triggered it.
+  reachability fill, the build gate, the drawing, two sound cues, the controls screen and
+  the Autohauler.
+- **Co-op is the texture now, not a garnish.** The campaign carries **62 leg-ups and 9
+  doorways in 329 climbing steps — one every 4.6** — against 11 moments in 384 steps when
+  the judges scored it. A lone player's reachability fill gets **62 of 4146 footholds**;
+  a pair gets all 4146.
 - **The Gauntlet escalates** instead of reshuffling: named floor conditions (NO CHECKPOINT,
-  CROSSWIND, CRACKED CRATE) arriving as the tower gets taller. Level data only — no sim
-  change, no state, nothing on the wire — and forty seeded towers are checked to prove no
-  condition can make a room unclimbable.
-- **A fortnight of dailies** rather than one day, with a strip told apart in ink rather than
-  hue, a paste-able docket measured to sixty columns where nothing on it is unverifiable by
-  the person receiving it, and the crew you last hauled with on the title screen.
-- **The run names its own worst moment** — ranked in metres across a destroyed crate, a
-  betrayal and a fatal fall — on the results card, in the red used for damage.
-- **Sixteen achievement pictograms** replacing two-letter monograms (two of which were
-  identical), after five rounds of rendering and looking; and real layouts for three Steam
-  assets that were one picture stretched three ways.
-- Earlier in the same push: the solo grip-jump exploit that let **one player clear every
-  gate**; the ring-buffer bug that made **every online match fast-forward into garbage after
-  34 seconds**; the campaign no longer being the entire chunk library.
+  CROSSWIND, CRACKED CRATE) arriving as the tower gets taller.
+- **A fortnight of dailies**, a strip told apart in ink rather than hue, a paste-able
+  docket, and the crew you last hauled with on the title screen.
+- **The run names its own worst moment** on the results card — and now shows a
+  **photograph of it**, taken at the instant it happened, pinned to the card as a print.
+- Earlier in the same push: the solo grip-jump exploit that let one player clear every
+  gate; the ring-buffer bug that made every online match fast-forward into garbage after
+  34 seconds; the campaign no longer being the entire chunk library.
 
-## In flight when this was written
+## What this session found and fixed
 
-Three background workflows. Each owns a disjoint set of files; do not edit their files while
-they run.
+Three of these were silent content losses caused by the density push itself — the gates
+were eating what the rooms were painted with:
 
-| lane | run id | owns |
-|---|---|---|
-| co-op density | `wf_05173c55-2d4` | `tools/chunklib.py`, `tools/gen_chunks.py`, `packages/core/src/chunks.ts` |
-| jank: what you see | `wf_12c5e145-e4c` | `packages/client/src/**`, `packages/client/test/**` |
-| jank: what is proved | `wf_12c5e145-e4c` | `packages/core/src/**` except `chunks.ts`, `packages/core/test/**`, `scripts/verify-levels.mjs`, `scripts/e2e.mjs` |
-
-Journals live under
-`/root/.claude/projects/-home-user-lego-identifier/<session>/subagents/workflows/<run id>/journal.jsonl`;
-one `{"type":"result"}` line per finished agent.
-
-**Density** is the important one. The measured baseline it has to move, printed by
-`npm run playtest` under `CO-OP`:
-
-```
-campaign       11 moments (7 leg-ups, 4 doors) in 384 steps — one every 34.9 steps
-gauntlet 33     1 moments (1 leg-ups, 0 doors) in 127 steps — one every 127.0 steps
-gauntlet 101    2 moments (1 leg-ups, 1 doors) in 146 steps — one every 73.0 steps
-```
-
-Target is roughly one every five to eight steps. It is slow because `npm run verify:levels`
-replays every gate and hold room in the real simulation and then attacks each with a solo
-search, and more co-op moments means a longer gate.
+1. **The rope was inside the floor for the whole run.** `placeAtSpawn` sagged it 41px, and
+   `solveRope` has no rule for walking a node back out of rock. 11 of 15 nodes buried at
+   tick 0 and still buried at tick 2400. Fixed at both ends; measured 0 of 15. SIM_VERSION 24.
+2. **69 hazards were being deleted by the gates on top of them** — a gate wipes its gap and
+   slides its landing sideways, and it took the spikes with the floor and orphaned the ones
+   standing on the platform it moved (freeze_crumble shipped with two spikes hanging in
+   mid-air five columns off the ledge). Seven campaign rooms had no danger anywhere. They
+   are re-laid on a step that can hold them now: 70 of 329 steps have teeth, up from 48.
+3. **40 saws and presses were being deleted the same way.** They slide sideways out of the
+   landing band instead: the campaign has 27 saws and 13 movers, up from 8 and 5.
+4. **19 of the 60 rooms had lost their checkpoint** to the same wipe.
+5. **The route-finder is now held to the design.** Every room writes down how many leg-ups
+   and shutters it was painted with; the campaign's fill has to come back with exactly
+   those numbers (62 and 9). The old check was a ceiling of eight.
+6. **The build gate runs on every core**, as (level, slice) pairs, and reports each level as
+   its last slice lands. The solo search came out of the unit suite — three towers of it ran
+   for over an hour inside vitest, single-threaded, in a runner that cannot interrupt a
+   synchronous body.
 
 ## What is left
 
-1. **Land the three lanes**, review each report, then run the whole pipeline:
-   `npx tsc -b packages/core packages/server packages/client` · `npx vitest run` ·
-   `npm run verify:levels` · `npm run verify:server` · `npm run build && npm run web` ·
-   `npm run e2e` · `npm run shots` · `npm run desktop:payload && npm run desktop:verify`.
-2. **Update `docs/STORE-PAGE.md`.** It claims "There is one of these on every floor", which
-   is what the density lane is making true. It also does not yet mention the hold, the floor
-   conditions or the daily strip.
-3. **Re-audit.** The brief is written and ready at
-   `<scratchpad>/audit3/reaudit3.js` — same six lenses and the same rubric as the 5.0 run, so
-   the number is directly comparable. Launch with the Workflow tool by `scriptPath`.
+1. **Run the whole pipeline**: `npx tsc -b packages/core packages/server packages/client` ·
+   `npx vitest run` · `npm run verify:levels` · `npm run verify:server` ·
+   `npm run build && npm run web` · `npm run e2e` · `npm run shots` ·
+   `npm run desktop:payload && npm run desktop:verify` · `npm run playtest`.
+2. **`npm run shots`** — the screenshots are stale for the title, the HUD, the nameplates
+   and every room in the tower.
+3. **Re-audit.** The brief is written and ready at `<scratchpad>/audit3/reaudit3.js` — same
+   six lenses and the same rubric as the 5.0 run, so the number is directly comparable.
+   Launch with the Workflow tool by `scriptPath`.
 4. **Deliver the verdict**, and iterate again if it is below 8.
 
-## Ideas not started
+## Watch out for
 
-- **A photograph of the worst moment.** The client already knows the tick; snapshotting a
-  downscaled frame at that instant and printing it on the results card as a polaroid with the
-  caption would be the most shareable thing in the game. Client-side, blocked only by the jank
-  lane owning those files.
-- **A third verb, the lift**: a plate that raises a platform, chaining into the rope verbs —
-  you hold, they ride up, they brace, you reel. Deferred because mover positions are pure
-  functions of the tick and would need threading through `world`, which is invasive to do
-  while other lanes are in the same files. Task #36.
-
-## Things worth not forgetting
-
-- `world.open` (which shutters stand open) is **derived, not remembered** — recomputed at the
-  top of every tick before anything moves, deliberately absent from the snapshot and from
-  `WORLD_KEYS`. Do not add it.
+- **`npm run verify:levels` is slow** — the solo search is 7000 scripted attempts and 1500
+  random ones per gate, in the real simulation, and there are 62 gates in the campaign
+  alone. About 22 seconds a gate on this machine. It is the one claim the whole design
+  rests on, so it has not been thinned; it has been spread across cores.
+- **The Autohauler against 62 gates** has not been re-measured since the density went up.
+  It crossed 77 of 92 in the last measurement, and the 15 it missed were the reel after the
+  boost rather than the boost itself. Worth `npm run playtest`.
+- `world.open` (which shutters stand open) is **derived, not remembered** — recomputed at
+  the top of every tick, deliberately absent from the snapshot and from `WORLD_KEYS`.
 - Any new numeric world/cargo/player field **must** go in `WORLD_KEYS` / `CARGO_KEYS` /
   `PLAYER_KEYS` in `state.ts`, or online play desyncs silently. There is a test for this.
 - Bump `SIM_VERSION` on any simulation change.
-- No transcendental maths in the simulation modules — `Math.hypot` cost a test once. There is
-  a test for that too.
-- `npm run e2e` and `npm run shots` refuse to run against a build older than the sources; that
-  guard exists because both had silently reported on stale builds.
+- No transcendental maths in the simulation modules — `Math.hypot` cost a test once.
+- `npm run e2e` and `npm run shots` refuse to run against a build older than the sources.
+- **Never edit `packages/core/src/chunks.ts` by hand.** It is generated:
+  `python3 tools/gen_chunks.py packages/core/src/chunks.ts`, and the generator fails the
+  build if a hazard it was asked for has nowhere to go.
+
+## Ideas not started
+
+- **A third verb, the lift**: a plate that raises a platform, chaining into the rope verbs —
+  you hold, they ride up, they brace, you reel. Deferred because mover positions are pure
+  functions of the tick and would need threading through `world`. Task #36.
+- **Gates with a different texture**: the launch ledge is always plain floor. Bracing on ice
+  or on a conveyor while your partner jumps off you is the same verb and a different
+  problem, and both tiles already exist.
