@@ -104,6 +104,24 @@ MIN_OVERLAP = 3
 # brace is stood on air beside it, and nobody goes anywhere.
 GATE_OVERLAP = 6
 
+# How much clear floor a gate has to leave between its far side and a side wall,
+# when the near side reaches that wall too.
+#
+# A wall jump is the one move in the game that gains height with nobody else in
+# it: 520 of upward velocity off any solid tile within a finger's reach. Gates
+# are proof against it everywhere except the corners of the shaft, and
+# foundry_tap was a corner: near side and far side both ran to column 34, three
+# clear of the wall. One player ran off the near side, jumped, drifted into the
+# wall, kicked off it at 2.6 tiles of rise and came down on the far side —
+# from column 31, replayed by the build gate. Moving the far side two columns
+# in put the kick's landing spot in the gap instead, and the same room turned
+# the solo search down at every column. Four columns is still beaten; five is
+# not. The near side has to reach the wall as well, or there is no run-off into
+# the corner to begin with: seven gates in the library sit two to four columns
+# off a wall with their near side eight or ten columns clear of it, and the
+# build gate finds no way up any of them.
+WALL_JUMP_REACH = 5
+
 # How wide a shutter has to be, which the crate decides rather than the haulers.
 #
 # A hauler is 20px across and the crate is 26, in a 24px tile. So a one column
@@ -696,11 +714,24 @@ class C:
             here = (up_r, c, c + width - 1)
             if overlap(low, here) < GATE_OVERLAP:
                 continue
+            if not self._clear_of_walls(low, here):
+                continue
             if above is not None and not reachable(here, above):
                 continue
             if best is None or abs(c - up_c0) < abs(best - up_c0):
                 best = c
         return best
+
+    @staticmethod
+    def _clear_of_walls(low, up):
+        """Is a gate's far side out of wall-jump range of the shaft's corners?
+
+        See WALL_JUMP_REACH: a hauler who can run off the near side into a
+        corner comes back off the wall with height nobody gave them."""
+        for near, far in ((low[1] - 2, up[1] - 2), (W - 3 - low[2], W - 3 - up[2])):
+            if near < WALL_JUMP_REACH and far < WALL_JUMP_REACH:
+                return False
+        return True
 
     def gate(self, index):
         """Take one foothold out, so the step needs two people.
