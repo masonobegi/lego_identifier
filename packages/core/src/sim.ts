@@ -13,11 +13,11 @@ import {
   TILE,
 } from './constants.js';
 import { hazardAt } from './hazards.js';
-import { T_CHECKPOINT, T_GOAL, type Level, tileAt } from './level.js';
+import { T_CHECKPOINT, T_GOAL, T_SHUTTER, type Level, tileAt } from './level.js';
 import { MAX_RISE } from './route.js';
 import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
-import { updateHolds } from './physics.js';
+import { shutterOpen, updateHolds } from './physics.js';
 import { resolveBoosts, updatePlayer } from './player.js';
 import { placeAtSpawn } from './state.js';
 import { pushEvent } from './events.js';
@@ -155,6 +155,27 @@ function checkGoal(world: World, ctx: SimContext): void {
  * output everywhere. Nothing in here may read wall-clock time, `Math.random`,
  * or any transcendental math function.
  */
+/**
+ * Is there a shut door between a body and where it would be rescued to?
+ *
+ * Sampled along the straight line rather than traced properly: a rescue only
+ * needs to know whether the two of them are in the same room, and half a tile
+ * is finer than the narrowest shutter anyone can author.
+ */
+function doorBetween(level: Level, world: World, from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+  if (level.holdGroups === 0) return false;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const steps = Math.ceil(Math.hypot(dx, dy) / (TILE / 2));
+  for (let n = 0; n <= steps; n++) {
+    const t = steps === 0 ? 0 : n / steps;
+    const tx = Math.floor((from.x + dx * t) / TILE);
+    const ty = Math.floor((from.y + dy * t) / TILE);
+    if (tileAt(level, tx, ty) === T_SHUTTER && !shutterOpen(level, world, tx, ty)) return true;
+  }
+  return false;
+}
+
 export function step(ctx: SimContext, world: World, inputs: number[]): void {
   const level = ctx.level;
   world.tick++;
@@ -245,7 +266,15 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
       // to the checkpoint instead. Level with them or below, you get the
       // rescue, which is the version of this that makes the game forgiving
       // rather than the version that makes it pointless.
-      const lift = p.y - other.y > (MAX_RISE + 1) * TILE;
+      //
+      // The same argument applies sideways, and only one shape of level makes
+      // it. A hold room is crossed on the flat, so the height rule never fires:
+      // the second hauler walks into a spike and is rescued to their partner's
+      // shoulder on the far side of a shut door, whichever plate is or is not
+      // being stood on. Every hold room in the library fell to it, and the
+      // solo search found it by watching the passenger cross nine columns in a
+      // single tick. Dying is not a key.
+      const lift = p.y - other.y > (MAX_RISE + 1) * TILE || doorBetween(level, world, p, other);
       if (lift) {
         placeAtSpawn(level, world, world.spawnX, world.spawnY);
         pushEvent(world, EV_RESPAWN, world.spawnX, world.spawnY, i, 1);

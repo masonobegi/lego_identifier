@@ -241,6 +241,35 @@ describe('the hold', () => {
   });
 
   /**
+   * Dying is not a key.
+   *
+   * A dead hauler is put back at their partner's shoulder, unless the partner
+   * is meaningfully above where they died — a rule written so that walking into
+   * a spike could not beat a leg up. A hold room is crossed on the flat, so
+   * that rule never fired, and the second hauler could cross a shut door by
+   * dying at it. Every hold room in the library fell to this, and the search
+   * found it by watching a body move nine columns in a single tick.
+   */
+  it('does not rescue you through a shut door', () => {
+    const { level, plate, door, floor } = twoPlate(6);
+    const ctx = { level, seed: 1, mode: 0 };
+    const world = createWorld(ctx);
+    place(world, door + 4, plate, floor - 1);
+    // Slot 1 is on the near plate, holding the door; slot 0 is well past it.
+    // Kill slot 1 where it stands and let the rescue run.
+    const spawnRow = Math.floor(world.spawnY / TILE);
+    world.players[1].dead = 1;
+    world.players[1].respawn = 0;
+    for (let t = 0; t < 8; t++) {
+      step(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    const landedCol = world.players[1].x / TILE;
+    expect(landedCol, 'rescued through a shut door').toBeLessThan(door);
+    expect(Math.abs(Math.floor(world.players[1].y / TILE) - spawnRow), 'sent back to the checkpoint').toBeLessThan(4);
+  });
+
+  /**
    * The exploit that decided how a closing shutter behaves.
    *
    * Holding the door open for anyone inside it — the obvious way to guarantee
