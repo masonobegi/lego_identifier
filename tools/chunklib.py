@@ -806,9 +806,18 @@ class C:
         return self
 
     # ----------------------------------------------------------- validation
+    # Every character the level parser knows. A chunk that paints anything else
+    # compiles to TypeScript perfectly happily and then throws at runtime, on
+    # the first tower unlucky enough to draw it — `deco` takes a string and
+    # writes it through, so one typo in a decoration is a crash nobody sees
+    # until a player finds the room.
+    GLYPHS = set('.#=^v<>~*oxicCW!F:S')
+
     def check(self, is_start=False, is_goal=False):
         for i, r in enumerate(self.rows):
             assert len(r) == W, f'{self.id}: row {i} is {len(r)} wide'
+            bad = set(r) - self.GLYPHS
+            assert not bad, f'{self.id}: row {i} paints {sorted(bad)}, which the level parser has no tile for'
 
         def clear(rows, what):
             for r in rows:

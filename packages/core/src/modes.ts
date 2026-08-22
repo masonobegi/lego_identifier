@@ -3,8 +3,17 @@ import { assembleLevel, generateTower, type ChunkDef, type Level } from './level
 import { MODE_GAUNTLET, MODE_HAUL } from './types.js';
 
 /** The authored campaign, bottom to top. */
+/**
+ * The authored tower: every room except the ones held back for the Gauntlet.
+ *
+ * This used to be handed `CHUNKS` — the whole library, in library order — which
+ * meant one playthrough of The Long Haul showed a player 100% of the rooms in
+ * the game, and the endless tower and the daily could never afterwards show
+ * them a floor they had not already climbed. A second evening had nothing to be
+ * about. The rooms tagged `spare` are the ones the campaign does not open.
+ */
 export function buildCampaign(): Level {
-  return assembleLevel('campaign', 'THE LONG HAUL', CHUNKS);
+  return assembleLevel('campaign', 'THE LONG HAUL', CHUNKS.filter((c) => !c.tags?.includes('spare')));
 }
 
 /**

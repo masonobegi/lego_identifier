@@ -91,11 +91,32 @@ describe('chunk library', () => {
 });
 
 describe('assembled towers', () => {
+  /**
+   * The campaign must not be the whole library.
+   *
+   * It was: `buildCampaign` was handed `CHUNKS` and the two were byte-identical
+   * in the same order, so finishing The Long Haul once showed a player 100% of
+   * the rooms in the game, and the Gauntlet and the daily could never afterwards
+   * put a floor in front of them they had not already climbed. Every reason to
+   * open the game a second evening rested on rooms that did not exist.
+   */
+  it('keeps rooms back that the campaign never opens', () => {
+    const played = new Set(buildCampaign().chunkIds);
+    const held = CHUNKS.filter((c) => !played.has(c.id));
+    expect(held.length, 'rooms the Gauntlet can show that the campaign cannot').toBeGreaterThanOrEqual(12);
+    // And they have to be reachable from the mode that is supposed to show
+    // them: held back from the campaign, not held back from the game.
+    const seen = new Set<string>();
+    for (let i = 1; i <= 400; i++) for (const id of buildTower(i * 7919, 10).chunkIds) seen.add(id);
+    const orphans = held.filter((c) => !seen.has(c.id));
+    expect(orphans.map((c) => c.id), 'rooms no mode can ever draw').toEqual([]);
+  });
+
   it('builds the campaign with a spawn, a goal and a checkpoint per chunk', () => {
     const level = buildCampaign();
     expect(level.w).toBe(40);
     expect(level.h).toBeGreaterThan(500);
-    expect(level.checkpoints.length).toBeGreaterThanOrEqual(CHUNKS.length - 1);
+    expect(level.checkpoints.length).toBeGreaterThanOrEqual(level.chunkIds.length - 1);
     expect(level.goalY).toBeLessThan(level.spawnY);
     expect(level.chunkIds[0]).toBe('yard_start');
   });
@@ -135,7 +156,8 @@ describe('assembled towers', () => {
     // described ended.
     for (const floors of [3, 10, 20]) expect(levelFloors(buildTower(31337, floors))).toBe(floors);
     expect(levelFloors(buildTower(31337, 400))).toBe(60);
-    expect(levelFloors(buildCampaign())).toBe(CHUNKS.length - 2);
+    const campaign = buildCampaign();
+    expect(levelFloors(campaign)).toBe(campaign.chunkIds.length - 2);
   });
 
   it('never places a hazard where the spawn is', () => {
