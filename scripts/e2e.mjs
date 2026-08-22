@@ -58,6 +58,25 @@ async function waitFor(page, fn, label, timeout = 20000) {
   }
 }
 
+/**
+ * Press a key until the page agrees something happened, or give up.
+ *
+ * A keypress into a canvas game is delivered to whatever has focus at that
+ * moment, and on a loaded machine that is sometimes nothing yet. Retrying is
+ * what a person does; a fixed sleep afterwards is what a flaky test does.
+ */
+async function pressUntil(page, key, fn, timeout = 8000) {
+  const started = Date.now();
+  for (;;) {
+    await page.keyboard.press(key);
+    for (let waited = 0; waited < 600; waited += 120) {
+      await sleep(120);
+      if (await page.evaluate(fn)) return true;
+    }
+    if (Date.now() - started > timeout) return false;
+  }
+}
+
 async function clickButton(page, label) {
   const button = page.locator('button.btn', { hasText: label }).first();
   await button.waitFor({ state: 'visible', timeout: 10000 });
@@ -195,7 +214,22 @@ async function main() {
   console.log('  host :', JSON.stringify(hostState));
   console.log('  guest:', JSON.stringify(guestState));
 
-  check('the simulation advanced', hostState.tick > 400 && guestState.tick > 400, `${hostState.tick}/${guestState.tick}`);
+  // Two claims, neither of them a stopwatch. The old form of this asked for
+  // more than 400 ticks after a wait that is worth about 400 ticks, so it went
+  // red on a host that had reached 399 while its guest was on 401 — a pass and
+  // a fail on the same healthy match, decided by scheduling noise. What is
+  // actually being checked is that both ends are running and that they are
+  // running *together*.
+  check(
+    'the simulation advanced on both clients',
+    hostState.tick > 300 && guestState.tick > 300,
+    `${hostState.tick}/${guestState.tick}`,
+  );
+  check(
+    'and neither client has run away from the other',
+    Math.abs(hostState.tick - guestState.tick) < 30,
+    `${hostState.tick} vs ${guestState.tick}`,
+  );
   check('no desyncs on either client', hostState.desyncs === 0 && guestState.desyncs === 0);
   check('both clients agree on where player one is', Math.abs(hostState.px - guestState.px) < 40 && Math.abs(hostState.py - guestState.py) < 40,
     `${hostState.px.toFixed(1)},${hostState.py.toFixed(1)} vs ${guestState.px.toFixed(1)},${guestState.py.toFixed(1)}`);
@@ -208,10 +242,12 @@ async function main() {
   check('server never fell behind its tick clock', stats.droppedTicks < 30, String(stats.droppedTicks));
 
   /* -------------------------------------------------------------- menus */
-  await host.keyboard.press('Escape');
-  await sleep(400);
+  // Pressing Escape and looking 400ms later was a race with whatever the page
+  // was doing at that instant, and it lost one run in three or four on a busy
+  // machine. Press until it takes, then look.
+  const paused = await pressUntil(host, 'Escape', () => window.HAULMATES.screen === 'pause');
   await host.screenshot({ path: `${SHOTS}/07-pause.png` });
-  check('pause menu opens', await host.evaluate(() => window.HAULMATES.screen === 'pause'));
+  check('pause menu opens', paused, await host.evaluate(() => String(window.HAULMATES.screen)));
 
   await clickButton(host, 'Settings');
   await sleep(300);
@@ -349,8 +385,7 @@ async function main() {
   // so a bot two ledges up can be standing almost exactly where it started.
   check('the bot climbs the route on its own', botRun.cursor >= 2, JSON.stringify(botRun));
   check('the bot does not smash the crate straight away', botRun.hp > 40, String(Math.round(botRun.hp)));
-  await solo.keyboard.press('Escape');
-  await sleep(300);
+  await pressUntil(solo, 'Escape', () => window.HAULMATES.screen === 'pause');
   await clickButton(solo, 'Back to menu');
   await sleep(300);
 
