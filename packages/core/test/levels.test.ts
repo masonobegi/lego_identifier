@@ -15,7 +15,7 @@ import {
   type Level,
   assembleLevel,
 } from '@haulmates/core';
-import { analyse, ledgeSteps, canMakeStep, verifyLevel } from '../../../scripts/verify-levels.mjs';
+import { analyse, canHaulCrate, canMakeStep, crateFinishes, ledgeSteps, verifyLevel } from '../../../scripts/verify-levels.mjs';
 
 const GOAL_CHUNK = (c: ChunkDef): boolean => c.tags?.includes('goal') ?? false;
 const START_CHUNK = (c: ChunkDef): boolean => c.tags?.includes('start') ?? false;
@@ -250,6 +250,102 @@ describe('climbability', () => {
       expect(outcome.ok).toBe(true);
     }
   }, 240_000);
+});
+
+/**
+ * The other half of a climbable tower, and the half nothing used to look at.
+ *
+ * Every check above judges a step by where a hauler's feet end up. The run does
+ * not end at anybody's feet: it ends when the crate reaches the goal. A tower
+ * whose route a pair can climb but whose load cannot follow them is a tower
+ * that passes every gate in the repo and cannot be finished.
+ */
+describe('hauling the crate', () => {
+  it('brings the crate up every climbing step of the campaign', () => {
+    const level = buildCampaign();
+    const result = analyse(level, { coop: true });
+    const steps = ledgeSteps(level, result.route, result.standable);
+    const ctx = { level, seed: 1, mode: 0 };
+    const stranded = steps
+      .filter((s) => !canHaulCrate(ctx, s.from, s.to))
+      .map((s) => `row ${s.from.y} -> row ${s.to.y}`);
+    expect(stranded).toEqual([]);
+  }, 120_000);
+
+  /**
+   * A ceiling with a hole in it exactly one column wide.
+   *
+   * Twenty-six pixels of crate in a twenty-four pixel tile: the pair go up
+   * through it and their load does not, which is the same arithmetic that
+   * decides how wide a shutter has to be. One column is the failing case and
+   * two is the passing one, so this pins the check to the geometry rather than
+   * to whether the search happened to find a way.
+   */
+  const pinched = (holeCols: number): Level => {
+    const rows: string[] = [];
+    for (let r = 0; r < 18; r++) {
+      let s = '';
+      for (let c = 0; c < 40; c++) {
+        if (c < 2 || c >= 38) s += '#';
+        else if (r === 13) s += '#';
+        else if (r === 10) s += c >= 20 && c < 20 + holeCols ? '.' : '#';
+        else if (r <= 1) s += '#';
+        else s += '.';
+      }
+      rows.push(s);
+    }
+    const put = (r: number, c: number, glyph: string): void => {
+      rows[r] = rows[r].slice(0, c) + glyph + rows[r].slice(c + 1);
+    };
+    put(12, 5, 'S');
+    put(9, 30, 'F');
+    return assembleLevel('pinch', 'PINCH', [{ id: 'pinch', biome: 0, difficulty: 0, rows, tags: ['start'] }]);
+  };
+
+  it('reports a step the crate cannot fit through, and passes the one it can', () => {
+    const from = { y: 12, x0: 2, x1: 37 };
+    const to = { y: 9, x0: 2, x1: 37 };
+    expect(canHaulCrate({ level: pinched(1), seed: 1, mode: 0 }, from, to), 'a one-column hole').toBe(false);
+    expect(canHaulCrate({ level: pinched(2), seed: 1, mode: 0 }, from, to), 'a two-column hole').toBe(true);
+  }, 60_000);
+
+  it('ends the run when the pair arrive at the goal with the crate', () => {
+    for (const level of [buildCampaign(), buildTower(104729, 6), buildTower(31337, 8)]) {
+      const result = analyse(level, { coop: true });
+      expect(crateFinishes({ level, seed: 1, mode: 0 }, level, result), level.id).toBe(null);
+    }
+  }, 60_000);
+
+  /**
+   * A goal band wider than the crate's leash.
+   *
+   * `pairAtGoal` asks whether each hauler is touching any goal tile;
+   * `cargoAtGoal` asks how far the crate is from `level.goalX`, which is the
+   * first goal tile the builder saw. The crate is tethered to the middle of a
+   * rope that cannot exceed its own length, so on a wide enough band a pair
+   * can stand on the finish, with their load at their feet, and the run does
+   * not end and never will. Twelve columns is enough; the shipped goal is six
+   * and leaves 35 px of the allowance spare at its far end.
+   */
+  it('reports a goal the crate cannot be brought across', () => {
+    const rows: string[] = [];
+    for (let r = 0; r < 10; r++) {
+      let s = '';
+      for (let c = 0; c < 40; c++) {
+        if (c < 2 || c >= 38) s += '#';
+        else if (r === 6) s += '#';
+        else if (r === 4 && c >= 10 && c < 22) s += 'F';
+        else if (r <= 1) s += '#';
+        else s += '.';
+      }
+      rows.push(s);
+    }
+    rows[5] = `${rows[5].slice(0, 5)}S${rows[5].slice(6)}`;
+    const level = assembleLevel('wide', 'WIDE', [{ id: 'wide', biome: 0, difficulty: 0, rows, tags: ['start'] }]);
+    const result = analyse(level, { coop: true });
+    expect(result.ok).toBe(true);
+    expect(crateFinishes({ level, seed: 1, mode: 0 }, level, result)).toMatch(/does not end/);
+  });
 });
 
 describe('the co-op reachability fill', () => {

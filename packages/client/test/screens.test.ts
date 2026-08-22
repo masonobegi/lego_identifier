@@ -93,6 +93,10 @@ function fakeApp(p: Profile): App {
     version: '1.0.0',
     achievements: { earned: [] },
     sfx: { ui: () => {} },
+    input: { padCount: 0 },
+    botPartner: false,
+    lobbyMode: 0,
+    lobbyTowerLength: 10,
     net: null,
     local: null,
   } as unknown as App;
@@ -159,6 +163,28 @@ describe('the title screen', () => {
     expect(marks, 'yesterday is all it can honestly draw').toHaveLength(14);
     expect(marks.filter((c) => c.includes('delivered'))).toHaveLength(1);
     expect(marks[13], 'and tonight is still blank').toContain('missed');
+  });
+});
+
+describe('the mode picker', () => {
+  /**
+   * The blurb said twenty floors. The campaign is every room in the library
+   * that is not held back for the Gauntlet, and that stack assembles to
+   * thirty-four — so the one number a player uses to decide whether they have
+   * an evening for this was under-selling the game by fourteen floors, and had
+   * been wrong since whichever commit last moved a `spare` tag.
+   *
+   * Asserted against the assembled tower rather than against thirty-four, for
+   * the same reason the code counts it rather than stating it: the number is
+   * allowed to change, and the menu is not allowed to be the last to hear.
+   */
+  it('advertises the campaign at the height it actually assembles to', async () => {
+    const { buildScreen } = await screens();
+    const { buildCampaign, levelFloors } = await import('@haulmates/core');
+    const app = fakeApp(await profile());
+    const said = text(buildScreen(app, 'couch'));
+    expect(said).toContain(`four biomes, ${levelFloors(buildCampaign())} floors`);
+    expect(said, 'and not a number somebody typed').not.toContain('twenty floors');
   });
 });
 

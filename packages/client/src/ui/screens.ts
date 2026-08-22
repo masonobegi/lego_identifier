@@ -5,8 +5,10 @@ import {
   INTENT_QUICKPLAY,
   MODE_GAUNTLET,
   MODE_HAUL,
+  buildCampaign,
   dailyLabel,
   isValidRoomCode,
+  levelFloors,
   normaliseRoomCode,
   WORST_BETRAYAL,
   WORST_CRATE,
@@ -259,9 +261,27 @@ function dailyBlurb(app: App): string {
 
 /* ------------------------------------------------------------------ online */
 
+/**
+ * How tall the authored tower actually is, counted off the tower.
+ *
+ * The menu advertised twenty floors. The campaign is every chunk in the
+ * library that is not held back for the Gauntlet, and that stack assembles to
+ * thirty-four — so the one number a player uses to decide whether they have an
+ * evening for this was under-selling the game by fourteen floors, and would
+ * have gone on being wrong every time a room was added or a `spare` tag moved.
+ *
+ * Assembled once and kept: building the campaign costs about five milliseconds
+ * and the menu rebuilds its whole tree on every keypress.
+ */
+let campaignFloors = 0;
+function longHaulFloors(): number {
+  if (campaignFloors === 0) campaignFloors = levelFloors(buildCampaign());
+  return campaignFloors;
+}
+
 function modeSelector(app: App): HTMLElement {
   const modes: { id: number; name: string; blurb: string }[] = [
-    { id: MODE_HAUL, name: 'The Long Haul', blurb: 'The full climb: four biomes, twenty floors, one crate.' },
+    { id: MODE_HAUL, name: 'The Long Haul', blurb: `The full climb: four biomes, ${longHaulFloors()} floors, one crate.` },
     { id: MODE_GAUNTLET, name: 'The Gauntlet', blurb: 'A randomly assembled tower. Pick how tall. Regret it.' },
   ];
   return h(

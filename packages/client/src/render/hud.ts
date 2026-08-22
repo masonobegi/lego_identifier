@@ -9,7 +9,7 @@ import {
   type Level,
   type World,
 } from '@haulmates/core';
-import { biomeFor } from './palette.js';
+import { biomeFor, PLAYER_BODY, REFLECTIVE } from './palette.js';
 import { roundRect } from './actors.js';
 
 export interface HudState {
@@ -45,6 +45,26 @@ export interface HudState {
 }
 
 const FONT = 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+
+/**
+ * The bottom-centre stack, measured up from the bottom edge.
+ *
+ * The crate bar and the hint were placed independently and their boxes crossed
+ * by four pixels — the hint's panel ran to 92 above the bottom and the crate
+ * bar's started at 96 — so the two of them drew a seam through each other's
+ * border whenever a hint was up on a damaged crate. That pair is not rare: the
+ * hints that fire late in a run are the ones about the crate.
+ *
+ * The hint keeps this height whether or not the crate bar is showing. A panel
+ * that jumps when a second panel appears is worse than a panel sitting a
+ * little high.
+ */
+const CRATE_BAR_TOP = 96;
+const CRATE_BAR_H = 46;
+const HINT_H = 40;
+/** Enough daylight between two dark panels to read as two panels. */
+const PANEL_GAP = 10;
+const HINT_TOP = CRATE_BAR_TOP + PANEL_GAP + HINT_H;
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -84,7 +104,13 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, s: 
 }
 
 function drawTopBar(ctx: CanvasRenderingContext2D, vw: number, s: HudState): void {
-  const biome = biomeFor(s.level.biome[Math.max(0, Math.min(s.level.h - 1, Math.floor(s.world.players[0].y / TILE)))]);
+  // The caption names the biome you are standing in, and it read player one's
+  // row whoever you were: the second hauler on an online run climbed into the
+  // Foundry under a bar that still said THE YARD, and there is nothing else on
+  // screen that names the place. Couch co-op has no local index — one screen,
+  // one pair of eyes — and falls back to player one, which is what it means.
+  const eye = s.world.players[Math.max(0, s.localIndex)];
+  const biome = biomeFor(s.level.biome[Math.max(0, Math.min(s.level.h - 1, Math.floor(eye.y / TILE)))]);
   const deathRow = s.world.players[0].deaths + s.world.players[1].deaths > 0;
   panel(ctx, 18, 16, 286, deathRow ? 74 : 62);
 
@@ -175,8 +201,9 @@ function drawCargoWarning(ctx: CanvasRenderingContext2D, vw: number, vh: number,
   if (hp > 0.999) return;
   const barW = 240;
   const x = vw / 2 - barW / 2;
-  const y = vh - 74;
-  panel(ctx, x - 12, y - 22, barW + 24, 46);
+  const top = vh - CRATE_BAR_TOP;
+  const y = top + 22;
+  panel(ctx, x - 12, top, barW + 24, CRATE_BAR_H);
   ctx.font = `900 12px ${FONT}`;
   ctx.fillStyle = hp < 0.34 ? '#ff4d6d' : '#8c97b6';
   ctx.textAlign = 'center';
@@ -312,12 +339,12 @@ function drawHint(ctx: CanvasRenderingContext2D, vw: number, vh: number, s: HudS
   ctx.font = `800 15px ${FONT}`;
   const width = ctx.measureText(s.hint).width + 44;
   const x = vw / 2 - width / 2;
-  const y = vh - 132;
-  panel(ctx, x, y, width, 40);
+  const y = vh - HINT_TOP;
+  panel(ctx, x, y, width, HINT_H);
   ctx.fillStyle = '#e8ecf7';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(s.hint, vw / 2, y + 21);
+  ctx.fillText(s.hint, vw / 2, y + HINT_H / 2 + 1);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.restore();
@@ -361,12 +388,31 @@ export function drawPlayerTags(
     ctx.font = `900 ${isLocal ? 13 : 12}px ${FONT}`;
     ctx.textAlign = 'center';
     const textW = widths[i];
-    ctx.globalAlpha = isLocal ? 0.95 : 0.75;
-    ctx.fillStyle = 'rgba(9,12,22,0.7)';
-    roundRect(ctx, -textW / 2 - 8, -14, textW + 16, 19, 6);
+
+    // Ink plate, reflective label, and the hauler's colour as a band across
+    // the top of it.
+    //
+    // The name used to be set in the player's own colour on a plate at 0.7
+    // alpha, which left both halves of the contrast ratio at the mercy of
+    // whatever the hauler was standing in front of. Measured over the Yard's
+    // spawn: HI-VIS ORANGE came out at 2.36:1, SIGNAL RED at 1.47:1 and
+    // MANDATORY BLUE at 1.09:1 — and couch co-op, which has no local hauler
+    // and so draws both tags at the dimmer alpha, ran those at 1.33, 1.15 and
+    // 1.36. Three of the eight vests were illegible on three of the four
+    // biomes. Opaque ink under a white label is the pairing every other piece
+    // of signage in this game uses and it holds at 17.8:1 against all of them;
+    // the colour still says which hauler is which, from the band rather than
+    // from the letters, where its own legibility is nobody's problem.
+    ctx.globalAlpha = isLocal ? 1 : 0.86;
+    ctx.fillStyle = PLAYER_BODY;
+    roundRect(ctx, -textW / 2 - 9, -21, textW + 18, 23, 5);
     ctx.fill();
+    // Inset by the corner radius, so the band ends exactly where the plate's
+    // straight top edge does and never overhangs the round.
     ctx.fillStyle = s.colours[i];
-    ctx.fillText(label, 0, 0);
+    ctx.fillRect(-textW / 2 - 4, -21, textW + 8, 3);
+    ctx.fillStyle = REFLECTIVE;
+    ctx.fillText(label, 0, -6);
     if (isLocal) {
       ctx.fillStyle = s.colours[i];
       ctx.beginPath();

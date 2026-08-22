@@ -9,8 +9,9 @@ import {
   type World,
 } from '@haulmates/core';
 import { drawCargo, drawMovers, drawSaws } from '../src/render/actors.js';
+import { drawPlayerTags, type HudState } from '../src/render/hud.js';
 import { drawDynamicTiles } from '../src/render/tiles.js';
-import { CARGO_COLOURS, applyHighContrast, biomeFor } from '../src/render/palette.js';
+import { BIOMES, CARGO_COLOURS, PLAYER_COLOURS, applyHighContrast, biomeFor } from '../src/render/palette.js';
 
 /**
  * A canvas that keeps the paint instead of the picture.
@@ -30,6 +31,8 @@ interface Paint {
 class Recorder {
   fills: Paint[] = [];
   strokes: Paint[] = [];
+  /** Lettering, kept apart from the fills: a label's colour is half a ratio. */
+  texts: (Paint & { text: string })[] = [];
   globalAlpha = 1;
   fillStyle = '';
   strokeStyle = '';
@@ -68,6 +71,17 @@ class Recorder {
   createLinearGradient(): { addColorStop: () => void } {
     return { addColorStop: (): void => {} };
   }
+
+  fillText(text: string): void {
+    this.texts.push({ text, style: this.fillStyle, alpha: this.globalAlpha });
+  }
+
+  /** Wide enough to be a plausible label; nothing here measures a picture. */
+  measureText(text: string): { width: number } {
+    return { width: text.length * 7 };
+  }
+
+  arcTo(): void {}
 
   translate(): void {}
   rotate(): void {}
@@ -136,7 +150,7 @@ function cargoAlphas(reducedFlash: boolean): number[] {
   const out: number[] = [];
   for (const time of [0, 0.05, 0.1, 0.15, 0.2, 0.25]) {
     const { rec, ctx } = recorder();
-    drawCargo(ctx, world, world, 1, time, reducedFlash);
+    drawCargo(ctx, level, world, world, 1, time, reducedFlash);
     const wash = rec.fills.filter((f) => f.style === CARGO_COLOURS.stencil && f.alpha < 0.99);
     expect(wash.length, 'a crate this hurt should paint its warning').toBe(1);
     out.push(wash[0].alpha);
@@ -237,6 +251,93 @@ describe('high contrast', () => {
         expect(p.hazard, `${p.name}: hazard reads as concrete`).not.toBe(p.tileBody);
         expect(p.hazard, `${p.name}: hazard reads as an outline`).not.toBe(p.ink);
       }
+    }
+  });
+});
+
+/* ------------------------------------------------------------- nameplates */
+
+function channel(v: number): number {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function luminance(rgb: number[]): number {
+  return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+}
+
+function rgb(hex: string): number[] {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+}
+
+function over(top: number[], alpha: number, under: number[]): number[] {
+  return top.map((v, i) => v * alpha + under[i] * (1 - alpha));
+}
+
+function contrast(a: number[], b: number[]): number {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** Everything a pass over the two nameplates paints. */
+function nameplates(localIndex: number): Recorder {
+  const { level, world } = crumblingWorld();
+  const { rec, ctx } = recorder();
+  const hud = {
+    world,
+    level,
+    localIndex,
+    names: ['BRAVE MARGE', 'AUTOHAULER'] as [string, string],
+    colours: [PLAYER_COLOURS[0].main, PLAYER_COLOURS[6].main] as [string, string],
+  } as unknown as HudState;
+  drawPlayerTags(ctx, hud, 1);
+  return rec;
+}
+
+describe('nameplates', () => {
+  /**
+   * A hauler's name used to be set in that hauler's own vest colour on a plate
+   * at 0.7 alpha, which left both halves of the ratio at the mercy of whatever
+   * they happened to be standing in front of. Over the Yard: HI-VIS ORANGE at
+   * 2.36:1, SIGNAL RED at 1.47:1, MANDATORY BLUE at 1.09:1 — and couch co-op,
+   * which has no local hauler and drew both tags at the dimmer alpha, ran those
+   * at 1.33, 1.15 and 1.36. Three of the eight vests were illegible against
+   * three of the four biomes, and which three depended on the cosmetic the
+   * player had picked.
+   *
+   * Asserted against every biome's paper rather than against one, because the
+   * thing that failed was a pairing that only holds on some backgrounds.
+   */
+  it('reads at 4.5:1 against every biome, whichever hauler you are', () => {
+    // Player one's tag is drawn first, so its plate is the first fill of the
+    // pass and its label the first piece of lettering; -1 is couch co-op,
+    // where neither hauler is the local one and both tags take the dimmer
+    // alpha, which is the case that used to be worst.
+    for (const localIndex of [0, 1, -1]) {
+      const rec = nameplates(localIndex);
+      const [plate] = rec.fills;
+      const [label] = rec.texts;
+      for (const biome of BIOMES) {
+        const under = over(rgb(plate.style), plate.alpha, rgb(biome.paper));
+        const ink = over(rgb(label.style), label.alpha, under);
+        expect(contrast(ink, under), `${biome.name}: the name on its plate`).toBeGreaterThan(4.5);
+      }
+    }
+  });
+
+  /**
+   * The colour still has to say which hauler is which — it is the only thing
+   * that does — so it moves to a band on the plate rather than leaving the
+   * picture. This is the assertion that stops a future tidy-up dropping it and
+   * leaving two identical white labels above two identical black silhouettes.
+   */
+  it('still wears both vest colours, and not in the lettering', () => {
+    const rec = nameplates(0);
+    const painted = new Set(rec.fills.map((f) => f.style));
+    expect(painted, 'player one is still identifiable').toContain(PLAYER_COLOURS[0].main);
+    expect(painted, 'and so is player two').toContain(PLAYER_COLOURS[6].main);
+    for (const colour of PLAYER_COLOURS) {
+      expect(rec.texts.map((t) => t.style), 'no vest colour is load-bearing text').not.toContain(colour.main);
     }
   });
 });

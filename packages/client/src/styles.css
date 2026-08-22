@@ -120,7 +120,12 @@ html, body {
   /* Warm ink, not navy. A blue dim over this game's warm concrete turns the
      whole backdrop grey, and a grey backdrop behind a paper panel is mush. */
   background: radial-gradient(120% 90% at 50% 0%, rgba(27, 23, 20, 0.42), rgba(12, 10, 8, 0.82));
-  backdrop-filter: blur(2px);
+  /* No backdrop-filter. A blur here has to re-read the whole window every time
+     the canvas behind it paints, and behind these menus the canvas is painting
+     a live tower sixty times a second: measured at 1080p, a 2px blur cost 12ms
+     of every frame — two thirds of a frame budget — and made the title screen
+     slower than the game it is advertising. Under a dim that reaches 82% it was
+     buying almost nothing to look at, either. */
 }
 
 /* -------------------------------------------------------------------- logo */

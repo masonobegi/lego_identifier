@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   Bot,
   GRIP_MAX,
+  IN_JUMP,
   IN_LEFT,
   IN_RESTART,
   IN_RIGHT,
@@ -20,9 +21,11 @@ import {
   T_SHUTTER,
   analyseLevel,
   assembleLevel,
+  boosting,
   buildCampaign,
   buildTower,
   createWorld,
+  ledgeSteps,
   planRoute,
   step,
   BOOST_RISE_TILES,
@@ -145,6 +148,64 @@ function holdRooms(level: Level): { door: number[]; plates: { x: number; y: numb
   }
   return out;
 }
+
+/** The steps on the route with the middle foothold taken out. */
+function gatesOf(level: Level): { from: { y: number; x0: number; x1: number }; to: { y: number; x0: number; x1: number } }[] {
+  const { route, standable } = analyseLevel(level, { coop: true });
+  return ledgeSteps(level, route, standable).filter((s) => s.from.y - s.to.y > MAX_RISE);
+}
+
+/**
+ * A gate is the one place in the game where two identical haulers cannot both
+ * do the right thing.
+ *
+ * `resolveBoosts` refuses to make a platform of anybody shoving off themselves
+ * on the same tick, so a pair who both take the offer both get an ordinary
+ * jump and both land back where they started — and two bots reading the same
+ * world reach that state together. Measured over twenty seconds under each of
+ * the 92 gates on the campaign and two towers: 1084 ticks in which each of them
+ * was standing on the other's braced shoulders, and both of them pressed JUMP
+ * on all 1084, for 86 boosts and a lot of standing about.
+ */
+describe('two bots at a gate', () => {
+  it('never spends both haulers on the same boost', () => {
+    const level = buildCampaign();
+    const gates = gatesOf(level).slice(0, 8);
+    expect(gates.length).toBe(8);
+    const ctx = { level, seed: 1, mode: MODE_HAUL };
+    let braced = 0;
+    let wasted = 0;
+    let crossed = 0;
+    for (const gate of gates) {
+      const world = createWorld(ctx);
+      const bots = [new Bot(level), new Bot(level)];
+      const col = Math.min(gate.from.x1, Math.max(gate.from.x0, Math.round((gate.to.x0 + gate.to.x1) / 2)));
+      standPair(world, [col, Math.min(gate.from.x1, col + 1)], gate.from.y);
+      for (let t = 0; t < 40 * 60; t++) {
+        const masks = [bots[0].think(world, 0), bots[1].think(world, 1)];
+        if (boosting(world, 0) && boosting(world, 1)) {
+          braced++;
+          if ((masks[0] & IN_JUMP) !== 0 && (masks[1] & IN_JUMP) !== 0) wasted++;
+        }
+        step(ctx, world, masks);
+        world.events.length = 0;
+        const up = world.players.every(
+          (p) => !p.dead && p.grounded === 1 && Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1 <= gate.to.y,
+        );
+        if (up) {
+          crossed++;
+          break;
+        }
+      }
+    }
+    // The pair have to actually get into the standoff for the count to mean
+    // anything: zero wasted boosts out of zero offers is what the broken build
+    // would score if the bots never lined up at all.
+    expect(braced, 'ticks with each hauler braced beside the other').toBeGreaterThan(0);
+    expect(wasted, 'ticks both of them took the same boost').toBe(0);
+    expect(crossed, 'gates a bot pair got up').toBeGreaterThanOrEqual(6);
+  }, 120_000);
+});
 
 describe('the hold', () => {
   /**

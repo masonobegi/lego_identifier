@@ -14,6 +14,14 @@
  *     real simulation — both players, the rope, the crate, moving hazards —
  *     by searching a small space of plausible inputs. A step no input script
  *     can make is a level bug, not a player skill issue.
+ *
+ *  3. **The crate.** Both of the above judge a step by where a hauler's feet
+ *     end up, and the run does not end at anybody's feet — it ends when the
+ *     crate reaches the goal. So every climbing step is replayed a third time
+ *     asking whether the load can be brought up after them, and the goal is
+ *     replayed asking the simulation itself whether it calls the run finished.
+ *     See the block above `canHaulCrate` for what that covers and what it does
+ *     not.
  */
 import {
   analyseLevel,
@@ -32,9 +40,12 @@ import {
   CARGO_H,
   GRIP_MAX,
   PLAYER_H,
+  ROPE_MAX,
   ROPE_NODES,
+  T_GOAL,
   T_PLATE,
   T_SHUTTER,
+  tileAt,
 } from '../packages/core/dist/index.js';
 
 /**
@@ -523,6 +534,274 @@ function canHold(ctx, cross) {
   return true;
 }
 
+/* ------------------------------------------------------- hauling the crate */
+
+/**
+ * Everything above this line proves a pair can climb. None of it proves the
+ * thing the game is named after can be brought with them.
+ *
+ * The crate is present in every replay in this file — it hangs off the middle
+ * of the rope, it is swung about by every jump, and it is ignored by every
+ * success test, all of which read a hauler's feet. So a tower could pass this
+ * gate end to end with a crate that cannot leave the first ledge, and the run
+ * only ends when the crate reaches the goal. That is a tower that ships broken
+ * with a green light on it.
+ *
+ * What the two checks below prove, precisely:
+ *
+ *  - `canHaulCrate` — for every climbing step on the route, if the pair are
+ *    standing on the upper ledge and the crate is on the lower one, some
+ *    plausible way of hauling brings the crate up after them without breaking
+ *    it. That is the state the tower is in on the tick the second hauler tops
+ *    out, and it is where a crate gets left behind or wedged.
+ *
+ *  - `crateFinishes` — with the pair standing anywhere they can touch the goal
+ *    and the crate at their feet, the *simulation itself* reports the run
+ *    finished. Not a restatement of the rule: `simStep` is what is asked, so
+ *    the two halves of the win condition cannot drift apart from the check.
+ *
+ * What they do not prove, which matters as much:
+ *
+ *  - Each step starts from a full-health crate, so this is a per-step claim,
+ *    not a claim about one continuous ascent. A tower every one of whose steps
+ *    costs the crate a little is not caught here; `npm run playtest` is what
+ *    measures accumulated damage across a run.
+ *  - The pair are placed on the upper ledge rather than arriving there, so
+ *    nothing here says the crate survives the *climb* — only that it can be
+ *    hauled up afterwards.
+ *  - Hold rooms are crossed on the flat and so are not climbing steps. The
+ *    crate goes through those doorways beside the haulers, and the doorway
+ *    tests in packages/core/test/levels.test.ts are what keep them wide enough
+ *    for it.
+ */
+
+/** Ticks a haul gets before it is called impossible. Measured on the campaign:
+ *  the median lift takes 26 of them and the slowest takes 147. */
+const HAUL_BUDGET = 420;
+/** Ticks the crate has to stay up before it counts as up, so a crate flung
+ *  over the lip by a rope snap and dropped straight back is not a pass. */
+const HAUL_SETTLE = 12;
+
+/**
+ * The verbs a pair have for lifting a crate, in the order they are tried.
+ *
+ * The rope only offers four, so this is not a sample of a space — it is the
+ * space. Walking away from the crate's column is the winch: the line goes
+ * taut over the lip and the crate comes up it. Standing still is what a short
+ * step needs, because the rope's own length clamp does the work unaided.
+ * Bracing gives the line a fixed end to pull against. Hopping is the one that
+ * matters on a two-row step, where the rope is slack, nothing is pulling, and
+ * the crate simply sits there until somebody puts a jolt into it — measured:
+ * eight of the campaign's 329 steps are haulable no other way.
+ */
+const HAUL_STYLES = [];
+for (const hop of [0, 1]) {
+  for (const anchor of [-1, 0, 1]) HAUL_STYLES.push({ anchor, hop });
+}
+
+/**
+ * Stand the pair on the ledge above with the crate still on the ledge below.
+ *
+ * The rope is strung down to the crate and back rather than laid flat between
+ * the haulers: the middle node is where the crate hangs from, and starting it
+ * level with two people who are three rows higher is a rope that snaps taut on
+ * the first tick and throws the crate up the wall for free.
+ */
+function placeHaul(world, to, pairCol, from, crateCol) {
+  const py = (to.y + 1) * TILE - PLAYER_H / 2 - 1;
+  const px = pairCol * TILE + TILE / 2;
+  for (let i = 0; i < 2; i++) {
+    const p = world.players[i];
+    p.x = px + (i === 0 ? -12 : 12);
+    p.y = py;
+    p.vx = 0;
+    p.vy = 0;
+    p.grounded = 1;
+    p.dead = 0;
+    p.gripping = 0;
+    p.coyote = 0;
+    p.jumpBuffer = 0;
+    p.jumpHeld = 0;
+    p.grip = GRIP_MAX;
+  }
+  const cx = crateCol * TILE + TILE / 2;
+  const cy = (from.y + 1) * TILE - CARGO_H / 2 - 1;
+  for (let i = 0; i < ROPE_NODES; i++) {
+    const t = i / (ROPE_NODES - 1);
+    const sag = 4 * t * (1 - t);
+    world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t + (cx - px) * sag;
+    world.ropeY[i] = py + (cy - py) * sag;
+    world.ropePX[i] = world.ropeX[i];
+    world.ropePY[i] = world.ropeY[i];
+  }
+  world.cargo.x = cx;
+  world.cargo.y = cy;
+  world.cargo.px = cx;
+  world.cargo.py = cy;
+  world.cargo.hp = 100;
+  world.cargo.calm = 0;
+  world.cargo.hurt = 0;
+  world.cargo.grounded = 0;
+  world.restartTimer = 0;
+}
+
+const clampCol = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Where to stand the pair and set the crate down for one step.
+ *
+ * The crate goes under the columns the two ledges share, because that is the
+ * part of the lower ledge a pair climbing the step were standing on. The pair
+ * go above it, and then half a rope to either side — the winch needs somewhere
+ * to walk to, and on a wide ledge the columns directly overhead give it none.
+ */
+function haulPlacements(from, to) {
+  const lo = Math.max(from.x0, to.x0);
+  const hi = Math.min(from.x1, to.x1);
+  const under = lo <= hi ? Math.round((lo + hi) / 2) : clampCol(Math.round((to.x0 + to.x1) / 2), from.x0, from.x1);
+  const reach = Math.floor(ROPE_MAX / 2 / TILE);
+  const out = [];
+  for (const crateCol of new Set([under, clampCol(to.x0, from.x0, from.x1), clampCol(to.x1, from.x0, from.x1)])) {
+    for (const pairCol of new Set([
+      clampCol(crateCol, to.x0, to.x1),
+      clampCol(crateCol - reach, to.x0, to.x1),
+      clampCol(crateCol + reach, to.x0, to.x1),
+    ])) {
+      out.push({ crateCol, pairCol });
+    }
+  }
+  return out;
+}
+
+/** Can the pair bring the crate up onto the ledge they have just climbed to? */
+export function canHaulCrate(ctx, from, to) {
+  for (const { crateCol, pairCol } of haulPlacements(from, to)) {
+    // Away from the crate first: that is the direction that tensions the rope,
+    // and it is the one that works on all but a handful of steps.
+    const away = pairCol >= crateCol ? 1 : -1;
+    for (const dir of [away, -away, 0]) {
+      for (const style of HAUL_STYLES) {
+        const world = createWorld(ctx);
+        placeHaul(world, to, pairCol, from, crateCol);
+        // Let the rope find its own shape before anybody pulls on it. Without
+        // this the first tick's correction is measured as crate speed and the
+        // crate is charged impact damage for a launch it never had.
+        for (let t = 0; t < 20; t++) {
+          simStep(ctx, world, [0, 0]);
+          world.events.length = 0;
+        }
+        let up = 0;
+        for (let t = 0; t < HAUL_BUDGET; t++) {
+          const walk = dir > 0 ? IN_RIGHT : dir < 0 ? IN_LEFT : 0;
+          const jump = style.hop === 1 && t % 40 < 12 ? IN_JUMP : 0;
+          const masks = [walk | jump, walk | jump];
+          if (style.anchor >= 0) masks[style.anchor] = IN_GRIP;
+          simStep(ctx, world, masks);
+          world.events.length = 0;
+          if (world.restartTimer > 0 || world.cargo.hp <= 0) break;
+          const foot = Math.floor((world.cargo.y + CARGO_H / 2 - 1) / TILE);
+          up = foot <= to.y ? up + 1 : 0;
+          if (up >= HAUL_SETTLE) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** Every cell a hauler can stand in and touch the goal from. */
+function goalCells(level, result) {
+  const out = [];
+  for (let y = 0; y < level.h; y++) {
+    for (let x = 0; x < level.w; x++) {
+      if (!result.standable[y * level.w + x]) continue;
+      let touching = false;
+      for (let oy = -1; oy <= 1 && !touching; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          if (tileAt(level, x + ox, y + oy) === T_GOAL) {
+            touching = true;
+            break;
+          }
+        }
+      }
+      if (touching) out.push({ x, y });
+    }
+  }
+  return out;
+}
+
+/**
+ * Does the simulation actually end the run when the pair arrive with the crate?
+ *
+ * Every pair of cells the two of them could be standing in, not one, because
+ * the two halves of the win condition are not measured against the same thing.
+ * `pairAtGoal` asks whether each hauler is touching any goal tile; the crate is
+ * asked for its distance from `level.goalX`, which is the *first* goal tile the
+ * level builder saw. On a six-wide goal band those disagree by a hundred and
+ * twenty pixels, and the crate is tethered to the middle of a rope that cannot
+ * exceed its own length — so the further along the band a pair stand, the less
+ * of GOAL_CARGO_REACH is left for the crate. Measured on the campaign: the
+ * worst standing spot leaves the crate 134.7 px out of the 170 allowed. That is
+ * thirty-five pixels of margin nobody chose, in a number that lives in a chunk
+ * one authoring change away from being wider.
+ *
+ * Cells further apart than the rope is long are skipped: the pair cannot be in
+ * that state, so failing them would be failing a fiction.
+ */
+export function crateFinishes(ctx, level, result) {
+  const cells = goalCells(level, result);
+  if (cells.length === 0) return 'no cell a hauler can stand in touches the goal';
+  for (const a of cells) {
+    for (const b of cells) {
+      const ay = (a.y + 1) * TILE - PLAYER_H / 2 - 1;
+      const by = (b.y + 1) * TILE - PLAYER_H / 2 - 1;
+      const ax = a.x * TILE + TILE / 2;
+      const bx = b.x * TILE + TILE / 2;
+      if (Math.abs(ax - bx) > ROPE_MAX || Math.abs(ay - by) > ROPE_MAX) continue;
+      const world = createWorld(ctx);
+      world.players[0].x = ax;
+      world.players[0].y = ay;
+      world.players[1].x = bx;
+      world.players[1].y = by;
+      for (const p of world.players) {
+        p.vx = 0;
+        p.vy = 0;
+        p.grounded = 1;
+        p.dead = 0;
+        p.gripping = 0;
+        p.grip = GRIP_MAX;
+      }
+      for (let i = 0; i < ROPE_NODES; i++) {
+        const t = i / (ROPE_NODES - 1);
+        world.ropeX[i] = ax + (bx - ax) * t;
+        world.ropeY[i] = ay + (by - ay) * t;
+        world.ropePX[i] = world.ropeX[i];
+        world.ropePY[i] = world.ropeY[i];
+      }
+      // At their feet, which is where a crate that has just been hauled up ends
+      // up, and the only placement that is not begging the question.
+      world.cargo.x = (ax + bx) / 2;
+      world.cargo.y = (ay + by) / 2 + (PLAYER_H - CARGO_H) / 2;
+      world.cargo.px = world.cargo.x;
+      world.cargo.py = world.cargo.y;
+      world.cargo.hp = 100;
+      world.restartTimer = 0;
+      let done = false;
+      for (let t = 0; t < HAUL_BUDGET && !done; t++) {
+        simStep(ctx, world, [0, 0]);
+        world.events.length = 0;
+        done = world.finished === 1;
+      }
+      if (!done) {
+        const dx = world.cargo.x - level.goalX;
+        const dy = world.cargo.y - level.goalY;
+        return `haulers at cols ${a.x} and ${b.x} row ${a.y} reach the goal with the crate and the run does not end (crate ${Math.round(Math.sqrt(dx * dx + dy * dy))}px from the goal)`;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Can the pair get from one ledge to the next?
  *
@@ -671,6 +950,12 @@ export function verifyLevel(level, mode, seed, options = {}) {
       failures.push(where);
       if (failures.length >= 5) break;
     }
+    // And the crate after them. A step two people can climb and their load
+    // cannot is a step that ends the run, because the run ends at the crate.
+    if (options.crate !== false && !canHaulCrate(ctx, s.from, s.to)) {
+      failures.push(`${where} — THE CRATE CANNOT BE HAULED UP IT`);
+      if (failures.length >= 5) break;
+    }
     // A gate one player can climb is not a gate, and the tower it is in does
     // not need two people however many of them it has.
     if (gate && options.solo !== false) {
@@ -698,6 +983,13 @@ export function verifyLevel(level, mode, seed, options = {}) {
     if (failures.length >= 5) break;
   }
 
+  // Last of all, the finish itself: the only claim in this file made by asking
+  // the simulation whether the run is over rather than by reading positions.
+  if (options.crate !== false && failures.length < 5) {
+    const unfinished = crateFinishes(ctx, level, result);
+    if (unfinished) failures.push(unfinished);
+  }
+
   return {
     ok: failures.length === 0,
     level: level.id,
@@ -716,12 +1008,12 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
   const campaign = buildCampaign();
   const r = verifyLevel(campaign, 0, 1);
   console.log(
-    `campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps and ${r.holds} hold rooms replayed`,
+    `campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps and ${r.holds} hold rooms replayed, crate hauled up every one of them`,
   );
   if (!r.ok) {
     bad++;
     if (r.reason) console.log(`  ${r.reason}`);
-    for (const f of r.failures ?? []) console.log(`  unmakeable step: ${f}`);
+    for (const f of r.failures ?? []) console.log(`  ${f}`);
   }
 
   const towers = Number(process.env.TOWER_SAMPLES ?? 12);
@@ -731,18 +1023,18 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
     const t = verifyLevel(level, 1, seed);
     const label = `tower ${String(seed).padStart(7)}`;
     console.log(
-      `${label}  ${t.ok ? 'OK  ' : 'FAIL'}  ${t.reached}/${t.total} footholds reachable, ${t.steps} climbing steps and ${t.holds} hold rooms replayed`,
+      `${label}  ${t.ok ? 'OK  ' : 'FAIL'}  ${t.reached}/${t.total} footholds reachable, ${t.steps} climbing steps and ${t.holds} hold rooms replayed, crate hauled up every one of them`,
     );
     if (!t.ok) {
       bad++;
-      for (const f of t.failures ?? []) console.log(`  unmakeable step: ${f}`);
+      for (const f of t.failures ?? []) console.log(`  ${f}`);
       if (t.reason) console.log(`  ${t.reason}`);
     }
   }
 
   if (bad > 0) {
-    console.error(`\n${bad} level(s) cannot be climbed.`);
+    console.error(`\n${bad} level(s) cannot be climbed, or cannot be finished with the crate.`);
     process.exit(1);
   }
-  console.log('\nEvery tower is climbable.');
+  console.log('\nEvery tower is climbable, and the crate can be brought up all of it.');
 }

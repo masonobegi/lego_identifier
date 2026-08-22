@@ -12,6 +12,7 @@ import {
   type World,
   moverX,
   moverY,
+  pointSolid,
   sawX,
   sawY,
 } from '@haulmates/core';
@@ -44,8 +45,44 @@ function tensionColour(t: number): string {
   return t < 0.86 ? '#FFC800' : STENCIL_RED;
 }
 
+/** How far a node may be moved to find air. A tile and a half; past that it is in a wall. */
+const ROPE_SURFACE_REACH = 36;
+/** Probe spacing. Fine enough that the rope sits on the paint rather than above it. */
+const ROPE_SURFACE_STEP = 3;
+
+/**
+ * Where a rope node is drawn, given the solver is allowed to leave it inside
+ * the tower.
+ *
+ * `placeAtSpawn` rests the rope in a slack arc, and that arc's sag is forty-one
+ * pixels — further than a hauler's centre is from their own feet — so on every
+ * floor a pair is ever put down on, the middle of the rope starts underneath
+ * it. Measured at the campaign spawn: eleven of fifteen nodes inside solid tile
+ * on the first tick, the lowest of them twenty-nine pixels under the floor.
+ * Nor does it work itself free. The solver's rule is that a blocked node stays
+ * where it is, which can stop a node entering a wall but can never walk one
+ * out of it, so the same eleven were still buried ten seconds later. The rope
+ * is the line the eye follows in this game, and it was drawn sawn through the
+ * ground at the start of every run, at every checkpoint reset, and for as long
+ * afterwards as the pair stood where they were put.
+ *
+ * A drawn correction rather than a solved one: a rope lying along the floor it
+ * is being dragged over is the honest picture of where the load is hanging
+ * from, and the physics of a rope already inside a floor are not a thing worth
+ * making the simulation carry.
+ */
+function surfaceY(level: Level, world: World, x: number, y: number): number {
+  if (!pointSolid(level, world, x, y)) return y;
+  for (let d = ROPE_SURFACE_STEP; d <= ROPE_SURFACE_REACH; d += ROPE_SURFACE_STEP) {
+    if (!pointSolid(level, world, x, y - d)) return y - d;
+    if (!pointSolid(level, world, x, y + d)) return y + d;
+  }
+  return y;
+}
+
 export function drawRope(
   ctx: CanvasRenderingContext2D,
+  level: Level,
   world: World,
   prev: World,
   alpha: number,
@@ -59,8 +96,13 @@ export function drawRope(
   const xs: number[] = [];
   const ys: number[] = [];
   for (let i = 0; i < ROPE_NODES; i++) {
-    xs.push(lerp(prev.ropeX[i], world.ropeX[i], alpha));
-    ys.push(lerp(prev.ropeY[i], world.ropeY[i], alpha));
+    const x = lerp(prev.ropeX[i], world.ropeX[i], alpha);
+    const y = lerp(prev.ropeY[i], world.ropeY[i], alpha);
+    xs.push(x);
+    // Both ends are pinned to a hauler's hands and are left where the pin puts
+    // them: a hauler standing in a crusher is inside geometry themselves, and
+    // a rope end that let go of them to find air would read as a broken rope.
+    ys.push(i === 0 || i === ROPE_NODES - 1 ? y : surfaceY(level, world, x, y));
   }
 
   const stroke = (width: number, style: string, offset = 0): void => {
@@ -106,6 +148,7 @@ export function drawRope(
 
 export function drawCargo(
   ctx: CanvasRenderingContext2D,
+  level: Level,
   world: World,
   prev: World,
   alpha: number,
@@ -119,12 +162,17 @@ export function drawCargo(
   const health = Math.max(0, c.hp) / CARGO_HP;
   const shake = c.shake;
 
-  // Tether from the middle of the rope down to the crate.
+  // Tether from the middle of the rope down to the crate, off the same node
+  // the rope was drawn through — the mid node is the deepest point of the sag
+  // and so the one most often left underground, and a tether that started
+  // below the floor while the rope it hangs off lay on top of it would be two
+  // drawings of one knot.
   const mid = (ROPE_NODES - 1) >> 1;
+  const midX = lerp(prev.ropeX[mid], world.ropeX[mid], alpha);
   ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 2.6;
   ctx.beginPath();
-  ctx.moveTo(lerp(prev.ropeX[mid], world.ropeX[mid], alpha), lerp(prev.ropeY[mid], world.ropeY[mid], alpha));
+  ctx.moveTo(midX, surfaceY(level, world, midX, lerp(prev.ropeY[mid], world.ropeY[mid], alpha)));
   ctx.lineTo(x, y - CARGO_H / 2);
   ctx.stroke();
 

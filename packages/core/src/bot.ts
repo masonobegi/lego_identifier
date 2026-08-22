@@ -215,6 +215,15 @@ const HOLD_PATIENCE = 600;
  * the route for a couple of seconds, and comes back to the plate.
  */
 const HOLD_RELIEF = 120;
+/**
+ * Ticks slot one holds the brace at a gate before taking the boost itself.
+ *
+ * Long enough that a person who has braced and is lining themselves up is not
+ * shoved out of the way, short enough that a partner who has walked off to make
+ * a cup of tea does not end the run. Four seconds, the same figure and the same
+ * argument as CRATE_PATIENCE.
+ */
+const GATE_PATIENCE = 240;
 
 /**
  * A room with a shutter in it: where its door stands, and where its plates are.
@@ -310,6 +319,8 @@ export class Bot {
   private holding = false;
   /** Ticks spent holding position for a partner, so patience can run out. */
   private waitTicks = 0;
+  /** Ticks spent offering a gate boost neither hauler has taken. */
+  private gateWait = 0;
   /** Ticks since the route cursor last advanced. */
   private stallTicks = 0;
   /** Highest route cursor reached, so shuffling backwards does not reset the clock. */
@@ -372,6 +383,7 @@ export class Bot {
     this.stillTicks = 0;
     this.anchoring = false;
     this.ropeWait = 0;
+    this.gateWait = 0;
     this.leap = null;
     this.leapFor = -1;
     this.steerWait = 0;
@@ -541,7 +553,27 @@ export class Bot {
         }
         return mask;
       }
-      if (boosting(world, index)) {
+      // Both of them braced beside each other is not two boosts, it is none.
+      //
+      // `resolveBoosts` refuses to make a platform of anybody who is shoving
+      // off themselves on the same tick, so two haulers who both press JUMP
+      // both get an ordinary jump — four and a half rows against a gate cut to
+      // six — and both land back where they started. Two bots reach that state
+      // together and stay in it, because they are the same code reading the
+      // same world: measured on a six-row gate, of 3600 ticks 2156 had both of
+      // them pressing JUMP and 22 had one, for one boost, no crossing, and a
+      // pair still standing on the lower ledge after the full minute.
+      //
+      // So slot one holds the brace and lets slot zero go up first. The same
+      // settled-rather-than-fair rule the takeoff gate uses, and it falls the
+      // right way for a person too: they are always slot zero, so the bot is
+      // the half of the pair that offers its shoulders. Bounded like every
+      // other wait in here, because a partner who never climbs must not be a
+      // life sentence — a person who braces and waits gets a bot that goes up
+      // first after four seconds and then hauls them up after it.
+      const standoff = index === 1 && boosting(world, index) && boosting(world, 1 - index);
+      this.gateWait = standoff ? this.gateWait + 1 : 0;
+      if (boosting(world, index) && !(standoff && this.gateWait <= GATE_PATIENCE)) {
         // Braced, beside us, and paying for it. Go.
         this.stallTicks = 0;
         if (this.jumpTicks === 0 && this.jumpCooldown === 0) {

@@ -283,8 +283,8 @@ export class Renderer {
 
     if (options.showGhostTrail) this.drawTrails(ctx, input);
 
-    drawRope(ctx, world, prev, alpha, this.time);
-    drawCargo(ctx, world, prev, alpha, this.time, options.reducedFlash);
+    drawRope(ctx, level, world, prev, alpha, this.time);
+    drawCargo(ctx, level, world, prev, alpha, this.time, options.reducedFlash);
     for (let i = 0; i < 2; i++) {
       const colour = PLAYER_COLOURS[input.colours[i] % PLAYER_COLOURS.length];
       drawPlayer(ctx, world, prev, i, alpha, colour, input.hats[i], this.time);
@@ -552,8 +552,8 @@ export class Renderer {
     drawDynamicTiles(this.ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1, options);
     drawMovers(this.ctx, level, world.tick, 0, palette);
     drawSaws(this.ctx, level, world.tick, 0, this.time, palette);
-    drawRope(this.ctx, world, prev, 0, this.time);
-    drawCargo(this.ctx, world, prev, 0, this.time, options.reducedFlash);
+    drawRope(this.ctx, level, world, prev, 0, this.time);
+    drawCargo(this.ctx, level, world, prev, 0, this.time, options.reducedFlash);
     for (let i = 0; i < 2; i++) {
       drawPlayer(this.ctx, world, prev, i, 0, PLAYER_COLOURS[i], i === 0 ? 1 : 0, this.time);
     }
