@@ -45,10 +45,11 @@ together, and the build fails if a pair cannot replay every gate in the real sim
 > generator. See *Level design rules*.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
-nobody is around, a hand-authored campaign of thirty-two floors and a kilometre of tower,
-an endless seeded one built from the same pool, and a daily haul —
-one procedurally assembled tower per calendar day, the same one for everybody, gone at
-midnight. Built to ship on Steam.
+nobody is around, a hand-authored campaign of thirty-four floors and well over a kilometre
+of tower, an endless seeded one drawn from the same sixty-room library — twenty-four of
+which the campaign never opens, so it still has floors to show you afterwards — and a
+daily haul: one assembled tower per calendar day, the same one for everybody, gone at
+midnight, with a fortnight of them kept behind it. Built to ship on Steam.
 
 ![Gameplay](docs/screenshots/gameplay.png)
 
