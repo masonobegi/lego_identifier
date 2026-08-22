@@ -57,6 +57,20 @@ were eating what the rooms were painted with:
    its last slice lands. The solo search came out of the unit suite — three towers of it ran
    for over an hour inside vitest, single-threaded, in a runner that cannot interrupt a
    synchronous body.
+7. **A press beside a gate was a step.** Sliding a gate's entities out of its airspace
+   instead of deleting them was right for blades and wrong for presses, which are solid
+   platforms that move. Eight gates stopped being gates; the build gate named all eight.
+8. **An updraught in a gate's gap was a free lift.** CROSSWIND paints wind into every
+   fourth row of the shaft, and wind is 1550 up against gravity's 2400. A bounce pad two
+   rows above a launch ledge does the same. Rooms now write down which rows a two-person
+   moment lives in, and no condition may add anything to them.
+9. **The second hauler was falling back down the gate.** One of them reached the landing at
+   96 of 96 gates and the pair only completed 84, because the reel switched off the moment
+   the rope was not past its rest length — which is exactly the middle of a six-row climb.
+   91 of 96 now, and the median crossing went from 613 ticks to **106**.
+10. **The simulation is twice as fast.** `hazardAt` was 37% of the profile because every
+    query asked all forty moving parts where they were. They carry the rows they can reach
+    now. 13.4us a tick to 6.7us.
 
 ## What is left
 
@@ -77,9 +91,10 @@ were eating what the rooms were painted with:
   random ones per gate, in the real simulation, and there are 62 gates in the campaign
   alone. About 22 seconds a gate on this machine. It is the one claim the whole design
   rests on, so it has not been thinned; it has been spread across cores.
-- **The Autohauler against 62 gates** has not been re-measured since the density went up.
-  It crossed 77 of 92 in the last measurement, and the 15 it missed were the reel after the
-  boost rather than the boost itself. Worth `npm run playtest`.
+- **`npm run playtest` prints a ceiling as well as a floor.** The five hopeful policies all
+  jump on a cadence, so with seventy-one two-person moments they mostly measure luck; the
+  `two Autohaulers` row is the game played by something that knows the verbs — 255 of the
+  campaign's 1179 rows in three minutes, six checkpoints, no crates lost, worst stall 27s.
 - `world.open` (which shutters stand open) is **derived, not remembered** — recomputed at
   the top of every tick, deliberately absent from the snapshot and from `WORLD_KEYS`.
 - Any new numeric world/cargo/player field **must** go in `WORLD_KEYS` / `CARGO_KEYS` /
