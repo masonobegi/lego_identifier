@@ -352,6 +352,22 @@ export function generateTower(seed: number, pool: ChunkDef[], length: number): C
     out.push(chosen);
     lastId = chosen.id;
   }
+
+  // Every tower needs at least one two-person step in it.
+  //
+  // Only some chunks carry a gate, so a short run could pick none of them and
+  // hand out a tower a single player could climb — six of twenty-five seeded
+  // towers did, which makes the Gauntlet a mode where whether you need your
+  // friend depends on the seed. If the run came out without one, swap a gated
+  // chunk in over the middle of it, where the difficulty ramp is already
+  // heading somewhere and a sudden two-person move is not the first thing that
+  // happens to you.
+  const gated = body.filter((c) => c.tags?.includes('gate'));
+  if (gated.length > 0 && !out.some((c) => c.tags?.includes('gate'))) {
+    const at = 1 + Math.floor((out.length - 1) / 2);
+    out[Math.min(at, out.length - 1)] = rng.pick(gated);
+  }
+
   out.push(rng.pick(goals));
   return out;
 }

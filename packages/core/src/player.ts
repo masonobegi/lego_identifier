@@ -37,6 +37,11 @@ import {
   WALL_JUMP_X,
   WALL_JUMP_Y,
   WIND_ACCEL,
+  BOOST_COST,
+  BRACE_REGEN_SHARE,
+  BOOST_REACH,
+  BOOST_RISE,
+  BOOST_SCALE,
 } from './constants.js';
 import { approach } from './math.js';
 import {
@@ -55,6 +60,7 @@ import {
   EV_BOUNCE,
   EV_EMOTE,
   EV_GRIP,
+  EV_BOOST,
   EV_JUMP,
   EV_LAND,
   EV_STEP,
@@ -106,6 +112,27 @@ function inWind(level: Level, x: number, y: number): boolean {
  * The rope is applied outside this function so that both players have already
  * moved before the constraint is solved.
  */
+/**
+ * Is this hauler standing on their partner's braced shoulders?
+ *
+ * Deliberately strict about *where*: beside them and level with them, not
+ * anywhere within a rope length. A boost you can get by accident is a boost
+ * that fires halfway through an ordinary jump and throws you into a ceiling,
+ * and one you have to line up is a thing the two of you do on purpose and can
+ * see each other doing.
+ *
+ * The brace has to be grounded. Clinging to a wall by your fingertips is not a
+ * platform, and letting it count made the highest reach in the game something
+ * one player could set up alone against any wall.
+ */
+export function boosting(world: World, index: number): boolean {
+  const p = world.players[index];
+  const mate = world.players[1 - index];
+  if (mate.dead || mate.gripping !== 1 || mate.grounded !== 1) return false;
+  if (mate.grip < BOOST_COST) return false;
+  return Math.abs(mate.x - p.x) <= BOOST_REACH && Math.abs(mate.y - p.y) <= BOOST_RISE;
+}
+
 export function updatePlayer(level: Level, world: World, index: number, input: number): void {
   const p = world.players[index];
 
@@ -171,6 +198,18 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       mdx * mdx + mdy * mdy > ROPE_REST * ROPE_REST;
     if (!grippy && p.grounded !== 1) p.grip -= GRIP_DRAIN * DT;
     else if (hanging) p.grip -= GRIP_DRAIN * HANG_DRAIN_SHARE * DT;
+    // Braced on your own two feet with nobody hanging off you: you get it back.
+    //
+    // Without this a brace could never recover, because the bar only refilled
+    // when you let go — and a boost costs a fifth of it. Five fumbled attempts
+    // at a gate and the pair was stuck under it permanently, with nothing on
+    // screen to say why and no way back: they would have to die on purpose to
+    // reset, and dying on purpose is not a mechanic, it is a bug report. It
+    // costs nothing to stand still on solid ground, so standing still on solid
+    // ground is how you get your hands back.
+    else if (p.grounded === 1 && p.grip < GRIP_MAX) {
+      p.grip = Math.min(GRIP_MAX, p.grip + GRIP_REGEN * BRACE_REGEN_SHARE * DT);
+    }
     if (p.grip <= 0) {
       p.grip = 0;
       p.gripping = 0;
@@ -227,7 +266,17 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
     if (p.coyote > 0) {
       p.jumpBuffer = 0;
       p.coyote = 0;
-      p.vy = JUMP_VELOCITY;
+      // A leg up off a braced partner: the one thing in this game two people
+      // can do that one cannot. See BOOST_SCALE for why it had to be invented
+      // rather than found — the rope, on its own, only ever took things away.
+      const lift = boosting(world, index) ? BOOST_SCALE : 1;
+      p.vy = JUMP_VELOCITY * lift;
+      if (lift > 1) {
+        const brace = world.players[1 - index];
+        brace.grip = Math.max(0, brace.grip - BOOST_COST);
+        world.boosts++;
+        pushEvent(world, EV_BOOST, p.x, p.y, index, 0);
+      }
       pushEvent(world, EV_JUMP, p.x, p.y, index, 0);
     } else if (wall !== 0) {
       p.jumpBuffer = 0;

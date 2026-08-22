@@ -160,6 +160,43 @@ export const CARGO_SHUFFLE = 190;
  * Ticks before a second betrayal can be counted. A yank hard enough to rip
  * somebody off a ledge is one incident, not one per frame of the fall.
  */
+/**
+ * The leg-up: how much higher you go when you jump off a braced partner.
+ *
+ * This exists because the rope did not do anything. Measured before it: a
+ * hauler with a partner braced beside them, or braced on a perch above them,
+ * crossed a chasm of exactly the same width as a hauler on their own — six
+ * tiles either way, at every launch column, run-up, hold and reel the search
+ * could try. Every metre of a game called "a two-player co-op disaster about a
+ * rope" was reachable by one person, and the second player was cargo with
+ * opinions. The co-op reachability fill agreed: 2787 cells solo, 2787 together.
+ *
+ * A rope cannot fix that on its own. Reeling pulls you *toward* your partner,
+ * so it can never take you anywhere they could not already stand, and a taut
+ * rope against an anchor is a leash whichever way you run. What two people have
+ * that one does not is a second pair of hands to stand on. So: brace, and your
+ * partner goes up half again as high as they can alone, which is the difference
+ * between a three-row step and a five-row one, and it is the only way in the
+ * game to gain a metre you could not have gained by yourself.
+ *
+ * It costs the brace real grip, so it is a resource rather than a free verb,
+ * and the crate takes the swing.
+ */
+export const BOOST_SCALE = 1.5;
+/**
+ * How fast a hauler braced on solid ground gets their grip back, as a share of
+ * the ordinary regeneration rate. Slower than letting go, because letting go is
+ * still the quicker way to recover — but not zero, which is what it was, and
+ * which stranded a pair under a gate the moment they had fumbled it five times.
+ */
+export const BRACE_REGEN_SHARE = 0.55;
+/** How close you have to be to your braced partner to get a leg up, in pixels. */
+export const BOOST_REACH = 40;
+/** ...and how level with them. */
+export const BOOST_RISE = 30;
+/** What the brace pays for it. Roughly a fifth of a full grip meter. */
+export const BOOST_COST = 42;
+
 export const BETRAYAL_DEBOUNCE = 45;
 
 /**
@@ -225,7 +262,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 17;
+export const SIM_VERSION = 18;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;

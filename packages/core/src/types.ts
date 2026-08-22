@@ -97,6 +97,14 @@ export interface World {
    * headline stat of the funniest screen in the game was noise.
    */
   yankHold: number;
+  /**
+   * Times somebody went up off their partner's shoulders.
+   *
+   * Counted because it is the only thing in the run that could not have
+   * happened with one player, which makes it the honest measure of whether a
+   * pair actually played together or merely took turns being in the way.
+   */
+  boosts: number;
   cargoBreaks: number;
   events: SimEvent[];
 }
@@ -125,6 +133,8 @@ export const EV_RESTART = 14;
 export const EV_STEP = 15;
 export const EV_CARGO_LAND = 16;
 export const EV_REEL = 17;
+/** A hauler launched off a braced partner. The only co-op verb that gains height. */
+export const EV_BOOST = 18;
 
 export const MODE_HAUL = 0;
 export const MODE_GAUNTLET = 1;

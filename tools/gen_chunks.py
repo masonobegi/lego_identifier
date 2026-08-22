@@ -47,6 +47,10 @@ V_STEP = 3
 # The measurement says three columns; authoring uses two, so the route always
 # has a column of slack and never needs a frame-perfect launch.
 LAUNCH_REACH = 2
+# How far a hauler can be reeled up a wall by a partner braced on the lip.
+# Mirrors REEL_CLIMB_TILES in packages/core/src/route.ts, which is what decides
+# whether the build gate believes a rope gate is passable.
+REEL_CLIMB = 8
 
 
 # How many columns of the lower foothold must work as a launch position.
@@ -143,6 +147,7 @@ class C:
         self.path = []          # [(row, c0, c1)] bottom-to-top, the guaranteed route
         self.protected = set()  # cells decoration must never touch
         self.skipped = []       # hazards that had nowhere to go, reported at the end
+        self.gates = set()      # path indices reached only by hauling on the rope
 
     # ------------------------------------------------------------- painting
     def put(self, r, c, s):
@@ -490,6 +495,110 @@ class C:
             self.protected.add((r + 1, c))
         return self
 
+    def _gate_column(self, index):
+        """Where the far side of a gate at `index` would have to go, or None.
+
+        The far side has two masters: it must sit over the near side, because a
+        boosted jump is nearly vertical, and it must still be one ordinary jump
+        under the foothold above it. In a serpentine those two pull in opposite
+        directions — six rows apart is two strides sideways — so most steps
+        cannot carry a gate at all."""
+        if not (1 <= index and index + 2 < len(self.path)):
+            return None
+        low = self.path[index]
+        up_r, up_c0, up_c1 = self.path[index + 2]
+        width = up_c1 - up_c0 + 1
+        lo = max(LO, 2)
+        hi = min(HI, W - 3 - (width - 1))
+        above = self.path[index + 3] if index + 3 < len(self.path) else None
+        best = None
+        for c in range(lo, hi + 1):
+            here = (up_r, c, c + width - 1)
+            if overlap(low, here) < MIN_OVERLAP:
+                continue
+            if above is not None and not reachable(here, above):
+                continue
+            if best is None or abs(c - up_c0) < abs(best - up_c0):
+                best = c
+        return best
+
+    def gate(self, index):
+        """Take one foothold out, so the step needs two people.
+
+        This is the hole that was at the middle of the game. `analyseLevel` can
+        answer "could ONE player reach this cell", and it has a second mode that
+        adds what a pair can do. The difference between the two fills is exactly
+        the set of places you cannot go alone, and on the finished campaign that
+        set was **empty**: 2787 cells solo, 2787 together. Every metre of a game
+        called "a two-player co-op disaster about a rope" was reachable by one
+        person with a passenger. Measured rather than assumed — a full input
+        sweep found a lone hauler crossing exactly the same six-tile chasm as a
+        pair with one of them braced, and reaching exactly the same five-row
+        shelf, from every launch column, run-up, hold and reel it could try.
+
+        The fix was a new verb rather than a new shape (see BOOST_SCALE), and
+        this is the shape that asks for it: the middle foothold of three simply
+        removed, leaving six clear rows. Alone that is one row past the highest
+        shelf anybody can reach. Together it is: one of you braces, the other
+        goes up off their shoulders, then braces on the lip while the first
+        hauls up the rope. Both co-op verbs, in order, and no way to fake it.
+
+        Deliberately no pillar in the gap. The first version stood one there for
+        the second hauler to climb, which is exactly the wall a lone player
+        wall-jumps straight up.
+
+        Called last, because it rewrites `self.path` and every other authoring
+        call is indexed off it."""
+        # Which step is gateable depends on where the serpentine happens to be
+        # when it gets there, so the index is a preference rather than an
+        # instruction: a chunk asks for a gate about here and gets one at the
+        # nearest step that can carry it.
+        for candidate in sorted(range(1, len(self.path) - 2), key=lambda i: abs(i - index)):
+            if self._gate_column(candidate) is not None:
+                index = candidate
+                break
+        else:
+            self.skipped.append(f'gate near path[{index}]')
+            return self
+        low = self.path[index]
+        mid_r = self.path[index + 1][0]
+        up = self.path[index + 2]
+
+        # Wipe the middle foothold and anything hanging off it.
+        for r in (mid_r - 1, mid_r, mid_r + 1):
+            for c in range(2, W - 2):
+                self.rows[r][c] = '.'
+
+        # The two survivors have to sit under one another, because a boosted
+        # jump goes up rather than along — and two footholds six rows apart in a
+        # serpentine are two strides apart sideways, which is nowhere near. So
+        # the upper one moves, solved against the lower one it must sit over and
+        # against the one above it that must still be an ordinary jump away.
+        up_r, up_c0, up_c1 = up
+        width = up_c1 - up_c0 + 1
+        lo = max(LO, 2)
+        hi = min(HI, W - 3 - (width - 1))
+        above = self.path[index + 3] if index + 3 < len(self.path) else None
+        best = self._gate_column(index)
+        for c in range(up_c0, up_c1 + 1):
+            self.rows[up_r][c] = '.'
+        for c in range(best, best + width):
+            self.rows[up_r][c] = '='
+        self._protect(up_r, best, best + width - 1)
+        up = (up_r, best, best + width - 1)
+        self.path[index + 2] = up
+
+        climb_rows = low[0] - up[0]
+        assert climb_rows == 2 * V_STEP, (
+            f'{self.id}: a {climb_rows} row gate is not what removing one '
+            f'foothold makes')
+
+        self.path = self.path[:index + 1] + self.path[index + 2:]
+        self.gates.add(index + 1)
+        if 'gate' not in self.tags:
+            self.tags.append('gate')
+        return self
+
     def sweep(self, index, period=200, phase=0, reach=None, side=1):
         """A blade that crosses the route, by rule rather than by eye.
 
@@ -600,9 +709,15 @@ class C:
             assert reachable((1, TOP_C0, TOP_C1), (0, BOT_C0, BOT_C1)), (
                 'the shared seam landings cannot be climbed between')
 
-        # Consecutive footholds must be within one jump of each other.
-        for (r0, a0, a1), (r1, b0, b1) in zip(self.path, self.path[1:]):
+        # Consecutive footholds must be within one jump of each other — or,
+        # where the route is deliberately gated, within one reel.
+        for i, ((r0, a0, a1), (r1, b0, b1)) in enumerate(zip(self.path, self.path[1:])):
             up = r0 - r1
+            if i + 1 in self.gates:
+                assert V_STEP < up <= REEL_CLIMB, (
+                    f'{self.id}: a {up} row gate at rows {r0}->{r1} is either '
+                    f'jumpable alone or past what a reel can do')
+                continue
             assert up == V_STEP, (
                 f'{self.id}: {up} row step between footholds at rows {r0} and {r1} '
                 f'(every step must be exactly {V_STEP})')
@@ -621,6 +736,8 @@ class C:
         # The goal chunk caps the tower: its top landing is a ceiling nobody
         # climbs through, so it is exempt.
         for i in range(1, len(self.path) - (1 if is_goal else 0)):
+            if i in self.gates:
+                continue
             r = self.path[i][0]
             for c in self.band(i, self.BODY_MARGIN):
                 assert self.rows[r][c] in self.PASS_THROUGH, (
@@ -712,6 +829,7 @@ c.saw(x=30, y=22, r=1, ax=-20, ay=0, period=230, phase=60)
 c.wall_spikes(8, -1, 2)
 c.hazard(4, '^', side=-1, length=3).underhang(6, side=-1, length=3)
 c.sweep(4, period=240)
+c.gate(3)
 chunks.append(c.check())
 
 # ================================================== BIOME 1 — THE FOUNDRY ====
@@ -744,6 +862,7 @@ c.ledge(28, 2, 4, '#', '~')
 c.hazard(3, '^', side=1, length=2).hazard(7, '^', side=-1, length=2)
 c.underhang(5, length=3).underhang(9, side=-1, length=2)
 c.sweep(3, period=200, phase=60)
+c.gate(5)
 chunks.append(c.check())
 
 c = C('foundry_saws', 1, 2, 33)
@@ -799,6 +918,7 @@ c.wall_spikes(12, -1, 2)
 c.hazard(2, '^', side=1, length=3).hazard(6, '^', side=-1, length=3)
 c.underhang(4, length=3).underhang(8, side=-1, length=3)
 c.sweep(7, period=195, side=-1)
+c.gate(4)
 chunks.append(c.check())
 
 c = C('freeze_saws', 2, 3, 33)
@@ -864,6 +984,7 @@ c.restyle([3], 'i')
 c.hazard(2, '^', side=1, length=3).hazard(5, '^', side=-1, length=3)
 c.hazard(8, '^', side=1, length=3).underhang(6, length=4)
 c.sweep(2, period=170).crusher(5, period=160, side=-1)
+c.gate(6)
 chunks.append(c.check())
 
 c = C('spire_goal', 3, 0, 24, tags=['goal'])

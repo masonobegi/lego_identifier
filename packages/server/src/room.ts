@@ -300,6 +300,7 @@ export class Room {
       .u32(w.players[1].deaths)
       .u32(w.cargoBreaks)
       .u32(w.betrayals)
+      .u32(w.boosts)
       .u32(w.bonds)
       .u32(w.checkpoint + 1);
     this.broadcast(msg.finish());

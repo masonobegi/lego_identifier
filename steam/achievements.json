@@ -67,6 +67,24 @@
     },
     {
       "order": 8,
+      "apiName": "FIRST_BOOST",
+      "displayName": "Leg Up",
+      "description": "Send your partner somewhere neither of you could reach alone.",
+      "hidden": false,
+      "iconAchieved": "achievements/first_boost.jpg",
+      "iconUnachieved": "achievements/first_boost_locked.jpg"
+    },
+    {
+      "order": 9,
+      "apiName": "BOOST_100",
+      "displayName": "Human Scaffolding",
+      "description": "Take or give a hundred boosts.",
+      "hidden": false,
+      "iconAchieved": "achievements/boost_100.jpg",
+      "iconUnachieved": "achievements/boost_100_locked.jpg"
+    },
+    {
+      "order": 10,
       "apiName": "ANCHOR_500",
       "displayName": "Load Bearing Friend",
       "description": "Spend five hundred moments braced while your partner swings.",
@@ -75,7 +93,7 @@
       "iconUnachieved": "achievements/anchor_500_locked.jpg"
     },
     {
-      "order": 9,
+      "order": 11,
       "apiName": "GAUNTLET_10",
       "displayName": "Ten Floors Up",
       "description": "Clear a Gauntlet of ten floors.",
@@ -84,7 +102,7 @@
       "iconUnachieved": "achievements/gauntlet_10_locked.jpg"
     },
     {
-      "order": 10,
+      "order": 12,
       "apiName": "GAUNTLET_20",
       "displayName": "Twenty Floors Up",
       "description": "Clear a Gauntlet of twenty floors.",
@@ -93,7 +111,7 @@
       "iconUnachieved": "achievements/gauntlet_20_locked.jpg"
     },
     {
-      "order": 11,
+      "order": 13,
       "apiName": "SPEEDRUN",
       "displayName": "Express Delivery",
       "description": "Finish The Long Haul in under twelve minutes.",
@@ -102,7 +120,7 @@
       "iconUnachieved": "achievements/speedrun_locked.jpg"
     },
     {
-      "order": 12,
+      "order": 14,
       "apiName": "NO_DEATHS",
       "displayName": "Suspiciously Competent",
       "description": "Finish a run without either of you dying.",
@@ -111,7 +129,7 @@
       "iconUnachieved": "achievements/no_deaths_locked.jpg"
     },
     {
-      "order": 13,
+      "order": 15,
       "apiName": "ONE_KILOMETRE",
       "displayName": "A Kilometre Of Regret",
       "description": "Climb one thousand metres in total.",
@@ -120,7 +138,7 @@
       "iconUnachieved": "achievements/one_kilometre_locked.jpg"
     },
     {
-      "order": 14,
+      "order": 16,
       "apiName": "MARATHON",
       "displayName": "Still Friends",
       "description": "Play twenty five runs.",
@@ -174,6 +192,16 @@
       "order": 5,
       "apiName": "betrayals",
       "displayName": "Partners yanked off ledges",
+      "type": "int",
+      "min": 0,
+      "max": 10000000,
+      "default": 0,
+      "incrementOnly": true
+    },
+    {
+      "order": 6,
+      "apiName": "boosts",
+      "displayName": "Boosts given and taken",
       "type": "int",
       "min": 0,
       "max": 10000000,

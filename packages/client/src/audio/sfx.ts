@@ -13,6 +13,7 @@ import {
   EV_LAND,
   EV_RESPAWN,
   EV_RESTART,
+  EV_BOOST,
   EV_ROPE_YANK,
   EV_STEP,
   GROUND_ICE,
@@ -71,6 +72,17 @@ export class Sfx {
           gain: 0.05 * g,
           bus,
         });
+        return;
+      }
+      case EV_BOOST: {
+        // A heave: the grunt of the brace under you and the whoop of going up.
+        // Deliberately unlike the jump it replaces, because the whole job of
+        // this sound is to tell a pair that what just happened was a *different
+        // thing* and they did it on purpose.
+        e.tone({ freq: 160, to: 70, dur: 0.18, type: 'sawtooth', gain: 0.13 * g, send: 0.25, bus });
+        e.tone({ freq: 330, to: 880, dur: 0.28, type: 'triangle', gain: 0.12 * g, bus });
+        e.tone({ freq: 495, to: 1320, dur: 0.26, type: 'sine', gain: 0.07 * g, at: e.now + 0.04, bus });
+        e.noise({ freq: 900, to: 2600, q: 1.4, dur: 0.22, gain: 0.07 * g, bus });
         return;
       }
       case EV_GRIP: {

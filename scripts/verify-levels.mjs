@@ -25,6 +25,8 @@ import {
   TILE,
   IN_GRIP,
   IN_JUMP,
+  IN_REEL,
+  MAX_RISE,
   IN_LEFT,
   IN_RIGHT,
   CARGO_H,
@@ -186,6 +188,92 @@ function canCross(ctx, from, to, mover) {
 }
 
 /**
+ * Can the pair get up a gate — the six-row step with no foothold in the middle?
+ *
+ * Nothing about this is symmetric, which is why it needs its own replay. One
+ * hauler braces; the other goes up off their shoulders, which is the only move
+ * in the game that gains height two people have and one does not. Then the
+ * roles swap: whoever is up top braces on the lip and the one still down there
+ * hauls themselves up the rope. Both co-op verbs, in that order, and the gate
+ * checks that a pair can actually do it rather than trusting the fill.
+ *
+ * Measured before the boost existed: a lone hauler reached the same five-row
+ * shelf and crossed the same six-tile chasm as a pair with one of them braced,
+ * from every launch column, run-up, hold and reel the search could try. Six
+ * rows is one past what anybody manages alone and four inside what a boost
+ * does, so this is neither a lie nor a frame-perfect move.
+ */
+function canGate(ctx, from, to) {
+  const on = (p, ledge) => {
+    const px = Math.floor(p.x / TILE);
+    const py = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
+    return py === ledge.y && px >= ledge.x0 && px <= ledge.x1;
+  };
+  // Launch from under the target, not from anywhere on the ledge. A boosted
+  // jump is nearly vertical, so the only columns that can work are the ones the
+  // far side is actually above — and on a wide near-side ledge those are a
+  // couple out of a dozen, which a general sample of six across the whole ledge
+  // will miss more often than not.
+  const lo = Math.max(from.x0, to.x0 - 1);
+  const hi = Math.min(from.x1, to.x1 + 1);
+  const under = [];
+  for (let x = lo; x <= hi; x++) under.push(x);
+  const columns = under.length > 0 ? under : launchColumns(from);
+
+  for (const climber of [0, 1]) {
+    const brace = 1 - climber;
+    let cleared = false;
+    outer:
+    for (const launch of columns) {
+      for (const jumpAt of [2, 6, 12]) {
+        // Short holds as well as long ones. A boost at full power goes ten rows
+        // and a gate is six, so holding the button all the way sails straight
+        // past the ledge you were aiming at and lands you back where you
+        // started — which is a thing a player has to learn too.
+        for (const hold of [8, 12, 16, 22, 30]) {
+          for (const haulWalk of [0, IN_LEFT, IN_RIGHT]) {
+            const world = createWorld(ctx);
+            placePair(world, launch, from.y);
+            for (let t = 0; t < 6; t++) {
+              simStep(ctx, world, [0, 0]);
+              world.events.length = 0;
+            }
+            let phase = 1;
+            let k = 0;
+            for (let t = 0; t < 900; t++) {
+              const masks = [0, 0];
+              if (phase === 1) {
+                masks[brace] = IN_GRIP;
+                if (t >= jumpAt && t < jumpAt + hold) masks[climber] = IN_JUMP;
+                if (on(world.players[climber], to) && world.players[climber].grounded === 1) {
+                  phase = 2;
+                  k = 0;
+                }
+              } else {
+                masks[climber] = IN_GRIP;
+                masks[brace] = IN_REEL | haulWalk;
+                if (k < 22) masks[brace] |= IN_JUMP;
+                k++;
+              }
+              simStep(ctx, world, masks);
+              world.events.length = 0;
+              if (world.restartTimer > 0) break;
+              if (world.players[0].dead || world.players[1].dead) break;
+              if (on(world.players[0], to) && on(world.players[1], to)) {
+                cleared = true;
+                break outer;
+              }
+            }
+          }
+        }
+      }
+    }
+    if (!cleared) return false;
+  }
+  return true;
+}
+
+/**
  * Can the pair get from one ledge to the next?
  *
  * Both of them, taking turns — not either of them. The old gate returned on the
@@ -198,7 +286,11 @@ export function canMakeStep(ctx, from, to) {
 }
 
 export function verifyLevel(level, mode, seed, options = {}) {
-  const result = analyse(level);
+  // The coop fill, because the levels have gates in them now: steps with the
+  // middle foothold taken out, which one player cannot climb and is not
+  // supposed to be able to. Verifying against the solo fill would report the
+  // campaign as broken, which is exactly what it did the first time.
+  const result = analyse(level, { coop: true });
   if (!result.ok) {
     return { ok: false, level: level.id, reason: result.reason ?? 'goal unreachable', highest: result.highest, reached: result.reached, total: result.total };
   }
@@ -209,7 +301,10 @@ export function verifyLevel(level, mode, seed, options = {}) {
   const steps = ledgeSteps(level, result.route, result.standable);
   const failures = [];
   for (const s of steps) {
-    if (!canMakeStep(ctx, s.from, s.to)) {
+    // A step taller than any one hauler can jump is a gate, and gates are
+    // replayed as the two-person move they are.
+    const gate = s.from.y - s.to.y > MAX_RISE;
+    if (!(gate ? canGate(ctx, s.from, s.to) : canMakeStep(ctx, s.from, s.to))) {
       failures.push(
         `row ${s.from.y} cols ${s.from.x0}-${s.from.x1} -> row ${s.to.y} cols ${s.to.x0}-${s.to.x1}`,
       );

@@ -149,6 +149,62 @@ console.log('Gameplay:');
     await page.evaluate(() => cancelAnimationFrame(window.__hold));
   }
 
+  // The gate: the only thing in the game two people can do and one cannot, and
+  // therefore the one picture that says what this is rather than what genre it
+  // is in. One hauler braced at the foot of a step with no foothold in it, the
+  // other stood against them about to go up off their shoulders, and the
+  // stencil the level paints over it to say so.
+  await page.evaluate(() => {
+    const app = window.HAULMATES;
+    const w = app.local.world;
+    const level = app.local.ctx.level;
+    // From the app's own cache, filled by the hint system, which is filled by
+    // the same fill that proves the tower climbable — so this can never point
+    // at somewhere that is not a gate.
+    const gates = Array.isArray(app.gateCells) ? app.gateCells.slice() : [];
+    const gate = gates.sort((a, b) => b.y - a.y)[0];
+    if (!gate) throw new Error('no gates found to photograph');
+    if (!gate) return;
+    const TILE = 24;
+    // On the gate cell itself, which is standable by definition — the ledge
+    // it is launched from sits somewhere else along the row and putting the
+    // pair there drops them into the gap.
+    const y = (gate.y + 1) * TILE - 17;
+    const hold = () => {
+      for (let i = 0; i < 2; i++) {
+        const p = w.players[i];
+        p.x = gate.x * TILE + TILE / 2 + (i ? 13 : -13);
+        p.y = y;
+        p.vx = 0;
+        p.vy = 0;
+        p.dead = 0;
+        p.grounded = 1;
+        p.grip = 210;
+      }
+      // The brace, holding. The renderer draws a gripping hauler differently,
+      // which is most of what makes the picture legible.
+      w.players[1].gripping = 1;
+      const n = w.ropeX.length;
+      for (let i = 0; i < n; i++) {
+        const t = i / (n - 1);
+        w.ropeX[i] = w.players[0].x + (w.players[1].x - w.players[0].x) * t;
+        w.ropeY[i] = y;
+        w.ropePX[i] = w.ropeX[i];
+        w.ropePY[i] = y;
+      }
+      w.cargo.x = w.ropeX[(n - 1) >> 1];
+      w.cargo.y = y + 46;
+      w.cargo.px = w.cargo.x;
+      w.cargo.py = w.cargo.y;
+      w.cargo.hp = 100;
+      window.__gate = requestAnimationFrame(hold);
+    };
+    hold();
+  });
+  await page.waitForTimeout(900);
+  await shoot(page, 'gate');
+  await page.evaluate(() => cancelAnimationFrame(window.__gate));
+
   // The hero shot the README leads with: the pair mid-climb, crate on the rope.
   await page.evaluate(() => {
     const app = window.HAULMATES;

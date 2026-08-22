@@ -107,6 +107,8 @@ export interface Profile {
   deaths: number;
   cargoBreaks: number;
   betrayals: number;
+  /** Lifetime boosts given and taken — the only co-op-only number here. */
+  boosts: number;
   bonds: number;
   metres: number;
   unlockedHats: number[];
@@ -122,6 +124,7 @@ export const DEFAULT_PROFILE: Profile = {
   deaths: 0,
   cargoBreaks: 0,
   betrayals: 0,
+  boosts: 0,
   bonds: 0,
   metres: 0,
   unlockedHats: [0],

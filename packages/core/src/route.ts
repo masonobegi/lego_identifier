@@ -44,6 +44,16 @@ export interface LevelAnalysis {
   standable: Uint8Array;
   /** Flood-fill parent index per cell, or -1 if never reached. */
   seen: Int32Array;
+  /**
+   * Cells that could only be reached by asking a partner for a leg up.
+   *
+   * The difference between what one player can do and what two can, as a list
+   * of places. The renderer paints a mark on them so a pair can see that the
+   * step in front of them is a two-person one before they spend five minutes
+   * failing it, and the hint system waits until somebody is standing under one
+   * before it explains the move.
+   */
+  gates: RouteCell[];
 }
 
 /**
@@ -62,6 +72,25 @@ export const FALL_DRIFT = 7;
  * that so the analysis never claims a climb that only just works.
  */
 export const REEL_CLIMB_TILES = 8;
+
+/**
+ * How far up a hauler goes off a braced partner's shoulders, in tiles.
+ *
+ * Measured against the simulation with a full input sweep: alone, the highest
+ * shelf a hauler can land on is five rows; with a partner braced beside them it
+ * is ten. Seven is the number the levels are cut to, which leaves two rows of
+ * margin over what one player can do and three under what two can, so a gate is
+ * neither a lie nor a frame-perfect move.
+ *
+ * This is the only edge in the fill that gains height and needs two people, and
+ * it is therefore the only reason the campaign cannot be finished alone. Before
+ * it existed the coop fill reached exactly as far as the solo fill did — 2787
+ * cells against 2787 — which is a precise way of saying the second player was
+ * not required for anything.
+ */
+export const BOOST_RISE_TILES = 7;
+/** Sideways tiles a boosted jump crosses. It goes up, not along. */
+export const BOOST_SPREAD = 2;
 
 /** Options for the fill. Solo is the default and is the stricter of the two. */
 export interface AnalyseOptions {
@@ -126,6 +155,7 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
       start: null,
       standable,
       seen,
+      gates: [],
     };
   }
   const startIndex = start.y * w + start.x;
@@ -140,7 +170,31 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
     queue.push(i);
   };
 
+  /**
+   * Somewhere you could get to, but only by asking your partner for a leg up.
+   *
+   * Held back rather than queued, and only let in once every cell reachable by
+   * ordinary climbing has been. A plain breadth-first fill takes the shortest
+   * path in edges, and a boost skips a whole foothold, so the moment boosting
+   * became an edge the route started using one wherever it could — 98 of the
+   * campaign's steps came back as two-person moves when four had been authored.
+   * That is not a route through the tower, it is a route through the ceiling of
+   * what the pair can do. Deferring them makes the fill answer the question the
+   * levels are actually asking: climb normally where you can, and call for a
+   * boost only where there is no other way on.
+   */
+  const gates: RouteCell[] = [];
+  const deferred: { from: number; x: number; y: number }[] = [];
+  const defer = (from: number, x: number, y: number): void => {
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const i = y * w + x;
+    if (!standable[i] || seen[i] !== -1) return;
+    deferred.push({ from, x, y });
+  };
+
   let highest = start.y;
+  // Ordinary climbing first, to exhaustion; then the moves that need a partner,
+  // then ordinary climbing again from wherever they got you, and round again.
   for (let head = 0; head < queue.length; head++) {
     const i = queue[head];
     const x = i % w;
@@ -162,23 +216,42 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
       for (let dx = -FALL_DRIFT; dx <= FALL_DRIFT; dx++) visit(i, x + dx, ny);
     }
 
-    // The rope climb. Stand beside a wall with a partner braced on top of it,
-    // haul on the rope, walk your feet up, and mantle over the lip. This is the
-    // only edge in the fill that needs two people, which is what makes it
-    // useful: a cell reachable only through one of these is a cell the game
-    // cannot be finished without a partner.
+    // The leg up. Stand beside your partner while they brace, and go half again
+    // as high as you can alone. Unlike the rope climb below it, this is the one
+    // that opens ground rather than recovering it: reeling drags you *toward*
+    // your partner, so it can never reach anywhere they could not already
+    // stand, and a taut rope is a leash whichever way you run.
     if (options.coop) {
-      for (const side of [-1, 1]) {
-        if (!isSolidTile(tileAt(level, x + side, y))) continue;
-        for (let up = 1; up <= REEL_CLIMB_TILES; up++) {
-          // A ceiling on your own side stops the climb dead.
-          const overhead = tileAt(level, x, y - up);
-          if (isSolidTile(overhead) || isDeadlyTile(overhead)) break;
-          if (isSolidTile(tileAt(level, x + side, y - up))) continue;
-          // The wall ended here: this is the lip you mantle onto.
-          visit(i, x + side, y - up);
-          break;
+      const braceable = standable[y * w + (x - 1)] === 1 || standable[y * w + (x + 1)] === 1;
+      if (braceable) {
+        for (let dy = MAX_RISE + 1; dy <= BOOST_RISE_TILES; dy++) {
+          for (let dx = -BOOST_SPREAD; dx <= BOOST_SPREAD; dx++) defer(i, x + dx, y - dy);
         }
+      }
+    }
+
+    // The rope climb used to be an edge here — stand beside a wall with your
+    // partner braced on the lip, haul, walk your feet up, mantle over. It is a
+    // real thing the game can do and it is not a route, which is why it is no
+    // longer in the fill.
+    //
+    // Reeling drags you *toward* your partner. It therefore cannot take you
+    // anywhere they could not already be standing, so it can never open ground:
+    // whatever it reaches, one player could have reached by going where the
+    // partner went. As an edge it did nothing but invent steps — six-row rises
+    // the verifier then could not replay, because the move it was modelling is
+    // how you get somebody *out* of a hole rather than how a pair gets up a
+    // tower. It remains in the game, and it is how the second hauler follows
+    // the first over a gate; it is just not a way through the level.
+
+    if (head === queue.length - 1 && deferred.length > 0) {
+      // Nothing left that one player could do. Cash in the co-op moves that
+      // have been waiting, and let the ordinary fill run on from them.
+      const pending = deferred.splice(0, deferred.length);
+      for (const d of pending) {
+        const before = seen[d.y * w + d.x];
+        visit(d.from, d.x, d.y);
+        if (before === -1 && seen[d.y * w + d.x] !== -1) gates.push({ x: d.x, y: d.y });
       }
     }
   }
@@ -218,7 +291,13 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
     route.reverse();
   }
 
-  return { ok: goalCell >= 0, highest, reached, total, route, start, standable, seen };
+  // Only the gates the route actually uses. The fill discovers others in
+  // corners of the level nobody has any reason to visit, and a mark painted on
+  // one of those is an invitation to a dead end.
+  const onRoute = new Set(route.map((c) => c.y * w + c.x));
+  const used = gates.filter((g) => onRoute.has(g.y * w + g.x));
+
+  return { ok: goalCell >= 0, highest, reached, total, route, start, standable, seen, gates: used };
 }
 
 /**
@@ -272,7 +351,11 @@ export interface RoutePlan {
 }
 
 export function planRoute(level: Level): RoutePlan {
-  const result = analyseLevel(level);
+  // The pair's route, not one player's. The bot is half of a pair, and once the
+  // levels had gates in them the solo fill stopped reaching the goal — so a bot
+  // planning off it was handed a route that ended a few ledges up and spent the
+  // rest of the game walking off the bottom of it with its cursor stuck at zero.
+  const result = analyseLevel(level, { coop: true });
   const indexAt = new Int32Array(level.w * level.h).fill(-1);
   for (let i = 0; i < result.route.length; i++) {
     const c = result.route[i];

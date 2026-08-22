@@ -502,6 +502,28 @@ export function drawHat(
       ctx.globalAlpha = 1;
       return;
     }
+    case 8: {
+      // A folding stepladder, worn as a hat, by somebody who has spent the
+      // evening being one. Unlocked by the first boost.
+      ctx.strokeStyle = '#8a6c2c';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(hx + side * 1.5, hy - 8);
+        ctx.lineTo(hx + side * 6, hy - 17);
+        ctx.stroke();
+      }
+      ctx.lineWidth = 1.4;
+      for (let i = 0; i < 3; i++) {
+        const t = 0.3 + i * 0.24;
+        ctx.beginPath();
+        ctx.moveTo(hx - 1.5 - 4.5 * t, hy - 8 - 9 * t);
+        ctx.lineTo(hx + 1.5 + 4.5 * t, hy - 8 - 9 * t);
+        ctx.stroke();
+      }
+      return;
+    }
     default: {
       // A tiny cowlick so a bare head still has a silhouette.
       ctx.strokeStyle = style.dark;

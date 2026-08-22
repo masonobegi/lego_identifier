@@ -41,6 +41,8 @@ const TESTS: Record<string, (c: AchievementContext) => boolean> = {
   HUNDRED_DEATHS: (c) => c.profile.deaths >= 100,
   BETRAYAL: (c) => c.profile.betrayals >= 1,
   BETRAYAL_100: (c) => c.profile.betrayals >= 100,
+  FIRST_BOOST: (c) => (c.world?.boosts ?? 0) >= 1,
+  BOOST_100: (c) => c.profile.boosts >= 100,
   ANCHOR_500: (c) => c.profile.bonds >= 500,
   GAUNTLET_10: (c) => c.finished && c.mode === 1 && c.towerFloors >= 10,
   GAUNTLET_20: (c) => c.finished && c.mode === 1 && c.towerFloors >= 20,

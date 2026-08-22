@@ -367,6 +367,64 @@ seam is makeable only with a run-up. With one in the search space, all thirteen
 pass: both haulers, taking turns, braced partner, real crate. That took the gate
 from six minutes to eleven, which is a fair price for it meaning what it says.
 
+## The second player was cargo with opinions
+
+The most expensive thing this project got wrong was not a bug. Every gate was green, the
+tower was climbable, the rope had physics, and the game was called *a two-player co-op
+disaster about a rope*. It was not a two-player game.
+
+`analyseLevel` can answer "could ONE player reach this cell", and it has a second mode
+that adds what a pair can do. The difference between the two fills is exactly the set of
+places you cannot go alone. On the finished campaign that set was **empty**: 2787 cells
+solo, 2787 together. Not "small". Empty.
+
+Measured directly rather than inferred, with a full input sweep against the real
+simulation — every launch column, run-up, hold and reel it could try:
+
+| | one hauler | with a partner braced |
+| --- | --- | --- |
+| widest chasm crossed | 6 tiles | 6 tiles |
+| highest shelf reached | 5 rows | 5 rows |
+
+The rope gave the pair *nothing*. And it could not have: **reeling drags you toward your
+partner**, so it can never take you anywhere they could not already stand, and a taut rope
+against an anchor is a leash whichever way you run. No arrangement of geometry gates two
+identical players who share a rope, because whatever one of them can do, the other can do
+by repeating it. The wall-climb the README described is a *rescue* — how you get somebody
+out of a hole — not a way up a tower. It was removed from the fill for exactly that
+reason, having spent a while inventing steps the verifier then could not replay.
+
+What two people have that one does not is a second pair of hands to stand on. So the fix
+was a verb, not a shape: **brace, and your partner goes up half again as high as they can
+alone.** Measured on the same sweep — five rows solo, ten off a brace — and the levels are
+cut to six-row gates, one per biome, which leaves a row of margin over what one player
+manages and four under what two do.
+
+That turns a gate into a set piece that uses both co-op verbs in order: one of you braces,
+the other goes up off your shoulders, then braces on the lip while you haul yourself up
+the rope. `scripts/verify-levels.mjs` replays exactly that sequence, both ways round, and
+fails the build if a pair cannot do it. The campaign is now unfinishable alone — 783 cells
+solo against 2739 together — which is the first time that sentence has been true.
+
+Three things had to change to keep the rest of the game honest about it:
+
+**The fill defers co-op edges.** A breadth-first fill takes the shortest path in edges and
+a boost skips a whole foothold, so the moment boosting became an edge the route used one
+wherever it could: 98 of the campaign's steps came back as two-person moves when four had
+been authored. Ordinary climbing now runs to exhaustion first, and the co-op moves are
+cashed in only when nothing else is left — which makes the fill answer the question the
+levels are asking rather than the question of what a pair could theoretically do.
+
+**The bot plans off the pair's route.** `planRoute` used the solo fill, which stops
+reaching the goal the moment there is a gate, so the Autohauler was handed a route that
+ended a few ledges up and walked off the bottom of it with its cursor stuck at zero.
+
+**Gates are painted.** A missing foothold looks exactly like a level that has run out, and
+the move that clears it is the one move a pair cannot stumble into, because it needs both
+of them standing still in the right place at once. So they carry a stencil, and the hint
+that explains the move fires when somebody is standing under one rather than at fifteen
+seconds next to nothing.
+
 ## What the rope is actually doing
 
 Worth measuring, because "the rope is the game" is the sort of claim that is easy to make

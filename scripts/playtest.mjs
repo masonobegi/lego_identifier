@@ -54,6 +54,9 @@ import {
   IN_RIGHT,
   IN_GRIP,
   IN_REEL,
+  boosting,
+  BOOST_REACH,
+  MAX_RISE,
   sawX,
   sawY,
   tautPathLength,
@@ -110,7 +113,9 @@ function placePair(world, x, y) {
  */
 export function reachRate(level, mode, seed, limit = 24) {
   const ctx = { level, seed, mode };
-  const r = analyseLevel(level);
+  // The pair's route. The solo fill stopped reaching the goal the moment the
+  // levels grew gates, and a route that ends four ledges up measures nothing.
+  const r = analyseLevel(level, { coop: true });
   const steps = ledgeSteps(level, r.route, r.standable).slice(0, limit);
   let tried = 0;
   let landed = 0;
@@ -195,7 +200,7 @@ function noise(seed) {
 }
 
 export function makeFollower(level, phase = 0) {
-  const r = analyseLevel(level);
+  const r = analyseLevel(level, { coop: true });
   const cells = r.route;
   const stand = r.standable;
   const { w } = level;
@@ -213,6 +218,8 @@ export function makeFollower(level, phase = 0) {
   const held = [null, null];
   // ...and where on the ledge they happen to be standing when they go.
   const spot = [0, 0];
+  // Ticks left of a boost that is already under way.
+  const lifting = [0, 0];
   const rnd = noise(phase * 2654435761 + 12345);
 
   /**
@@ -295,6 +302,55 @@ export function makeFollower(level, phase = 0) {
     }
     const target = held[i];
     if (!target) return 0;
+
+    // A gate: the step with no foothold in the middle. Six rows is past what
+    // anybody jumps, so the pair has to do the two-person move — one braces,
+    // the other goes up off them, and then the one still down there hauls up
+    // the rope. Modelled here because a person who has been shown the hint
+    // will try it, and an instrument that has not been shown it would report
+    // the gates as walls and every tuning above them as unreachable.
+    if (grounded && row - target.y > MAX_RISE) {
+      const mate = world.players[1 - i];
+      const mateUp = mate.y < p.y - (MAX_RISE + 1) * TILE;
+      if (mateUp) return IN_REEL | (rnd() < 0.3 ? IN_JUMP : 0);
+
+      // One of them picks the place and the other comes to them.
+      //
+      // Both picking independently is a deadlock, and a quiet one: the climber
+      // clamps the target column to the ledge it is standing on, the brace is
+      // half a tile off the end of that ledge and clamps to where it already
+      // is, and the two of them stand two columns apart — inside the rope,
+      // outside the boost — for as long as you care to watch. Measured at the
+      // second gate in the campaign: one boost, then fifty-nine seconds of
+      // nothing, on every seed.
+      if (i === 0) {
+        const l = standable(col, row) ? ledge(col, row) : { x0: col, x1: col };
+        const at = Math.max(l.x0, Math.min(l.x1, target.x));
+        if (Math.abs(col - at) > 1) return at > col ? IN_RIGHT : IN_LEFT;
+        // Keep holding once it has started. `boosting` asks whether your
+        // partner is braced *beside* you, which stops being true the instant
+        // you leave the ground — so a follower that reads it every tick lets
+        // go two frames in and cuts its own jump short. Measured: four rows of
+        // a six-row gate, over and over, on a gate that a held jump clears
+        // from every column on the ledge.
+        // Hold, then let go. A jump needs a *press*, so a follower that holds
+        // the button from the moment a boost is available never jumps twice:
+        // the first attempt fires and every one after it is swallowed, because
+        // there is no rising edge left to swallow. Six boosts and then silence,
+        // with the brace stood there ready and the bar full.
+        if (lifting[i] > 0) {
+          lifting[i]--;
+          return lifting[i] > 8 ? IN_JUMP : 0;
+        }
+        if (boosting(world, 0)) {
+          lifting[i] = 34;
+          return IN_JUMP;
+        }
+        return 0;
+      }
+      if (Math.abs(mate.x - p.x) > BOOST_REACH * 0.7) return mate.x > p.x ? IN_RIGHT : IN_LEFT;
+      return IN_GRIP;
+    }
 
     // Walk toward it, but only as far as the footing goes — a bad player still
     // has eyes and does not stroll off the side of the platform they are on.

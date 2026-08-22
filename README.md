@@ -7,10 +7,20 @@ it. Its length is measured along the path it actually takes, so hooking it over 
 costs you slack. Wrap it round a pillar and your leash shortens. Run too far and you drag
 your friend off a ledge.
 
-**A pit deeper than a jump is a two-person problem.** Fall in and you are stuck; with
-your partner up top you climb the rope, walk your feet up the wall, and mantle over the
-lip. If you *both* go in, you are both stuck — a partner standing on the edge is what you
-haul against.
+**Brace, and your partner goes higher than either of you can alone.** Hold GRIP and you
+become a step: they stand against you, jump, and clear six rows where five is everybody's
+limit. Every biome has a gate cut to that — a foothold simply missing — and getting past
+one takes both verbs in order: you brace, they go up, they brace on the lip, you haul
+yourself up the rope after them. **The campaign cannot be finished by one person.** That
+is measured, not asserted: the reachability fill reaches 783 cells alone and 2739
+together, and the build fails if a pair cannot replay every gate in the real simulation.
+
+> It was not always true, and the way it was false is the most useful thing in this repo.
+> See *The second player was cargo with opinions* in [docs/DESIGN.md](docs/DESIGN.md):
+> before the boost existed, a hauler with a partner braced beside them crossed exactly the
+> same chasm and reached exactly the same shelf as a hauler on their own, and the two
+> fills agreed at 2787 cells each. A rope cannot gate two identical players, because
+> reeling only ever drags you toward somewhere your partner already is.
 
 > Both of those sentences were false until recently, and were measured false rather than
 > noticed. See *The rope does not work yet* in [docs/DESIGN.md](docs/DESIGN.md) for what
@@ -39,6 +49,10 @@ one procedurally assembled tower per calendar day, the same one for everybody, g
 midnight. Built to ship on Steam.
 
 ![Gameplay](docs/screenshots/gameplay.png)
+
+A gate, and the mark the level paints on one. Neither of you gets up this alone.
+
+![A two-person step](docs/screenshots/gate.png)
 
 ---
 
@@ -71,6 +85,7 @@ Start*, and the Autohauler takes the other end of the rope. See [The bot](#the-b
 | Action | Default key | Gamepad | What it is for |
 |---|---|---|---|
 | Move / jump | `A` `D` / `SPACE` | Stick / `A` | Ordinary, generous platforming. |
+| Leg up | stand on a braced partner and jump | same | Half again the height. The only move two people have that one does not. |
 | **Grip** | `L-SHIFT` | Right trigger | Lock yourself in place on ground or wall. You become an anchor your partner can swing from. Drains, except on yellow rebar. |
 | **Reel** | `F` | Left trigger | Haul yourself along the rope toward your partner. It beats gravity, so an anchored partner above you is a ladder. Costs grip stamina. |
 | Emote | `T` | `Y` | Apologise. Or don't. |

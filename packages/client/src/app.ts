@@ -17,6 +17,7 @@ import {
   MODE_HAUL,
   NetClient,
   TILE,
+  analyseLevel,
   buildCampaign,
   modeName,
   type MatchResult,
@@ -50,12 +51,29 @@ import { buildScreen, tickPreviews, type ScreenId } from './ui/screens.js';
 export const VERSION = '1.0.0';
 
 /** Contextual coaching, shown once each until the player has seen them all. */
-const HINTS: { id: string; text: string; when: (w: World, tick: number) => boolean }[] = [
+/**
+ * Hints, and the one that had to stop being on a timer.
+ *
+ * Everything here fires on the clock, which is fine for the things a player
+ * will meet in the first thirty seconds whatever they do. The boost is not one
+ * of those: it is the only move in the game that needs both haulers standing
+ * still in the right place at once, so nobody stumbles into it, and it is the
+ * only move without which the tower cannot be finished. Explaining it at
+ * fifteen seconds, next to a gate they will not reach for another four minutes,
+ * is the same as not explaining it. So its condition is a place rather than a
+ * time — standing under one, looking up at a step that is not there.
+ */
+const HINTS: { id: string; text: string; when: (w: World, tick: number, atGate: boolean) => boolean }[] = [
   { id: 'move', text: 'Move with A and D. Jump with SPACE.', when: (_w, t) => t > 90 && t < 480 },
   { id: 'rope', text: 'The rope will not stretch past its limit — run too far and you drag your partner with you.', when: (_w, t) => t > 520 && t < 900 },
   { id: 'grip', text: 'Hold SHIFT to brace in place. Your partner can then swing from you.', when: (_w, t) => t > 940 && t < 1400 },
   { id: 'reel', text: 'Hold F to reel yourself along the rope toward your partner.', when: (_w, t) => t > 1440 && t < 1900 },
   { id: 'cargo', text: 'The crate takes damage when it hits things. Reach a checkpoint to repair it.', when: (w) => w.cargo.hp < 70 },
+  {
+    id: 'boost',
+    text: 'Nobody climbs this alone. One of you holds SHIFT to brace; the other stands against them and jumps.',
+    when: (_w, _t, atGate) => atGate,
+  },
 ];
 
 export class App {
@@ -102,7 +120,7 @@ export class App {
   private hintStrength = 0;
   private shownHints = new Set<string>();
   private achievementTimer = 0;
-  private statSnapshot = { deaths: 0, breaks: 0, betrayals: 0, bonds: 0, best: 0 };
+  private statSnapshot = { deaths: 0, breaks: 0, betrayals: 0, boosts: 0, bonds: 0, best: 0 };
   private runCounted = false;
   private paused = false;
   private autoNamed = false;
@@ -354,9 +372,10 @@ export class App {
   private updateHints(world: World, tick: number): void {
     if (this.hintStrength > 0) this.hintStrength -= 0.006;
     if (this.profile.seenTutorial && this.shownHints.size >= HINTS.length) return;
+    const atGate = this.underGate(world);
     for (const hint of HINTS) {
       if (this.shownHints.has(hint.id)) continue;
-      if (!hint.when(world, tick)) continue;
+      if (!hint.when(world, tick, atGate)) continue;
       this.shownHints.add(hint.id);
       save('hints', [...this.shownHints]);
       this.hintText = hint.text;
@@ -364,6 +383,38 @@ export class App {
       break;
     }
   }
+
+  /**
+   * Is either hauler standing at the bottom of a two-person step?
+   *
+   * The gate cells come from the same fill that proves the tower climbable, so
+   * this can never drift from where the gates actually are. Cached per level
+   * because the fill is about thirty milliseconds and the level does not move.
+   */
+  private underGate(world: World): boolean {
+    const level = (this.net ?? this.local)?.ctx?.level;
+    if (!level) return false;
+    if (this.gatesFor !== level) {
+      this.gatesFor = level;
+      this.gateCells = analyseLevel(level, { coop: true }).gates;
+    }
+    for (const g of this.gateCells) {
+      const gx = g.x * TILE + TILE / 2;
+      const gy = (g.y + 1) * TILE;
+      for (const p of world.players) {
+        if (p.dead || p.grounded !== 1) continue;
+        // Below it and near it: standing where the missing foothold would be
+        // seen from, not merely somewhere in the same room.
+        const dy = p.y - gy;
+        if (dy > TILE * 2 && dy < TILE * 8 && Math.abs(p.x - gx) < TILE * 5) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Public so `npm run shots` can stage a picture at one. */
+  gateCells: { x: number; y: number }[] = [];
+  private gatesFor: unknown = null;
 
   /* -------------------------------------------------------------- profile */
 
@@ -380,6 +431,10 @@ export class App {
     if (world.betrayals > this.statSnapshot.betrayals) {
       this.profile.betrayals += world.betrayals - this.statSnapshot.betrayals;
       this.statSnapshot.betrayals = world.betrayals;
+    }
+    if (world.boosts > this.statSnapshot.boosts) {
+      this.profile.boosts += world.boosts - this.statSnapshot.boosts;
+      this.statSnapshot.boosts = world.boosts;
     }
     if (world.bonds > this.statSnapshot.bonds) {
       this.profile.bonds += world.bonds - this.statSnapshot.bonds;
@@ -751,6 +806,7 @@ export class App {
       deaths: [world.players[0].deaths, world.players[1].deaths],
       cargoBreaks: world.cargoBreaks,
       betrayals: world.betrayals,
+      boosts: world.boosts,
       bonds: world.bonds,
       checkpoints: world.checkpoint + 1,
     };
@@ -831,7 +887,7 @@ export class App {
   }
 
   private resetRunStats(): void {
-    this.statSnapshot = { deaths: 0, breaks: 0, betrayals: 0, bonds: 0, best: 0 };
+    this.statSnapshot = { deaths: 0, breaks: 0, betrayals: 0, boosts: 0, bonds: 0, best: 0 };
     this.runCounted = false;
   }
 }

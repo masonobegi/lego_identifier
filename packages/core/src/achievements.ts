@@ -28,6 +28,8 @@ export const ACHIEVEMENT_DEFS: AchievementDefinition[] = [
   { id: 'HUNDRED_DEATHS', name: 'Statistically Inevitable', description: 'Die one hundred times.', hat: 5 },
   { id: 'BETRAYAL', name: 'It Was An Accident', description: 'Yank your partner off solid ground for the first time.' },
   { id: 'BETRAYAL_100', name: 'It Keeps Happening', description: 'Yank your partner off solid ground one hundred times.' },
+  { id: 'FIRST_BOOST', name: 'Leg Up', description: 'Send your partner somewhere neither of you could reach alone.', hat: 8 },
+  { id: 'BOOST_100', name: 'Human Scaffolding', description: 'Take or give a hundred boosts.' },
   { id: 'ANCHOR_500', name: 'Load Bearing Friend', description: 'Spend five hundred moments braced while your partner swings.', hat: 7 },
   { id: 'GAUNTLET_10', name: 'Ten Floors Up', description: 'Clear a Gauntlet of ten floors.' },
   { id: 'GAUNTLET_20', name: 'Twenty Floors Up', description: 'Clear a Gauntlet of twenty floors.', hat: 6 },
@@ -52,6 +54,7 @@ export const STAT_DEFS: StatDefinition[] = [
   { id: 'total_metres', name: 'Metres climbed', type: 'int', min: 0, max: 100000000 },
   { id: 'crates_broken', name: 'Crates destroyed', type: 'int', min: 0, max: 10000000 },
   { id: 'betrayals', name: 'Partners yanked off ledges', type: 'int', min: 0, max: 10000000 },
+  { id: 'boosts', name: 'Boosts given and taken', type: 'int', min: 0, max: 10000000 },
 ];
 
 /** Map of achievement id to the hat it unlocks. */

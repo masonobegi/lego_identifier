@@ -69,6 +69,7 @@ import {
   IN_JUMP,
   IN_LEFT,
   IN_REEL,
+  BOOST_REACH,
   IN_RIGHT,
   JUMP_CUT,
   SAW_RADIUS,
@@ -82,6 +83,8 @@ import {
 } from './constants.js';
 import { approach } from './math.js';
 import { T_PLATFORM, isDeadlyTile, isSolidTile, sawX, sawY, tileAt, type Level } from './level.js';
+import { boosting } from './player.js';
+import { MAX_RISE } from './route.js';
 import { bodyCell, cellCentreX, cellCentreY, planRoute, type RouteCell, type RoutePlan } from './route.js';
 import type { World } from './types.js';
 
@@ -441,6 +444,59 @@ export class Bot {
     // fill's edges span four columns even when every tile between is walkable.
     const stroll = rise === 0 && this.rowClear(here.y, here.x, target.x);
     const needJump = !waiting && !stroll && (rise > 0 || (rise === 0 && gap > 0) || (rise < 0 && gap > 3));
+
+    // A gate: the step with the middle foothold taken out. Six rows is past
+    // what anybody jumps, so there is no version of this the bot can do by
+    // itself and no point planning a leap for it. Three states, in the order
+    // they happen, and the bot picks by where its partner is rather than by
+    // guessing at their intent — which it cannot read, and which a person
+    // playing beside it will not have formed either.
+    if (!waiting && rise > MAX_RISE && !airborne) {
+      const lip = (MAX_RISE + 1) * TILE;
+      if (!mate.dead && mate.y < p.y - lip) {
+        // They are up on the lip. Haul, and hop to get the rope moving: a
+        // reel against a dead-hanging rope on the floor does very little.
+        this.stallTicks = 0;
+        let mask = IN_REEL;
+        if (this.jumpTicks === 0 && this.jumpCooldown === 0) {
+          this.jumpTicks = JUMP_HOLD[2];
+          this.jumpCooldown = JUMP_COOLDOWN + this.jumpTicks;
+        }
+        if (this.jumpTicks > 0) {
+          this.jumpTicks--;
+          mask |= IN_JUMP;
+        }
+        return mask;
+      }
+      if (boosting(world, index)) {
+        // Braced, beside us, and paying for it. Go.
+        this.stallTicks = 0;
+        if (this.jumpTicks === 0 && this.jumpCooldown === 0) {
+          this.jumpTicks = JUMP_HOLD[3];
+          this.jumpCooldown = JUMP_COOLDOWN + this.jumpTicks;
+        }
+        if (this.jumpTicks > 0) {
+          this.jumpTicks--;
+          return IN_JUMP;
+        }
+        return 0;
+      }
+      // Otherwise: offer the brace, and go to *them* rather than to a column
+      // of our own choosing.
+      //
+      // Both of them picking a spot independently is a deadlock: the climber
+      // aims at the column the step lands on, the brace aims at the same column
+      // from a different ledge, and they end up two apart — inside the rope,
+      // outside the boost — holding position forever. Somebody has to be the
+      // one who moves, and it is the same somebody every time for the same
+      // reason the takeoff gate is: what a pair needs is not a fair rule, it is
+      // a settled one.
+      if (!mate.dead && Math.abs(mate.x - p.x) > BOOST_REACH * 0.7) {
+        this.charging = false;
+        return mate.x > p.x ? IN_RIGHT : IN_LEFT;
+      }
+      return IN_GRIP;
+    }
 
     // A leap is planned only when one is needed. Asking for the nearest cell
     // of the destination ledge when the destination is the ledge you are

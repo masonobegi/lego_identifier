@@ -16,6 +16,7 @@ import {
   buildCampaign,
   buildTower,
   planRoute,
+  BOOST_RISE_TILES,
   tileAt,
   type ChunkDef,
 } from '@haulmates/core';
@@ -51,13 +52,20 @@ describe('route planning', () => {
 
   it('only links cells the measured movement envelope can actually link', () => {
     const level = buildCampaign();
-    const { route } = analyseLevel(level);
+    const { route, gates } = analyseLevel(level, { coop: true });
+    const gated = new Set(gates.map((g) => `${g.x},${g.y}`));
     for (let i = 1; i < route.length; i++) {
       const from = route[i - 1];
       const to = route[i];
       const rise = from.y - to.y;
       const run = Math.abs(to.x - from.x);
       if (rise <= 0) continue; // falling and walking are unbounded sideways
+      // A gate is a two-person move and is deliberately outside one hauler's
+      // envelope; that is the whole point of it.
+      if (gated.has(`${to.x},${to.y}`)) {
+        expect(rise).toBeLessThanOrEqual(BOOST_RISE_TILES);
+        continue;
+      }
       expect(rise).toBeLessThanOrEqual(MAX_RISE);
       expect(run).toBeLessThanOrEqual(REACH_BY_RISE[rise]);
     }
@@ -65,7 +73,7 @@ describe('route planning', () => {
 
   it('ends within touching distance of a goal tile', () => {
     const level = buildCampaign();
-    const { route } = analyseLevel(level);
+    const { route } = analyseLevel(level, { coop: true });
     const last = route[route.length - 1];
     let touching = false;
     for (let dy = -1; dy <= 1; dy++) {

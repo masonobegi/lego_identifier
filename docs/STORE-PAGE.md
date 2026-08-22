@@ -32,6 +32,7 @@ was.
 [h2]FOUR BUTTONS. INFINITE WAYS TO RUIN THINGS.[/h2]
 
 [list]
+[*][b]Give each other a leg up[/b] — brace, and your partner clears a step neither of you reaches alone. Every floor has one. The campaign cannot be finished by one person, and that is measured rather than promised.
 [*][b]Move and jump[/b] — generous, forgiving platforming. The rope supplies the
 difficulty.
 [*][b]GRIP[/b] — brace yourself in place and become an anchor. Now your partner can swing

@@ -22,7 +22,7 @@ export const CARGO_KEYS = [
 
 export const WORLD_KEYS = [
   'tick', 'rng', 'checkpoint', 'spawnX', 'spawnY', 'best', 'finished',
-  'finishTick', 'restartTimer', 'bonds', 'betrayals', 'yankHold', 'cargoBreaks',
+  'finishTick', 'restartTimer', 'bonds', 'betrayals', 'yankHold', 'boosts', 'cargoBreaks',
 ] as const satisfies readonly (keyof World)[];
 
 type PlayerKey = (typeof PLAYER_KEYS)[number];
@@ -148,6 +148,7 @@ export function createWorld(ctx: SimContext): World {
     finishTick: 0,
     restartTimer: 0,
     yankHold: 0,
+    boosts: 0,
     bonds: 0,
     betrayals: 0,
     cargoBreaks: 0,
@@ -185,6 +186,7 @@ export function cloneWorld(src: World): World {
     finishTick: src.finishTick,
     restartTimer: src.restartTimer,
     yankHold: src.yankHold,
+    boosts: src.boosts,
     bonds: src.bonds,
     betrayals: src.betrayals,
     cargoBreaks: src.cargoBreaks,

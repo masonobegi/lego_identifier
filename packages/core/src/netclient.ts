@@ -62,6 +62,8 @@ export interface MatchResult {
   deaths: [number, number];
   cargoBreaks: number;
   betrayals: number;
+  /** Times one of you went up off the other. Only a pair can make this move. */
+  boosts: number;
   bonds: number;
   /** How many checkpoints were reached, not the index of the last one. */
   checkpoints: number;
@@ -310,6 +312,7 @@ export class NetClient {
           deaths: [r.u32(), r.u32()],
           cargoBreaks: r.u32(),
           betrayals: r.u32(),
+          boosts: r.u32(),
           bonds: r.u32(),
           checkpoints: r.u32(),
         };

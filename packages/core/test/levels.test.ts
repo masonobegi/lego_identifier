@@ -4,6 +4,7 @@ import {
   TILE,
   buildCampaign,
   buildTower,
+  MAX_RISE,
   isDeadlyTile,
   isSolidTile,
   tileAt,
@@ -153,7 +154,7 @@ describe('danger', () => {
     // The level gate could not see that: a level with no hazards at all passes
     // "is it climbable" perfectly. So the danger is measured here instead.
     const level = buildCampaign();
-    const r = analyse(level);
+    const r = analyse(level, { coop: true });
     const steps = ledgeSteps(level, r.route, r.standable);
     let hot = 0;
     for (const step of steps) {
@@ -170,9 +171,9 @@ describe('danger', () => {
 });
 
 describe('climbability', () => {
-  it('lets a player reach the goal of the campaign', () => {
+  it('lets a pair reach the goal of the campaign', () => {
     const level: Level = buildCampaign();
-    const result = analyse(level);
+    const result = analyse(level, { coop: true });
     expect(result.ok).toBe(true);
     // Effectively every foothold in the tower should be part of the climb.
     expect(result.reached / result.total).toBeGreaterThan(0.98);
@@ -180,22 +181,27 @@ describe('climbability', () => {
 
   it('replays every climbing step of the campaign in the real simulation', () => {
     const level = buildCampaign();
-    const result = analyse(level);
+    const result = analyse(level, { coop: true });
     const steps = ledgeSteps(level, result.route, result.standable);
     expect(steps.length).toBeGreaterThan(100);
     const ctx = { level, seed: 1, mode: 0 };
-    const unmakeable = steps.filter((s) => !canMakeStep(ctx, s.from, s.to));
+    // Gates are two-person moves and have their own replay in verifyLevel;
+    // this one is about the ordinary jumps between them.
+    const unmakeable = steps
+      .filter((s) => s.from.y - s.to.y <= MAX_RISE)
+      .filter((s) => !canMakeStep(ctx, s.from, s.to));
     expect(
       unmakeable.map((s) => `row ${s.from.y} [${s.from.x0}-${s.from.x1}] -> row ${s.to.y} [${s.to.x0}-${s.to.x1}]`),
     ).toEqual([]);
   }, 240_000);
 
-  it('lets a player reach the goal of every randomly generated tower', () => {
+  it('lets a pair reach the goal of every randomly generated tower, and nobody alone', () => {
     for (let i = 0; i < 25; i++) {
       const seed = (i + 1) * 104729;
       const level = buildTower(seed, 4 + (i % 12));
-      const result = analyse(level);
+      const result = analyse(level, { coop: true });
       expect(result.ok, `tower ${seed} is not climbable`).toBe(true);
+      expect(analyse(level).ok, `tower ${seed} is climbable alone`).toBe(false);
       expect(result.reached / result.total).toBeGreaterThan(0.98);
     }
   }, 120_000);
@@ -256,15 +262,23 @@ describe('the co-op reachability fill', () => {
     expect(ropeOnly).toBeGreaterThan(0);
   });
 
-  it('agrees with the solo fill on the shipped campaign, which uses no rope', () => {
-    // Documented rather than aspirational: the campaign contains no geometry
-    // that needs a rope, and this test will start failing the moment it does —
-    // which is the point at which someone should come and update it.
+  it('disagrees with the solo fill, because the campaign now needs two people', () => {
+    // This test used to assert the opposite, and said so cheerfully: "the
+    // campaign contains no geometry that needs a rope, and this test will start
+    // failing the moment it does". It was the most useful line in the suite. A
+    // game called "a two-player co-op disaster about a rope" had a passing test
+    // recording that one player could climb all of it, and nobody had gone back
+    // to update the test because nobody had made it false.
+    //
+    // It is false now. See BOOST_SCALE and gate() for what had to change, and
+    // *The second player was cargo with opinions* in docs/DESIGN.md for the
+    // measurement that showed a rope alone can never do it.
     const level = buildCampaign();
     const solo = analyse(level);
     const coop = analyse(level, { coop: true });
-    expect(solo.ok).toBe(true);
-    expect(coop.reached).toBe(solo.reached);
+    expect(solo.ok, 'one player finishes the campaign').toBe(false);
+    expect(coop.ok, 'two players finish the campaign').toBe(true);
+    expect(coop.reached).toBeGreaterThan(solo.reached * 2);
   });
 });
 

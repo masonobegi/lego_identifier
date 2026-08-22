@@ -10,6 +10,7 @@ import {
   EV_JUMP,
   EV_LAND,
   EV_RESPAWN,
+  EV_BOOST,
   EV_ROPE_YANK,
   EV_STEP,
   TILE,
@@ -51,7 +52,9 @@ const SCUFF_PROBES: [number, number][] = [
 ];
 import { drawFloorMarks } from './stencil.js';
 import { P_CHUNK, P_DUST, P_RING, P_SMOKE, P_SPARK, Particles } from './particles.js';
+import { stencilMark } from './stencil.js';
 import { applyHighContrast, biomeFor, PLAYER_COLOURS } from './palette.js';
+import { analyseLevel } from '@haulmates/core';
 import { drawCargo, drawMovers, drawPlayer, drawRope, drawSaws } from './actors.js';
 import { drawHud, drawPlayerTags, type HudState } from './hud.js';
 
@@ -82,6 +85,11 @@ interface Trail {
 export class Renderer {
   readonly camera = new Camera();
   readonly particles = new Particles();
+  /** Cached per level, because the fill is ~30ms and the level does not move. */
+  /** Public so `npm run shots` can stage a picture at one. */
+  gates: { x: number; y: number }[] = [];
+  private gatesFor: Level | null = null;
+  private readonly gateMark = new Map<string, HTMLCanvasElement>();
   private background = new Background();
   private tiles = new TileCache();
   private ctx: CanvasRenderingContext2D;
@@ -133,6 +141,16 @@ export class Renderer {
       switch (e.kind) {
         case EV_JUMP:
           this.particles.burst(4, { x: e.x, y: e.y + 14, colour: '#b9c3e0', size: 2, life: 0.3, gravity: 260 }, 1, 60);
+          break;
+        case EV_BOOST:
+          // The only move in the game two people can make and one cannot, and
+          // the only one a player has to be *told* about — so it gets the
+          // biggest tell: a ring, a shower off the brace's shoulders, and a
+          // kick. If a pair does this by accident once, they should know
+          // immediately that it was a thing and want to do it again.
+          this.particles.emit({ x: e.x, y: e.y + 10, colour: '#ffd23d', size: 10, life: 0.4, gravity: 0, kind: P_RING });
+          this.particles.burst(14, { x: e.x, y: e.y + 14, colour: '#ffd23d', size: 2.4, life: 0.45, gravity: 320, vy: -60, kind: P_SPARK }, 2.4, 190);
+          this.camera.kick(6);
           break;
         case EV_LAND: {
           const force = Math.min(1, Math.abs(e.b) / 900);
@@ -249,6 +267,7 @@ export class Renderer {
 
     this.recordScuffs(level, world, prev, options);
     drawFloorMarks(ctx, palette, level.widthPx, level.heightPx, view);
+    this.drawGateMarks(ctx, level, palette, view);
     this.drawTiles(ctx, level, world, view, options);
     this.drawOutOfBounds(ctx, level, view, palette);
     drawDynamicTiles(ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1);
@@ -280,6 +299,59 @@ export class Renderer {
    * is a record of the route the pair actually took, which is the point: at the
    * top of a long climb the wall below you is the story of getting there.
    */
+  /**
+   * Paint the two-person steps so a pair can see one coming.
+   *
+   * A gate is a foothold that simply is not there, and from below that looks
+   * exactly like a level that has run out. Without a mark, the first thing a
+   * pair does at one is spend five minutes proving to themselves that the jump
+   * is impossible, which it is, and then quit — the move that clears it is the
+   * one move in the game they have not been shown and cannot stumble into,
+   * because it needs both of them standing still in the right place at once.
+   *
+   * The mark is a stencil in the yard's own language rather than a tutorial
+   * pop-up, and it is painted on the wall behind the gap where the missing
+   * foothold would have been, which is exactly where you are looking when you
+   * are wondering what went wrong.
+   */
+  private drawGateMarks(
+    ctx: CanvasRenderingContext2D,
+    level: Level,
+    p: { stencil: string },
+    view: { x0: number; y0: number; x1: number; y1: number },
+  ): void {
+    if (this.gatesFor !== level) {
+      this.gatesFor = level;
+      this.gates = analyseLevel(level, { coop: true }).gates;
+    }
+    for (const g of this.gates) {
+      const y = (g.y + 2) * TILE;
+      if (y < view.y0 - TILE * 4 || y > view.y1 + TILE * 4) continue;
+      const x = g.x * TILE + TILE / 2;
+      const key = `gate|${p.stencil}`;
+      let mark = this.gateMark.get(key);
+      if (!mark) {
+        const built = stencilMark('2 PERSON LIFT', TILE * 1.15, p.stencil);
+        if (!built) continue;
+        mark = built;
+        this.gateMark.set(key, mark);
+      }
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.drawImage(mark, x - mark.width / 2, y);
+      // A bracket under it, pointing at the gap the mark is about.
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = p.stencil;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(x - TILE * 1.4, y + mark.height + 8);
+      ctx.lineTo(x, y + mark.height + 2);
+      ctx.lineTo(x + TILE * 1.4, y + mark.height + 8);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   private recordScuffs(level: Level, world: World, prev: World, options: RenderOptions): void {
     if (options.highContrast) return;
     let written = 0;
