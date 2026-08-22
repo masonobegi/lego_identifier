@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MODE_HAUL,
   ROPE_NODES,
+  TILE,
   buildCampaign,
   createWorld,
   pointSolid,
@@ -98,29 +99,31 @@ function buriedNodes(level: Level, world: World): number {
 
 describe('the rope', () => {
   /**
-   * `placeAtSpawn` rests the rope in a slack arc forty-one pixels deep, which
-   * is further than a hauler's middle is from their own feet — so the middle of
-   * it starts under any floor the pair is ever put down on. And the solver
-   * cannot get it back: a blocked node stays where it is, which stops a node
-   * entering a wall but never walks one out of one.
-   *
-   * Stated as a fact about the simulation because that is where it lives, and
-   * because the drawing correction below is only worth having for as long as it
-   * stays true.
+   * The simulation used to hand the drawing a rope that was already inside the
+   * floor — `placeAtSpawn` rested it in a slack arc forty-one pixels deep, which
+   * is further than a hauler's middle is from their own feet, and the solver had
+   * no way to get it back out. That is fixed at the source now, in
+   * `placeAtSpawn` and in `tightenRope`, and this is the client's copy of the
+   * fact: it is what makes the correction below a safety net rather than the
+   * thing holding the picture together.
    */
-  it('is left inside the tower by the simulation at every spawn', () => {
+  it('is handed to the drawing already out of the ground', () => {
     const { level, world } = atSpawn();
-    expect(buriedNodes(level, world), 'nodes underground on the first tick').toBeGreaterThan(8);
+    expect(buriedNodes(level, world), 'nodes underground on the first tick').toBe(0);
   });
 
   /**
-   * Which is the single most-looked-at moment of a run: the first frame of it,
-   * and the first frame after every checkpoint reset, with the rope sawn
-   * through the ground and staying there for as long as the pair stood where
-   * they were put.
+   * And the drawing puts it back on the surface whatever it is given, because
+   * the moment this is wrong is the single most-looked-at frame of a run: the
+   * first one, and the first one after every checkpoint reset. Fed a rope
+   * dragged a tile under the floor by hand — which is what the simulation used
+   * to hand it — every node between the haulers' hands still comes back above
+   * ground.
    */
-  it('is drawn lying on it anyway', () => {
+  it('draws it on the surface even when it is handed one underground', () => {
     const { level, world } = atSpawn();
+    for (let i = 0; i < ROPE_NODES; i++) world.ropeY[i] += TILE;
+    expect(buriedNodes(level, world), 'the setup has to actually bury it').toBeGreaterThan(8);
     const { rec, ctx } = recorder();
     drawRope(ctx, level, world, world, 1, 0);
     const drawn = rec.strokes.filter((s) => s.style !== ROPE_SHADOW);
@@ -142,6 +145,7 @@ describe('the rope', () => {
    */
   it('hangs the crate off the same knot it drew', () => {
     const { level, world } = atSpawn();
+    for (let i = 0; i < ROPE_NODES; i++) world.ropeY[i] += TILE;
     const { rec, ctx } = recorder();
     drawCargo(ctx, level, world, world, 1, 0, true);
     const [tether] = rec.strokes;

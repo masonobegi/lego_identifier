@@ -133,6 +133,7 @@ c = C('yard_shift', 0, 0, 33)
 c.climb(width=12, step=(8, 3), direction=-1)
 c.put(2, 19, '!')
 c.deco(9, 30, 'oooo').deco(19, 4, 'ooo')
+c.hazard(2, '^', side=1, length=2)
 c.underhang(3, length=2).underhang(7, side=-1, length=2)
 c.gate(4)
 c.gate(7)
@@ -243,6 +244,7 @@ c.climb(width=11, step=(7, 4), direction=1, start=9)
 c.put(2, 19, '!')
 c.ledge(12, 2, 4, '#', '~').ledge(21, 34, 4, '#', '~').ledge(29, 2, 4, '#', '~')
 c.wall_spikes(17, 1, 2)
+c.hazard(8, '^', side=-1, length=2)
 c.underhang(3, length=3).underhang(7, side=-1, length=2)
 c.sweep(5, period=185, phase=40)
 c.gate(3)
@@ -340,6 +342,7 @@ c.put(2, 19, '!')
 c.restyle([3, 7], 'i')
 c.deco(11, 4, 'xxxx').deco(22, 30, 'xxxx')
 c.wall_spikes(15, -1, 3)
+c.hazard(7, '^', side=1, length=3)
 c.underhang(5, length=3)
 c.sweep(2, period=200)
 c.gate(3)
@@ -435,6 +438,7 @@ c.put(2, 19, '!')
 c.saw(x=19, y=9, r=1, ax=0, ay=8, period=140)
 c.saw(x=10, y=24, r=1, ax=16, ay=0, period=160, phase=50)
 c.wall_spikes(19, -1, 2).wall_spikes(26, 1, 2)
+c.hazard(4, '^', side=-1, length=3)
 c.underhang(4, length=4).underhang(8, side=-1, length=3)
 c.sweep(2, period=160)
 c.gate(2)
@@ -803,6 +807,20 @@ if moved:
 # compiles, the tower is still climbable, and the step the design wanted
 # dangerous is a step you stroll across. Thirty of them accumulated while this
 # was a printed line nobody read. It is the build now.
+eaten = [(ch.id, why) for ch in chunks for why in sorted(ch.eaten)]
+if eaten:
+    print(f'{len(eaten)} hazard(s) moved off a gate and back onto the climb:')
+    for cid, why in eaten:
+        print(f'  {cid}: {why}')
+
+# A hazard a gate displaced and the room then had nowhere for is the same
+# invisible loss as one that was never placed, so it is reported the same way.
+homeless = [(ch.id, why) for ch in chunks for why in ch.homeless]
+if homeless:
+    print(f'{len(homeless)} displaced hazard(s) found nowhere to go:')
+    for cid, why in homeless:
+        print(f'  {cid}: {why}')
+
 skipped = [(ch.id, why) for ch in chunks for why in ch.skipped]
 if skipped:
     print(f'{len(skipped)} hazard(s) had nowhere to go:')

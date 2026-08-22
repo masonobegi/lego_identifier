@@ -104,6 +104,10 @@ MIN_OVERLAP = 3
 # brace is stood on air beside it, and nobody goes anywhere.
 GATE_OVERLAP = 6
 
+# The glyphs that kill. Kept here because more than one painter has to know
+# whether it is about to quietly delete the only danger on a step.
+DEADLY = '^v<>~'
+
 # How much clear floor a gate has to leave between its far side and a side wall,
 # when the near side reaches that wall too.
 #
@@ -259,6 +263,8 @@ class C:
         self.path = []          # [(row, c0, c1)] bottom-to-top, the guaranteed route
         self.protected = set()  # cells decoration must never touch
         self.skipped = []       # hazards that had nowhere to go, reported at the end
+        self.eaten = set()      # ...and the ones a gate cleared off its own step
+        self.homeless = []      # ...and the ones it could then find nowhere for
         self.moved = []         # ...and the ones that went to a neighbouring step
         self.cleared = []       # entities lifted out of a gate's airspace, on purpose
         self.gates = set()      # path indices reached only by hauling on the rope
@@ -580,7 +586,7 @@ class C:
                 return run
         return []
 
-    def hazard(self, index, ch, side=1, length=3):
+    def hazard(self, index, ch, side=1, length=3, fatal=True):
         """Put something dangerous on the route itself, not beside it.
 
         The tower was 92.7% plain concrete, and every hazard in it was painted
@@ -627,7 +633,10 @@ class C:
                 if at != index:
                     self.moved.append(f'hazard path[{index}] -> path[{at}]')
                 return self
-        self.skipped.append(f'hazard path[{index}] row {r}')
+        if fatal:
+            self.skipped.append(f'hazard path[{index}] row {r}')
+        else:
+            self.homeless.append(f'{ch} from the gate at path[{index}]')
         return self
 
     def underhang(self, index, ch='v', side=1, length=3):
@@ -772,6 +781,7 @@ class C:
         else:
             self.skipped.append(f'gate near path[{index}]')
             return self
+        cleared = []
         low = self.path[index]
         up = self.path[index + 2]
 
@@ -788,6 +798,16 @@ class C:
         # through that row on the way to the landing.
         for r in range(up[0] + 1, low[0] - 1):
             for c in range(2, W - 2):
+                # The checkpoint stays. It is not a tile anybody can stand on,
+                # so it cannot help a lone climber, and the gap is on the route
+                # — the boost carries you straight up through it. Wiping it took
+                # the checkpoint out of nineteen of the sixty rooms, which is
+                # nineteen rooms where a fall costs you the whole floor.
+                if self.rows[r][c] == '!':
+                    continue
+                if self.rows[r][c] in DEADLY:
+                    cleared.append(self.rows[r][c])
+                    self.eaten.add(f'the gap of the gate at path[{index}]')
                 self.rows[r][c] = '.'
 
         # The two survivors have to sit under one another, because a boosted
@@ -801,8 +821,28 @@ class C:
         hi = min(HI, W - 3 - (width - 1))
         above = self.path[index + 3] if index + 3 < len(self.path) else None
         best = self._gate_column(index)
+        # Whatever was standing on the far side goes with it, or rather goes.
+        #
+        # A gate moves its landing platform sideways to line it up over the
+        # launch band, and for a long time it took the platform and left what
+        # was standing on it: freeze_crumble finished with two spikes at row 21
+        # columns 5 and 6, hanging in mid-air five columns clear of the ledge
+        # they had been painted on. Seven rooms in the campaign came out with
+        # every hazard on their route orphaned like that, which read on the
+        # danger meter as seven rooms with no teeth and read on screen as
+        # spikes growing out of the sky.
+        #
+        # They are cleared rather than carried, because the landing band is the
+        # one place in the game a hazard may not be — the climber comes up off a
+        # braced partner nearly vertically and cannot steer out of six columns.
+        # An author who wanted danger on that step is told so at the bottom of
+        # the build and moves it somewhere the pair can see it coming.
         for c in range(up_c0, up_c1 + 1):
             self.rows[up_r][c] = '.'
+            if up_r > 0 and self.rows[up_r - 1][c] in DEADLY:
+                cleared.append(self.rows[up_r - 1][c])
+                self.rows[up_r - 1][c] = '.'
+                self.eaten.add(f'the landing of the gate at path[{index}]')
         for c in range(best, best + width):
             self.rows[up_r][c] = '='
         self._protect(up_r, best, best + width - 1)
@@ -842,6 +882,20 @@ class C:
         self.gates.add(index + 1)
         if 'gate' not in self.tags:
             self.tags.append('gate')
+
+        # And it goes somewhere else in the room rather than out of the game.
+        #
+        # Sixty-nine hazards across the library were sitting on the step a gate
+        # eats or in the air it clears. Deleting them made seven campaign rooms
+        # completely safe and dropped the share of the climb with teeth in it
+        # from a sixth to under a seventh, which is the tower quietly becoming
+        # the clean staircase `hazard` exists to prevent. So the danger the gate
+        # displaces is re-laid on a step that can hold it — usually the launch
+        # ledge, which is the right answer anyway: a spike beside you while you
+        # line the boost up is a thing you can see and stand clear of, and a
+        # spike in the six columns you land in blind is not.
+        for ch in sorted(set(cleared)):
+            self.hazard(index, ch, side=1, length=min(3, cleared.count(ch)), fatal=False)
         return self
 
     def _hold_columns(self, index):
