@@ -22,6 +22,7 @@ import {
   buildCampaign,
   levelFloors,
   modeName,
+  campaignJob,
   shutterOpen,
   towerId,
   type MatchResult,
@@ -120,6 +121,14 @@ export class App {
 
   lobbyMode = MODE_HAUL;
   lobbyTowerLength = DEFAULT_TOWER_LENGTH;
+  /**
+   * Which job sheet The Long Haul is being taken on. See `CAMPAIGN_JOBS`.
+   *
+   * It travels as the campaign's seed, which was otherwise unused — the
+   * campaign is one authored tower — so a condition on it needs no lobby field
+   * and no protocol change.
+   */
+  lobbyJob = 0;
   /** Local play with a bot on the second rope end rather than a second person. */
   get botPartner(): boolean {
     return this.settings.botPartner;
@@ -768,7 +777,7 @@ export class App {
       world,
       level: session.ctx!.level,
       mode: session.ctx!.mode,
-      modeName: modeName(session.ctx!.mode),
+      modeName: modeName(session.ctx!.mode, session.ctx!.seed),
       localIndex: this.net ? this.net.localIndex : -1,
       names,
       colours: [PLAYER_COLOURS[colours[0] % PLAYER_COLOURS.length].main, PLAYER_COLOURS[colours[1] % PLAYER_COLOURS.length].main],
@@ -797,7 +806,11 @@ export class App {
    * Join or open a room. `seed` of zero leaves the tower to the server; a seed
    * asks for one by name, which is how both ends of a daily agree on it.
    */
-  connect(intent: number, code = '', seed = 0): void {
+  connect(
+    intent: number,
+    code = '',
+    seed = this.lobbyMode === MODE_HAUL ? this.lobbyJob : 0,
+  ): void {
     this.lobbyIntent = intent;
     this.audio.unlock();
     this.disposeSession();
@@ -845,7 +858,7 @@ export class App {
       this.lastWorst = worstOf(client.world);
       this.finishedRun = true;
       this.targetTicks = client.mode === MODE_HAUL
-        ? this.profile.bestCampaignTicks
+        ? this.campaignBest()
         : this.dailyRun && this.profile.daily.day === this.today
           ? this.profile.daily.bestTicks
           : 0;
@@ -1010,7 +1023,11 @@ export class App {
     this.startCouch();
   }
 
-  startCouch(mode = this.lobbyMode, seed = (Math.random() * 0x7fffffff) | 0, floors = this.lobbyTowerLength): void {
+  startCouch(
+    mode = this.lobbyMode,
+    seed = mode === MODE_HAUL ? this.lobbyJob : (Math.random() * 0x7fffffff) | 0,
+    floors = this.lobbyTowerLength,
+  ): void {
     this.audio.unlock();
     this.disposeSession();
     this.resetRunStats();
@@ -1133,7 +1150,7 @@ export class App {
         ? this.profile.daily.bestTicks
         : 0
       : this.local!.ctx.mode === MODE_HAUL
-        ? this.profile.bestCampaignTicks
+        ? this.campaignBest()
         : 0;
     this.endDailyAttempt();
     this.recordBest(this.lastResult, this.local!.ctx.mode);
@@ -1178,12 +1195,33 @@ export class App {
     }
   }
 
+  /** Which job sheet the run on screen is being taken on. See `CAMPAIGN_JOBS`. */
+  campaignJob(): number {
+    const session = this.net ?? this.local;
+    const seed = this.net ? this.net.seed : (this.local?.ctx.seed ?? 0);
+    if (!session) return this.lobbyJob;
+    return (session === this.net ? this.net.mode : this.local!.ctx.mode) === MODE_HAUL ? campaignJob(seed) : 0;
+  }
+
+  /** The time to beat on the job sheet being climbed. */
+  campaignBest(): number {
+    const job = this.campaignJob();
+    return job === 0 ? this.profile.bestCampaignTicks : (this.profile.bestCampaignJobs[job] ?? 0);
+  }
+
   private recordBest(result: MatchResult, mode: number): void {
     this.recordCrew(result, mode);
     if (!this.finishedRun) return;
     if (mode === MODE_HAUL) {
-      const best = this.profile.bestCampaignTicks;
-      if (best === 0 || result.finishTick < best) this.profile.bestCampaignTicks = result.finishTick;
+      // Each job sheet keeps its own record, because a run with the wind up all
+      // the way is not the same climb and a table that mixes them is a table
+      // nobody trusts. Slot zero is also written to `bestCampaignTicks`, which
+      // is the field every save in the wild already has.
+      const job = this.campaignJob();
+      const kept = this.profile.bestCampaignJobs;
+      while (kept.length <= job) kept.push(0);
+      if (kept[job] === 0 || result.finishTick < kept[job]) kept[job] = result.finishTick;
+      if (job === 0) this.profile.bestCampaignTicks = kept[0];
       return;
     }
     const floors = this.runFloors();

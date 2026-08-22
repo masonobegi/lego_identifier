@@ -4,7 +4,22 @@ import { CARGO_HP } from './constants.js';
 import { Rng } from './rng.js';
 import { MODE_GAUNTLET, MODE_HAUL } from './types.js';
 
-/** The authored campaign, bottom to top. */
+/**
+ * The job sheets the campaign can be taken on.
+ *
+ * Index 0 is the ordinary run and is what `buildCampaign()` means with no
+ * argument. The rest are the Gauntlet's own floor conditions applied to the
+ * *whole* authored tower rather than to a floor of a random one — the same
+ * three words a player has already met one floor at a time, turned into a way
+ * to take the best thirty-four floors in the game again.
+ *
+ * They cost nothing on the wire. `levelForMatch` is handed a seed it has never
+ * used for the campaign, because the campaign is one tower, so the seed is the
+ * job: both peers and the server already agree on it, and no level data has to
+ * cross.
+ */
+export const CAMPAIGN_JOBS = ['', 'NO CHECKPOINT', 'CROSSWIND', 'CRACKED CRATE'] as const;
+
 /**
  * The authored tower: every room except the ones held back for the Gauntlet.
  *
@@ -14,8 +29,25 @@ import { MODE_GAUNTLET, MODE_HAUL } from './types.js';
  * them a floor they had not already climbed. A second evening had nothing to be
  * about. The rooms tagged `spare` are the ones the campaign does not open.
  */
-export function buildCampaign(): Level {
-  return assembleLevel('campaign', 'THE LONG HAUL', CHUNKS.filter((c) => !c.tags?.includes('spare')));
+export function buildCampaign(job = 0): Level {
+  const rooms = CHUNKS.filter((c) => !c.tags?.includes('spare'));
+  const name = CAMPAIGN_JOBS[job] ?? '';
+  if (!name) return assembleLevel('campaign', 'THE LONG HAUL', rooms);
+
+  const rule = FLOOR_RULES.find((r) => r.name === name)!;
+  // Never the ground floor and never the roof, for the same reason the Gauntlet
+  // spares them: the first thing you meet should be the game, and the last
+  // thing should be the ending.
+  const dressed = rooms.map((chunk, i) =>
+    i < 2 || i === rooms.length - 1
+      ? chunk
+      : { ...chunk, rows: rule.apply(chunk.rows, chunk), rule: name },
+  );
+  const level = assembleLevel(`campaign-${job}`, `THE LONG HAUL — ${name}`, dressed);
+  // A cracked crate for the whole climb rather than for one floor of it, which
+  // is the difference between a nasty floor and a nasty job.
+  if (name === 'CRACKED CRATE') level.crateHp = Math.round(CARGO_HP * 0.55);
+  return level;
 }
 
 /**
@@ -127,11 +159,22 @@ export const DEFAULT_TOWER_LENGTH = 10;
  * crosses the wire.
  */
 export function levelForMatch(mode: number, seed: number, towerLength: number): Level {
-  return mode === MODE_GAUNTLET ? buildTower(seed, towerLength) : buildCampaign();
+  // The campaign is one tower, so its seed was doing nothing. It carries the
+  // job sheet instead — see `CAMPAIGN_JOBS` — which is why a condition on the
+  // campaign needs no protocol change and no lobby field: both ends already
+  // agree on the seed before the match starts.
+  return mode === MODE_GAUNTLET ? buildTower(seed, towerLength) : buildCampaign(campaignJob(seed));
 }
 
-export function modeName(mode: number): string {
-  return mode === MODE_GAUNTLET ? 'GAUNTLET' : 'THE LONG HAUL';
+/** Which job sheet a campaign seed names. Anything unrecognised is the plain run. */
+export function campaignJob(seed: number): number {
+  return seed > 0 && seed < CAMPAIGN_JOBS.length ? seed : 0;
+}
+
+export function modeName(mode: number, seed = 0): string {
+  if (mode === MODE_GAUNTLET) return 'GAUNTLET';
+  const job = CAMPAIGN_JOBS[campaignJob(seed)];
+  return job ? `THE LONG HAUL — ${job}` : 'THE LONG HAUL';
 }
 
 export { MODE_GAUNTLET, MODE_HAUL };

@@ -68,6 +68,9 @@ usually the other person.
 [*][b]THE LONG HAUL[/b] — a full climb through four biomes: a builder's yard, a foundry
 full of saws and lava, a freezer with no friction, and a spire that combines everything
 that has already killed you.
+[*][b]THE LONG HAUL, AGAIN[/b] — the same thirty-four floors on a different job sheet: no
+checkpoint anywhere in the tower, or an updraught in every shaft, or a crate that was
+already cracked when you signed for it. Each one keeps its own record.
 [*][b]THE GAUNTLET[/b] — an endless tower assembled fresh from a seed. Choose how tall.
 Regret it immediately. The higher it goes the more of its floors arrive with a name on
 them — NO CHECKPOINT, CROSSWIND, CRACKED CRATE — so a tall run is an escalation rather

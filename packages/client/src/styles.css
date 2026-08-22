@@ -543,6 +543,10 @@ kbd {
    that is not on your side. */
 .screen .sub.worst { color: #b8341c; font-weight: 700; }
 
+/* Which job sheet the run was taken on, when it was not the ordinary one. Set
+   in the ink the HUD names the mode in, because it is the same fact. */
+.screen .sub.job { letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; opacity: 0.85; }
+
 /* And the photograph of it. A print pinned to the card: white border, a little
    off square, a hard shadow. The tilt is fixed rather than random — a card that
    sits at a different angle every time you finish reads as decoration, and this

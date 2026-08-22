@@ -534,6 +534,7 @@ Counted from the built data rather than remembered, because the two drift:
 | Steps with something lethal on them | 70 of 329 |
 | Blades and presses on the campaign | 27 saws, 13 movers |
 | Achievements | 16, unlocking 9 hats |
+| The Long Haul, on a job sheet | the same 36 rooms with NO CHECKPOINT, CROSSWIND or CRACKED CRATE over the whole tower; a record apiece |
 | The Gauntlet | any height from the same 60-chunk pool, on a shared seed, with named conditions on the floors as it gets taller |
 | The Daily Haul | one procedurally assembled tower per calendar day, and a fortnight of them remembered |
 

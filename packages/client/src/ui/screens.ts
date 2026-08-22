@@ -6,6 +6,7 @@ import {
   MODE_GAUNTLET,
   MODE_HAUL,
   buildCampaign,
+  CAMPAIGN_JOBS,
   dailyLabel,
   isValidRoomCode,
   levelFloors,
@@ -302,6 +303,7 @@ function modeSelector(app: App): HTMLElement {
         ),
       ),
     ),
+    app.lobbyMode === MODE_HAUL ? jobSheet(app) : null,
     app.lobbyMode === MODE_GAUNTLET
       ? h(
           'label',
@@ -320,6 +322,40 @@ function modeSelector(app: App): HTMLElement {
           }),
         )
       : null,
+  );
+}
+
+/**
+ * The job sheet The Long Haul is being taken on.
+ *
+ * The campaign is thirty-four hand-built floors and the best content in the
+ * game, and until now there was exactly one way to climb it. These are the
+ * three conditions a Gauntlet floor can arrive under, applied to the whole
+ * tower instead — the same three words a player has already met one floor at a
+ * time. Each keeps its own record, and the ordinary run stays first and
+ * unmarked so nobody has to opt out of anything to play the game as authored.
+ */
+function jobSheet(app: App): HTMLElement {
+  const said = [
+    { name: 'Standard', blurb: 'The job as written.' },
+    { name: 'No net', blurb: 'Not one checkpoint in the whole tower.' },
+    { name: 'Wind up', blurb: 'An updraught in every shaft, and the crate feels it.' },
+    { name: 'Salvage', blurb: 'The crate is already cracked when you pick it up.' },
+  ];
+  return h(
+    'label',
+    { class: 'field' },
+    h('span', {}, 'Job sheet'),
+    h(
+      'div',
+      { class: 'menu two' },
+      ...said.map((job, i) =>
+        button(app, job.name, job.blurb, () => {
+          app.lobbyJob = i;
+          app.refresh();
+        }, { primary: app.lobbyJob === i }),
+      ),
+    ),
   );
 }
 
@@ -623,6 +659,7 @@ function resultsScreen(app: App): HTMLElement {
     'div',
     { class: 'screen' },
     h('h2', { class: 'title' }, app.finishedRun ? 'Delivered' : 'Run over'),
+    jobLine(app),
     h('div', { class: 'verdict' }, verdict),
     against ? h('p', { class: 'sub' }, against) : null,
     crewLine(app),
@@ -1117,6 +1154,19 @@ function achievementsScreen(app: App): HTMLElement {
  * three six-minute runs of the campaign it produced "yanked off a ledge at
  * 5:20, 31 metres", which is a sentence somebody would read out.
  */
+/**
+ * Which job sheet this was, when it was not the ordinary one.
+ *
+ * A time on the card means nothing without it: fourteen minutes with no
+ * checkpoints anywhere is not the same run as fourteen minutes with
+ * thirty-six, and the bests are kept apart for the same reason.
+ */
+function jobLine(app: App): HTMLElement | null {
+  const job = CAMPAIGN_JOBS[app.campaignJob()];
+  if (!job) return null;
+  return h('p', { class: 'sub job' }, `Job sheet: ${job}`);
+}
+
 function worstLine(app: App): HTMLElement | null {
   const w = app.lastWorst;
   if (!w || w.value < 4) return null;
@@ -1293,6 +1343,14 @@ function recordsScreen(app: App): HTMLElement {
       ]),
       ledger('Best on record', [
         ['Fastest Long Haul', p.bestCampaignTicks > 0 ? formatTime(p.bestCampaignTicks / 60) : 'Not yet delivered', 'gold'],
+        // A job sheet is only listed once it has been delivered. Four rows of
+        // "Not yet delivered" is a to-do list, and this is a record of what the
+        // two of you have actually done.
+        ...CAMPAIGN_JOBS.flatMap((job, i) =>
+          i > 0 && (p.bestCampaignJobs[i] ?? 0) > 0
+            ? ([[`  …on ${job.toLowerCase()}`, formatTime(p.bestCampaignJobs[i] / 60), 'gold']] as [string, string, string][])
+            : [],
+        ),
         ['Tallest Gauntlet finished', p.bestGauntletHeight > 0 ? `${p.bestGauntletHeight} floors` : 'Not yet delivered', 'gold'],
         [dailyLabel(app.today), today],
         ['Days running', streak > 0 ? `${streak}` : '—'],

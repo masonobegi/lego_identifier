@@ -185,6 +185,14 @@ export interface Profile {
   runs: number;
   finishes: number;
   bestCampaignTicks: number;
+  /**
+   * Best time on each named job sheet, indexed by `CAMPAIGN_JOBS`.
+   *
+   * Slot zero duplicates `bestCampaignTicks`, which stays because it is what
+   * every save in the wild already holds — a player who has finished the
+   * ordinary run keeps their record.
+   */
+  bestCampaignJobs: number[];
   bestGauntletHeight: number;
   deaths: number;
   cargoBreaks: number;
@@ -204,6 +212,7 @@ export const DEFAULT_PROFILE: Profile = {
   runs: 0,
   finishes: 0,
   bestCampaignTicks: 0,
+  bestCampaignJobs: [],
   bestGauntletHeight: 0,
   deaths: 0,
   cargoBreaks: 0,
@@ -272,6 +281,7 @@ export function loadProfile(): Profile {
   const p: Profile = { ...DEFAULT_PROFILE, ...saved };
   if (!Array.isArray(p.unlockedHats) || p.unlockedHats.length === 0) p.unlockedHats = [0];
   if (!Array.isArray(p.crews)) p.crews = [];
+  p.bestCampaignJobs = Array.isArray(saved.bestCampaignJobs) ? saved.bestCampaignJobs.slice(0, 8) : [];
   // That merge is one level deep, so a saved `daily` arrives whole, and a save
   // older than the history arrives without one — a strip drawn from
   // `undefined` is a crash on the title screen. The array is rebuilt rather

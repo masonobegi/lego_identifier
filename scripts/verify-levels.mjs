@@ -27,6 +27,7 @@ import {
   analyseLevel,
   buildCampaign,
   buildTower,
+  CAMPAIGN_JOBS,
   createWorld,
   ledgeSteps,
   step as simStep,
@@ -1026,7 +1027,20 @@ export function verifyLevel(level, mode, seed, options = {}) {
  */
 function levels() {
   const towers = Number(process.env.TOWER_SAMPLES ?? 12);
-  const list = [{ label: 'campaign      ', build: () => buildCampaign(), mode: 0, seed: 1 }];
+  const list = [
+    { label: 'campaign      ', build: () => buildCampaign(), mode: 0, seed: 1 },
+    // The campaign taken on a job sheet, but only the one that ADDS anything.
+    //
+    // NO CHECKPOINT takes the '!' out, which is not a tile anybody can stand on
+    // and cannot make a step easier; CRACKED CRATE changes one number and no
+    // geometry at all. CROSSWIND paints updraught into the shaft, and wind is
+    // 1550 upward against gravity's 2400 — so a hauler jumping through a band
+    // of it goes higher than the reachability fill thinks anybody can, which is
+    // exactly the claim this file exists to check. The conditions are kept out
+    // of the rows a gate or a doorway lives in, and this is what proves that is
+    // enough rather than merely plausible.
+    { label: 'crosswind haul', build: () => buildCampaign(CAMPAIGN_JOBS.indexOf('CROSSWIND')), mode: 0, seed: 2 },
+  ];
   for (let i = 0; i < towers; i++) {
     const seed = (i + 1) * 104729;
     list.push({

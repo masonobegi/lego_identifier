@@ -105,6 +105,8 @@ function fakeApp(p: Profile): App {
     botPartner: false,
     lobbyMode: 0,
     lobbyTowerLength: 10,
+    lobbyJob: 0,
+    campaignJob: () => 0,
     net: null,
     local: null,
   } as unknown as App;
@@ -240,6 +242,8 @@ describe('the worst moment', () => {
       targetTicks: 0,
       net: null,
       local: null,
+      lobbyJob: 0,
+      campaignJob: () => 0,
       lastResult: {
         finishTick: 18_000,
         deaths: [3, 4],
@@ -275,5 +279,36 @@ describe('the worst moment', () => {
     expect(pick(screen, 'img'), 'nothing to pin up').toHaveLength(0);
     expect(classes(screen)).not.toContain('polaroid');
     expect(text(screen)).toContain('Worst moment: 5:20.00 — somebody fell 31 metres.');
+  });
+});
+
+/**
+ * The Long Haul, taken on a named job sheet.
+ *
+ * The campaign is the best content in the game and there was one way to climb
+ * it. The picker has to be there, the ordinary run has to stay first and
+ * unmarked, and the ledger must not turn into a to-do list of jobs nobody has
+ * taken.
+ */
+describe('the job sheet', () => {
+  it('offers the three conditions, with the plain run first', async () => {
+    const { buildScreen } = await screens();
+    const said = text(buildScreen(fakeApp(await profile()), 'couch'));
+    expect(said).toContain('Job sheet');
+    expect(said).toContain('Standard');
+    expect(said).toContain('No net');
+    expect(said).toContain('Wind up');
+    expect(said).toContain('Salvage');
+  });
+
+  it('keeps the ledger to the jobs that have actually been delivered', async () => {
+    const { buildScreen } = await screens();
+    const bare = await profile({ bestCampaignTicks: 54_000, bestCampaignJobs: [54_000, 0, 0, 0] });
+    expect(text(buildScreen(fakeApp(bare), 'records')), 'nothing to list yet').not.toContain('…on');
+
+    const done = await profile({ bestCampaignTicks: 54_000, bestCampaignJobs: [54_000, 0, 61_200, 0] });
+    const said = text(buildScreen(fakeApp(done), 'records'));
+    expect(said).toContain('…on crosswind');
+    expect(said, 'and not the two nobody has taken').not.toContain('…on no checkpoint');
   });
 });

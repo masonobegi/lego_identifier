@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARGO_HP, CHUNKS, TILE_CHARS, T_EMPTY, analyseLevel, buildCampaign, buildTower, tileAt } from '../src/index.js';
+import { CAMPAIGN_JOBS, CARGO_HP, CHUNKS, TILE_CHARS, T_EMPTY, analyseLevel, buildCampaign, buildTower, tileAt } from '../src/index.js';
 
 /**
  * The Gauntlet had to stop being a reshuffle.
@@ -118,5 +118,71 @@ describe('floor conditions', () => {
     const c = buildCampaign();
     expect(c.floorRules.every((r) => r === ''), 'a hand-built tower needs no dressing').toBe(true);
     expect(c.crateHp).toBe(0);
+  });
+});
+
+/**
+ * The campaign, taken on a named job sheet.
+ *
+ * Thirty-four hand-built floors is the best content in the game and there was
+ * exactly one way to climb them, which is most of why a panel of three judges
+ * failed this on "at least a week of reasons to come back". These are the
+ * conditions a Gauntlet floor can arrive under, applied to the whole authored
+ * tower instead — the same three words a player has already met one floor at a
+ * time, and no new level content to build or verify.
+ *
+ * They cost nothing on the wire: the campaign is one tower, so its seed was
+ * doing nothing, and the job travels as the seed both ends already agree on.
+ */
+describe('the campaign job sheets', () => {
+  it('changes the tower, and only in the ways the condition names', () => {
+    const plain = buildCampaign();
+    for (let job = 1; job < CAMPAIGN_JOBS.length; job++) {
+      const l = buildCampaign(job);
+      expect(l.h, `job ${job} is the same tower`).toBe(plain.h);
+      expect(l.chunkIds, `job ${job} climbs the same rooms`).toEqual(plain.chunkIds);
+      expect(l.id, `job ${job} is told apart from the plain run`).not.toBe(plain.id);
+      expect(l.name).toContain(CAMPAIGN_JOBS[job]);
+    }
+    expect(buildCampaign(0).id, 'the ordinary run keeps its own id').toBe('campaign');
+    // NO CHECKPOINT is the one that has to be visible in the data: the ground
+    // floor and the roof keep theirs, and nothing else does.
+    const bare = buildCampaign(CAMPAIGN_JOBS.indexOf('NO CHECKPOINT'));
+    expect(bare.checkpoints.length).toBeLessThan(4);
+    expect(plain.checkpoints.length).toBeGreaterThan(30);
+    // And the salvage job hands you a crate that is already hurt.
+    const salvage = buildCampaign(CAMPAIGN_JOBS.indexOf('CRACKED CRATE'));
+    expect(salvage.crateHp).toBeGreaterThan(0);
+    expect(salvage.crateHp).toBeLessThan(CARGO_HP);
+    expect(plain.crateHp).toBe(0);
+  });
+
+  it('is still climbable by a pair and still impossible alone', () => {
+    for (let job = 0; job < CAMPAIGN_JOBS.length; job++) {
+      const l = buildCampaign(job);
+      expect(analyseLevel(l, { coop: true }).ok, `job ${job} together`).toBe(true);
+      expect(analyseLevel(l).ok, `job ${job} alone`).toBe(false);
+    }
+  });
+
+  it('leaves the two-person moments exactly as they were painted', () => {
+    // The same rule the Gauntlet's floors are held to, and for the same reason:
+    // an updraught in a gate's gap is a free lift up the one step that is
+    // supposed to need a partner.
+    const rooms = CHUNKS.filter((c) => !c.tags?.includes('spare'));
+    for (let job = 1; job < CAMPAIGN_JOBS.length; job++) {
+      const l = buildCampaign(job);
+      let cursor = l.h;
+      for (const chunk of rooms) {
+        cursor -= chunk.rows.length;
+        for (const r of chunk.twoPersonRows ?? []) {
+          for (let x = 0; x < l.w; x++) {
+            const was = TILE_CHARS[chunk.rows[r][x]];
+            const now = tileAt(l, x, cursor + r);
+            expect(now === was || now === T_EMPTY, `job ${job} ${chunk.id} row ${r} col ${x}`).toBe(true);
+          }
+        }
+      }
+    }
   });
 });
