@@ -29,3 +29,4 @@ packages/desktop/build-config.json
 
 # Temporary git worktrees created by the Workflow tool.
 .claude/worktrees/
+tools/__pycache__/
