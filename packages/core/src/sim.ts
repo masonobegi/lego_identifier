@@ -14,6 +14,7 @@ import {
 } from './constants.js';
 import { hazardAt } from './hazards.js';
 import { T_CHECKPOINT, T_GOAL, type Level, tileAt } from './level.js';
+import { MAX_RISE } from './route.js';
 import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
 import { updatePlayer } from './player.js';
@@ -223,13 +224,58 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
       const p = world.players[i];
       if (!p.dead || p.respawn > 0) continue;
       const other = world.players[1 - i];
+
+      // Coming back next to your partner is a rescue. It must not be a lift.
+      //
+      // This used to be unconditional, and it quietly beat every co-operative
+      // verb in the game. Reeling moves you 430 px/s along a rope that is 232px
+      // long and drains your grip; a boost costs the brace a fifth of their bar
+      // and needs both of you lined up. Dying is instant, unlimited, free, and
+      // goes as far as your partner has got — so at a gate, the fastest way for
+      // the second hauler to follow the first is to walk into a spike. Every
+      // gate in the tower, and the entire reason the campaign needs two people,
+      // was one bad habit away from being decoration.
+      //
+      // So: if your partner is meaningfully above where you died, you go back
+      // to the checkpoint instead. Level with them or below, you get the
+      // rescue, which is the version of this that makes the game forgiving
+      // rather than the version that makes it pointless.
+      const lift = p.y - other.y > (MAX_RISE + 1) * TILE;
+      if (lift) {
+        placeAtSpawn(level, world, world.spawnX, world.spawnY);
+        pushEvent(world, EV_RESPAWN, world.spawnX, world.spawnY, i, 1);
+        continue;
+      }
+
+      // And put them somewhere that is not itself lethal. The death sweep runs
+      // earlier in this same tick, so a body placed inside a spike dies again
+      // on the next one, which reads as the game taking two lives for one
+      // mistake and can loop.
+      let px = other.x - other.facing * 26;
+      const py = other.y - 12;
+      for (const dx of [0, 26, -26, 52, -52]) {
+        const x = other.x - other.facing * 26 + dx;
+        const clear = !hazardAt(
+          level,
+          world,
+          x - PLAYER_HALF_W + HURT_INSET_X,
+          py - PLAYER_H / 2 + HURT_INSET_Y,
+          x + PLAYER_HALF_W - HURT_INSET_X,
+          py + PLAYER_H / 2 - HURT_INSET_Y,
+        );
+        if (clear) {
+          px = x;
+          break;
+        }
+      }
+
       p.dead = 0;
       p.respawn = 0;
       p.stunned = 8;
       p.grip = 0;
       p.gripCooldown = 20;
-      p.x = other.x - other.facing * 26;
-      p.y = other.y - 12;
+      p.x = px;
+      p.y = py;
       p.vx = other.vx * 0.5;
       p.vy = -180;
       pushEvent(world, EV_RESPAWN, p.x, p.y, i, 0);

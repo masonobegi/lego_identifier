@@ -4,6 +4,9 @@ import {
   GRIP_MAX,
   IN_GRIP,
   IN_JUMP,
+  LocalMatch,
+  MODE_HAUL,
+  MAX_RISE,
   PLAYER_H,
   ROPE_NODES,
   TILE,
@@ -205,5 +208,48 @@ describe('rope gates', () => {
     // two-person moves when four had been authored.
     const pair = analyseLevel(buildCampaign(), { coop: true });
     expect(pair.gates.length).toBeLessThanOrEqual(8);
+  });
+});
+
+describe('dying', () => {
+  /**
+   * Coming back next to your partner is a rescue. It must not be a lift.
+   *
+   * Unconditional partner-side respawn quietly beat every co-operative verb in
+   * the game: reeling moves you 430 px/s along a 232px rope and drains your
+   * grip, a boost costs the brace a fifth of their bar and needs both of you
+   * lined up — and dying is instant, unlimited, free, and goes as far as your
+   * partner has got. At a gate the fastest way for the second hauler to follow
+   * the first was to walk into a spike, which would have made every gate in the
+   * tower decoration within an hour of somebody noticing.
+   */
+  it('does not carry you up to a partner who has climbed above you', () => {
+    const m = new LocalMatch(MODE_HAUL, 1, 6);
+    const w = m.world;
+    const base = w.players[0].y;
+    w.players[1].x = w.players[0].x;
+    w.players[1].y = base - 8 * TILE;
+    w.players[0].dead = 1;
+    w.players[0].respawn = 0;
+    for (let t = 0; t < 6; t++) {
+      step(m.ctx, w, [0, 0]);
+      w.events.length = 0;
+    }
+    expect((base - w.players[0].y) / TILE).toBeLessThan(MAX_RISE);
+  });
+
+  it('still puts you back beside a partner who is level with you', () => {
+    const m = new LocalMatch(MODE_HAUL, 1, 6);
+    const w = m.world;
+    const y0 = w.players[0].y;
+    w.players[1].x = w.players[0].x + 60;
+    w.players[0].dead = 1;
+    w.players[0].respawn = 0;
+    for (let t = 0; t < 6; t++) {
+      step(m.ctx, w, [0, 0]);
+      w.events.length = 0;
+    }
+    expect(Math.abs(w.players[0].x - w.players[1].x)).toBeLessThan(90);
+    expect(Math.abs(w.players[0].y - y0)).toBeLessThan(TILE * 2);
   });
 });

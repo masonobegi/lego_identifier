@@ -26,6 +26,9 @@ import {
   buildTower,
   cloneWorld,
   createWorld,
+  WORLD_KEYS,
+  CARGO_KEYS,
+  PLAYER_KEYS,
   dcos,
   dsin,
   hashSeed,
@@ -216,6 +219,33 @@ describe('simulation determinism', () => {
     runTicks(ctx, a, 60);
     runTicks(ctx, b, 60);
     expect(hashWorld(a)).not.toBe(hashWorld(b));
+  });
+});
+
+describe('what rollback copies', () => {
+  /**
+   * Every number on the world is in the key lists, or it is not rolled back.
+   *
+   * Rollback copies state field by field from `WORLD_KEYS`, `CARGO_KEYS` and
+   * `PLAYER_KEYS`. A field added to the interface and forgotten in the list is
+   * not a type error, is not a test failure, and does not show up in single
+   * player: it shows up as two clients quietly disagreeing about a counter
+   * several minutes into an online match. Three fields were added to the world
+   * in one afternoon — a hazard grace timer, a betrayal debounce, a boost
+   * count — and each was one omission away from that.
+   */
+  it('has every numeric field of the world in a key list', () => {
+    const world = createWorld({ level: buildCampaign(), seed: 1, mode: 0 });
+    const missing: string[] = [];
+    const check = (obj: object, keys: readonly string[], label: string): void => {
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'number' && !keys.includes(k)) missing.push(`${label}.${k}`);
+      }
+    };
+    check(world, WORLD_KEYS, 'world');
+    check(world.cargo, CARGO_KEYS, 'cargo');
+    check(world.players[0], PLAYER_KEYS, 'player');
+    expect(missing).toEqual([]);
   });
 });
 
