@@ -1039,6 +1039,19 @@ function levels() {
   return list;
 }
 
+/** One level's slices, back together as the single answer about that level. */
+function merge(slices) {
+  return {
+    ok: slices.every((p) => p.ok),
+    reached: slices[0].reached,
+    total: slices[0].total,
+    steps: slices[0].steps,
+    holds: slices[0].holds,
+    reason: slices.find((p) => p.reason)?.reason,
+    failures: slices.flatMap((p) => p.failures ?? []),
+  };
+}
+
 function report(label, r) {
   console.log(
     `${label}  ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ` +
@@ -1094,7 +1107,15 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
     }
     const parts = list.map(() => []);
     let next = 0;
+    let bad = 0;
     const started = Date.now();
+    // Said out loud because it is minutes rather than seconds and somebody is
+    // sitting watching it: the solo search is the price of the one claim the
+    // whole design rests on, and it scales with the number of gates.
+    console.log(
+      `Proving ${list.length} levels — ${queue.length} slices on ${cores} cores. ` +
+        `The solo search is thorough and slow; expect this to take a while.`,
+    );
 
     await new Promise((resolve, reject) => {
       let live = 0;
@@ -1121,6 +1142,9 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
               return;
             }
             parts[job.level].push(JSON.parse(out.trim().split('\n').pop()));
+            // Report a level the moment its last slice lands, so a long run
+            // shows its working instead of sitting silent for twenty minutes.
+            if (parts[job.level].length === slices) bad += report(list[job.level].label, merge(parts[job.level]));
             if (next >= queue.length && live === 0) resolve();
             else pump();
           });
@@ -1129,19 +1153,6 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
       pump();
     });
 
-    let bad = 0;
-    for (let l = 0; l < list.length; l++) {
-      const slicesOf = parts[l];
-      bad += report(list[l].label, {
-        ok: slicesOf.every((p) => p.ok),
-        reached: slicesOf[0].reached,
-        total: slicesOf[0].total,
-        steps: slicesOf[0].steps,
-        holds: slicesOf[0].holds,
-        reason: slicesOf.find((p) => p.reason)?.reason,
-        failures: slicesOf.flatMap((p) => p.failures ?? []),
-      });
-    }
     console.log(
       `\n${list.length} levels in ${queue.length} slices on ${cores} cores, ` +
         `${Math.round((Date.now() - started) / 1000)}s.`,

@@ -241,11 +241,28 @@ describe('climbability', () => {
     }
   }, 120_000);
 
+  /**
+   * The replay, but not the solo search that runs beside it in the build gate.
+   *
+   * `soloCanCross` throws five and a half thousand scripted attempts and
+   * fifteen hundred random ones at every gate, in the real simulation, and the
+   * library is built around seventy-one two-person moments now where it had
+   * seven. It is the single most valuable check in the repo and it does not
+   * belong in a unit test: three towers of it ran for over an hour here, on one
+   * core, inside a runner that cannot interrupt a synchronous body however
+   * generous the timeout — so the suite stopped being runnable and a suite
+   * nobody runs catches nothing.
+   *
+   * It runs in `npm run verify:levels`, on the campaign and twelve towers
+   * rather than three, spread across every core. This keeps the half that is
+   * cheap: that every step of a generated tower can actually be climbed by a
+   * pair and the crate brought up after them.
+   */
   it('replays every climbing step of a sample of towers', () => {
     for (let i = 0; i < 3; i++) {
       const seed = (i + 1) * 31337;
       const level = buildTower(seed, 6);
-      const outcome = verifyLevel(level, 1, seed);
+      const outcome = verifyLevel(level, 1, seed, { solo: false });
       expect(outcome.failures ?? [], `tower ${seed}`).toEqual([]);
       expect(outcome.ok).toBe(true);
     }
