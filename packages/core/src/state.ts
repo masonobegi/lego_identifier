@@ -59,6 +59,34 @@ function liftClear(level: Level, world: World): void {
   }
 }
 
+/**
+ * How many slack settings the spawn arc is allowed to try, biggest first.
+ *
+ * A ladder rather than a solve: the same integer sequence on both peers, and
+ * the last rung is a straight line between two hauler centres, which is in open
+ * air whenever the haulers themselves are.
+ */
+const SAG_STEPS = 8;
+
+/** Would a rope hung between two points with this much belly touch geometry? */
+function arcHitsTiles(
+  level: Level,
+  world: World,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  sag: number,
+): boolean {
+  for (let i = 1; i < ROPE_NODES - 1; i++) {
+    const t = i / (ROPE_NODES - 1);
+    const nx = ax + (bx - ax) * t;
+    const ny = ay + (by - ay) * t + 4 * t * (1 - t) * sag;
+    if (rectHitsTiles(level, world, nx - 1, ny - 1, nx + 1, ny + 1)) return true;
+  }
+  return false;
+}
+
 export function placeAtSpawn(level: Level, world: World, x: number, y: number): void {
   const half = ROPE_REST * 0.36;
   for (let i = 0; i < 2; i++) {
@@ -90,11 +118,33 @@ export function placeAtSpawn(level: Level, world: World, x: number, y: number): 
   const ay = world.players[0].y;
   const bx = world.players[1].x;
   const by = world.players[1].y;
+  // Rest the rope in a slack arc so it reads as a rope, not a stick — but only
+  // as much slack as there is room for.
+  //
+  // The arc's belly is 4*t*(1-t)*ROPE_REST*0.35 = 41px at the middle, and a
+  // hauler's feet are 16px below their centre, so on a floor the rope was laid
+  // a whole tile inside the rock: measured at the campaign spawn, 11 of the 15
+  // nodes started inside solid tile, the deepest 29px under the surface. And it
+  // never came out. `solveRope` leaves a blocked node where it is, which can
+  // stop one entering a wall but can never walk one back out of it, so the same
+  // 11 nodes were still buried ten seconds later with the pair standing still.
+  //
+  // So shorten the belly until the whole arc is in open air. Nine tries down to
+  // a straight line, which is always legal because both ends are hauler
+  // centres, and the search is over integers of a fixed ladder rather than a
+  // solve, so both peers land on the same rope.
+  let sag = 0;
+  for (let step = SAG_STEPS; step > 0; step--) {
+    const candidate = (ROPE_REST * 0.35 * step) / SAG_STEPS;
+    if (!arcHitsTiles(level, world, ax, ay, bx, by, candidate)) {
+      sag = candidate;
+      break;
+    }
+  }
   for (let i = 0; i < ROPE_NODES; i++) {
     const t = i / (ROPE_NODES - 1);
     const nx = ax + (bx - ax) * t;
-    // Rest the rope in a slack arc so it reads as a rope, not a stick.
-    const ny = ay + (by - ay) * t + 4 * t * (1 - t) * ROPE_REST * 0.35;
+    const ny = ay + (by - ay) * t + 4 * t * (1 - t) * sag;
     world.ropeX[i] = nx;
     world.ropeY[i] = ny;
     world.ropePX[i] = nx;

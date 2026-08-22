@@ -169,6 +169,17 @@ export interface ChunkDef {
   /** Chunks tagged 'start' or 'goal' are only used as the first/last chunk. */
   tags?: string[];
   /**
+   * How many two-person moments the room was authored with — leg-ups and
+   * shutters respectively, written out by the chunk painter.
+   *
+   * Nothing in the simulation reads these. They exist so the build can hold the
+   * route-finder to the design: `analyseLevel` should find the gates that were
+   * painted and no others, and a fill that helps itself to a leg up where there
+   * is an ordinary way on says so by coming back with more than were painted.
+   */
+  gates?: number;
+  holds?: number;
+  /**
    * The name of the condition this floor is being climbed under, if any.
    *
    * Set when a tower is assembled rather than when a room is authored: the same

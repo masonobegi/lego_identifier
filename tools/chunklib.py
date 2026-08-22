@@ -262,6 +262,7 @@ class C:
         self.moved = []         # ...and the ones that went to a neighbouring step
         self.cleared = []       # entities lifted out of a gate's airspace, on purpose
         self.gates = set()      # path indices reached only by hauling on the rope
+        self.holds = 0          # shutters the pair have to take turns opening
 
     # ------------------------------------------------------------- painting
     def put(self, r, c, s):
@@ -1069,6 +1070,7 @@ class C:
                 self.rows[row][c] = 'H'
         for c in near + far:
             self.rows[r][c] = '_'
+        self.holds += 1
         if 'hold' not in self.tags:
             self.tags.append('hold')
         return self
@@ -1289,6 +1291,16 @@ class C:
                 parts.append('{ ' + fields + ' }')
             ents = '    entities: [\n      ' + ',\n      '.join(parts) + ',\n    ],\n'
         tags = f"    tags: [{', '.join(chr(39)+t+chr(39) for t in self.tags)}],\n" if self.tags else ''
+        # How many two-person moments this room was *authored* with, carried
+        # into the level data so the build can check the route-finder against
+        # the design rather than against a number somebody typed in a test.
+        # A fill that helps itself to a leg up where there is an ordinary way
+        # on shows up here as more gates found than gates painted.
+        counts = ''
+        if self.gates:
+            counts += f"    gates: {len(self.gates)},\n"
+        if self.holds:
+            counts += f"    holds: {self.holds},\n"
         return (f"  {{\n    id: '{self.id}',\n    biome: {self.biome},\n    difficulty: {self.diff},\n"
-                f"{tags}    rows: [\n      {rows},\n    ],\n{ents}  }}")
+                f"{tags}{counts}    rows: [\n      {rows},\n    ],\n{ents}  }}")
 

@@ -18,7 +18,9 @@
  *   - stand on a plate and stay there while your partner crosses the shutter it
  *     is holding open, and cross while they are the one standing on theirs;
  *   - never take off while the crate is still travelling, because climbing
- *     shortens the rope and the rope yanks whatever is on the end of it.
+ *     shortens the rope and the rope yanks whatever is on the end of it;
+ *   - at a gate, be the one who braces first, because two haulers who both
+ *     take the leg up cancel each other and neither of them goes anywhere.
  *
  * Those rules are why the bot is worth having rather than a moving obstacle:
  * they are the co-operative half of the game, played back at you. Bracing in
@@ -560,9 +562,11 @@ export class Bot {
       // both get an ordinary jump — four and a half rows against a gate cut to
       // six — and both land back where they started. Two bots reach that state
       // together and stay in it, because they are the same code reading the
-      // same world: measured on a six-row gate, of 3600 ticks 2156 had both of
-      // them pressing JUMP and 22 had one, for one boost, no crossing, and a
-      // pair still standing on the lower ledge after the full minute.
+      // same world. Measured under all 92 gates of the campaign and two
+      // towers, twenty seconds apiece: 1084 ticks in which each of them was
+      // standing on the other's braced shoulders, and both of them pressed
+      // JUMP on all 1084. Given forty seconds a gate, the pair got up 55 of
+      // the 92; with slot one holding its nerve, 77.
       //
       // So slot one holds the brace and lets slot zero go up first. The same
       // settled-rather-than-fair rule the takeoff gate uses, and it falls the

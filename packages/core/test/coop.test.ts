@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BOOST_COST,
   BRACE_REGEN_SHARE,
+  CHUNKS,
   DT,
   GRIP_MAX,
   GRIP_REGEN,
@@ -375,16 +376,48 @@ describe('rope gates', () => {
     }
   });
 
-  it('uses a boost only where there is no ordinary way on', () => {
+  it('finds the two-person moments that were painted, and no others', () => {
     // A breadth-first fill takes the shortest path in edges, and a boost skips
     // a whole foothold — so the moment boosting became an edge the route used
     // one wherever it could, and 98 of the campaign's steps came back as
     // two-person moves when four had been authored.
     //
+    // This was a ceiling on the count for a while, which stopped meaning
+    // anything the day the library was built around co-op rather than dotted
+    // with it: sixty-two gates is now the design, not a bug. So hold the fill
+    // to the design instead. Every room writes down how many leg-ups and
+    // shutters it was painted with, and the two numbers have to agree.
+    //
+    // More found than painted is the fill helping itself. Fewer is worse: it
+    // means a room the author built around two people has an ordinary way up
+    // it, and the build gate will never look at the gate that was skipped.
+    const used = CHUNKS.filter((c) => !c.tags?.includes('spare'));
+    const painted = {
+      gates: used.reduce((n, c) => n + (c.gates ?? 0), 0),
+      holds: used.reduce((n, c) => n + (c.holds ?? 0), 0),
+    };
+    const pair = analyseLevel(buildCampaign(), { coop: true });
     // Counted without the doorways: a shutter crossing is a gate as well, and a
     // room built around one is not the fill helping itself to a boost.
+    expect(pair.gates.length - pair.holds.length, 'leg-ups').toBe(painted.gates);
+    expect(pair.holds.length, 'shutters').toBe(painted.holds);
+  });
+
+  it('spaces them out instead of counting one ledge many times', () => {
+    // One leg up opens one ledge. If a whole landing row came back as eight
+    // gates the count would look like density and play like one moment, so no
+    // two of them may sit inside the same jump of each other.
     const pair = analyseLevel(buildCampaign(), { coop: true });
-    expect(pair.gates.length - pair.holds.length).toBeLessThanOrEqual(8);
+    const doors = new Set(pair.holds.map((h) => `${h.x},${h.y}`));
+    const rows = pair.gates
+      .filter((g) => !doors.has(`${g.x},${g.y}`))
+      .map((g) => g.y)
+      .sort((a, b) => a - b);
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i] - rows[i - 1], `two gates at rows ${rows[i - 1]} and ${rows[i]}`).toBeGreaterThan(
+        MAX_RISE,
+      );
+    }
   });
 });
 

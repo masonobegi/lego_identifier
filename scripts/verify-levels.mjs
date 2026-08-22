@@ -638,7 +638,9 @@ function placeHaul(world, to, pairCol, from, crateCol) {
   world.cargo.y = cy;
   world.cargo.px = cx;
   world.cargo.py = cy;
-  world.cargo.hp = 100;
+  // Health is left as `createWorld` set it, which is the level's own: a
+  // Gauntlet floor can hand the pair a crate at fifty-five, and a check that
+  // quietly tops it back up is checking a tower nobody plays.
   world.cargo.calm = 0;
   world.cargo.hurt = 0;
   world.cargo.grounded = 0;
@@ -757,7 +759,8 @@ export function crateFinishes(ctx, level, result) {
       const by = (b.y + 1) * TILE - PLAYER_H / 2 - 1;
       const ax = a.x * TILE + TILE / 2;
       const bx = b.x * TILE + TILE / 2;
-      if (Math.abs(ax - bx) > ROPE_MAX || Math.abs(ay - by) > ROPE_MAX) continue;
+      const span = (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
+      if (span > ROPE_MAX * ROPE_MAX) continue;
       const world = createWorld(ctx);
       world.players[0].x = ax;
       world.players[0].y = ay;
@@ -784,7 +787,6 @@ export function crateFinishes(ctx, level, result) {
       world.cargo.y = (ay + by) / 2 + (PLAYER_H - CARGO_H) / 2;
       world.cargo.px = world.cargo.x;
       world.cargo.py = world.cargo.y;
-      world.cargo.hp = 100;
       world.restartTimer = 0;
       let done = false;
       for (let t = 0; t < HAUL_BUDGET && !done; t++) {

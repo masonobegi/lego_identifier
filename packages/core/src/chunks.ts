@@ -17,6 +17,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 0,
     tags: ['start', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -58,6 +59,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 0,
     tags: ['gate', 'hold'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -99,6 +102,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -140,6 +144,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 0,
     tags: ['gate', 'hold'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -181,6 +187,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -222,6 +229,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -263,6 +271,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -304,6 +313,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -345,6 +356,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 0,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -386,6 +398,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -427,6 +441,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 1,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -468,6 +483,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -509,6 +525,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -554,6 +571,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -595,6 +613,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate', 'hold'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -639,6 +659,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -680,6 +701,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -721,6 +743,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -762,6 +785,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -803,6 +828,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -844,6 +870,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -888,6 +915,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -929,6 +957,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -970,6 +999,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1011,6 +1041,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1052,6 +1083,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 2,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1096,6 +1128,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1137,6 +1171,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 2,
     tags: ['gate', 'hold'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1178,6 +1214,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1219,6 +1256,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1265,6 +1303,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1306,6 +1345,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1347,6 +1387,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1388,6 +1429,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1434,6 +1476,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1479,6 +1523,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1520,6 +1565,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1564,6 +1610,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 2,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1608,6 +1655,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1646,6 +1694,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 0,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1681,6 +1730,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 0,
     difficulty: 1,
     tags: ['spare', 'hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1719,6 +1770,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['spare', 'hold', 'gate'],
+    gates: 2,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1763,6 +1816,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1805,6 +1859,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['spare', 'gate', 'hold'],
+    gates: 2,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1852,6 +1908,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1897,6 +1954,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['spare', 'gate'],
+    gates: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1929,6 +1987,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 1,
     difficulty: 2,
     tags: ['spare', 'hold', 'gate'],
+    gates: 2,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -1976,6 +2036,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['spare', 'hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2014,6 +2076,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 3,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2058,6 +2121,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 2,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2093,6 +2157,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2137,6 +2202,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2178,6 +2244,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 2,
     difficulty: 3,
     tags: ['spare', 'hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2213,6 +2281,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'hold', 'gate'],
+    gates: 1,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2254,6 +2324,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 3,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2304,6 +2375,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 2,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2348,6 +2420,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2380,6 +2453,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'gate'],
+    gates: 3,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2427,6 +2501,8 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 3,
     tags: ['spare', 'hold', 'gate'],
+    gates: 2,
+    holds: 1,
     rows: [
       '##....................................##',
       '##........============................##',
@@ -2474,6 +2550,7 @@ export const CHUNKS: ChunkDef[] = [
     biome: 3,
     difficulty: 0,
     tags: ['goal', 'gate'],
+    gates: 1,
     rows: [
       '########################################',
       '########################################',

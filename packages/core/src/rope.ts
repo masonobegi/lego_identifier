@@ -32,6 +32,10 @@ import { WORST_BETRAYAL, pushEvent, recordWorst } from './events.js';
 const SEG_MAX = ROPE_MAX / (ROPE_NODES - 1);
 const ROPE_G_STEP = ROPE_GRAVITY * DT * DT;
 
+/** How far, and in what increments, a buried rope node looks for open air. */
+const SURFACE_STEP = 3;
+const SURFACE_REACH = TILE + TILE / 2;
+
 /** Where the rope is tied to a player — chest height, not the feet. */
 export function anchorX(world: World, i: number): number {
   return world.players[i].x;
@@ -268,7 +272,7 @@ export function solveRope(world: World, level: Level): void {
   const bx = anchorX(world, 1);
   const by = anchorY(world, 1);
 
-  tightenRope(world);
+  tightenRope(world, level);
 }
 
 /**
@@ -283,7 +287,7 @@ export function solveRope(world: World, level: Level): void {
  * function string-pulls between the two haulers and never sees the sag. The
  * crate was left forty-six tiles below a pair who did not notice.
  */
-export function tightenRope(world: World): void {
+export function tightenRope(world: World, level: Level): void {
   const rx = world.ropeX;
   const ry = world.ropeY;
   const ax = anchorX(world, 0);
@@ -318,6 +322,51 @@ export function tightenRope(world: World): void {
   ry[0] = ay;
   rx[ROPE_NODES - 1] = bx;
   ry[ROPE_NODES - 1] = by;
+  surfaceRope(world, level);
+}
+
+/**
+ * Put back any node the constraint pass pushed into rock.
+ *
+ * `solveRope` will not let a node walk into geometry, but the sentence it
+ * enforces is about entering, not leaving: a blocked node stays put, which can
+ * never walk one back out. And the two things that run after it are blind —
+ * `tightenRope` is a distance constraint that has no idea where the walls are,
+ * and the crate's tether hauls the middle node most of the way toward the crate
+ * before it. Between them the rope sank: measured on the campaign spawn with
+ * both haulers standing still and no input at all, eleven of the fifteen nodes
+ * were a whole tile inside the floor after ten seconds, and stayed there.
+ *
+ * So a node that ends the pass inside a tile climbs out along a fixed ladder,
+ * up first because the floor is what it usually fell into, then down, then
+ * sideways, three pixels at a time to a tile and a half. Fixed order and fixed
+ * steps, so both peers walk the same node to the same pixel. A node with no way
+ * out inside that radius is left where it is, which is no worse than before.
+ */
+function surfaceRope(world: World, level: Level): void {
+  const rx = world.ropeX;
+  const ry = world.ropeY;
+  for (let i = 1; i < ROPE_NODES - 1; i++) {
+    if (!pointSolid(level, world, rx[i], ry[i])) continue;
+    for (let r = SURFACE_STEP; r <= SURFACE_REACH; r += SURFACE_STEP) {
+      if (!pointSolid(level, world, rx[i], ry[i] - r)) {
+        ry[i] -= r;
+        break;
+      }
+      if (!pointSolid(level, world, rx[i], ry[i] + r)) {
+        ry[i] += r;
+        break;
+      }
+      if (!pointSolid(level, world, rx[i] - r, ry[i])) {
+        rx[i] -= r;
+        break;
+      }
+      if (!pointSolid(level, world, rx[i] + r, ry[i])) {
+        rx[i] += r;
+        break;
+      }
+    }
+  }
 }
 
 /**

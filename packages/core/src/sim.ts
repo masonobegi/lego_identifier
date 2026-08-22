@@ -264,7 +264,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
     solveRope(world, level);
     clampRopeLength(world, level);
     updateCargo(level, world);
-    tightenRope(world);
+    tightenRope(world, level);
     return;
   }
 
@@ -281,7 +281,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   // The crate has just hauled on the rope's middle node. Put the rope back
   // inside its own length before anything reads it, or a crate that cannot
   // move drags the middle a little further toward itself every tick, for ever.
-  tightenRope(world);
+  tightenRope(world, level);
 
   /* --------------------------------------------------------------- deaths */
   for (let i = 0; i < 2; i++) {

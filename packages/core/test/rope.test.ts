@@ -32,6 +32,7 @@ import {
   cloneWorld,
   IN_LEFT,
   REEL_MAX_SPEED,
+  pointSolid,
 } from '@haulmates/core';
 
 /* ------------------------------------------------------------------ setup */
@@ -463,5 +464,59 @@ describe('an anchor holds the line', () => {
     const anchored = pull(true);
     expect(towed, 'a loaded rope hauls on you').toBeGreaterThan(0);
     expect(anchored / towed).toBeCloseTo(BRACED_LOAD_SHARE, 5);
+  });
+});
+
+/**
+ * The rope is the thing you look at. If it is lying inside the floor, the game
+ * is broken in the one place a player cannot help but stare — and it was, from
+ * the first frame of every run, for the whole run.
+ *
+ * Two separate bugs met in the middle. `placeAtSpawn` rested the rope in a
+ * 41-pixel arc, which is deeper than a hauler's feet are below their centre, so
+ * a pair standing on a floor laid the middle of their rope a tile inside it.
+ * And nothing could undo that: `solveRope` refuses to let a node walk *into*
+ * geometry but has no rule for walking one back out, while `tightenRope` and
+ * the crate's tether both move nodes with no idea where the walls are.
+ *
+ * Measured on the campaign spawn before the fix: 11 of the 15 nodes inside
+ * solid tile at tick 0, the deepest 30px under the surface, and still 11 of
+ * them 26px under it forty seconds later with nobody touching the controls.
+ */
+describe('the rope and the floor', () => {
+  const buried = (level: Level, world: World): number => {
+    let n = 0;
+    for (let i = 0; i < ROPE_NODES; i++) {
+      if (pointSolid(level, world, world.ropeX[i], world.ropeY[i])) n++;
+    }
+    return n;
+  };
+
+  it('is not laid inside the ground it is spawned on', () => {
+    const level = buildCampaign();
+    const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+    expect(buried(level, createWorld(ctx))).toBe(0);
+  });
+
+  it('stays out of it, with nobody touching the controls', () => {
+    const level = buildCampaign();
+    const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+    const world = createWorld(ctx);
+    // Forty seconds. The sag used to be permanent rather than a frame-one
+    // problem, so a short run would have passed while the bug was intact.
+    for (let t = 0; t < 2400; t++) step(ctx, world, [0, 0]);
+    expect(buried(level, world)).toBe(0);
+  });
+
+  it('comes back out when the level itself pushes it in', () => {
+    // The direct test of the escape ladder: put every node a tile inside the
+    // floor by hand, run one tick, and it should be standing on top of it.
+    const level = buildCampaign();
+    const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+    const world = createWorld(ctx);
+    for (let i = 0; i < ROPE_NODES; i++) world.ropeY[i] += TILE;
+    expect(buried(level, world), 'the setup has to actually bury it').toBeGreaterThan(0);
+    step(ctx, world, [0, 0]);
+    expect(buried(level, world)).toBe(0);
   });
 });
