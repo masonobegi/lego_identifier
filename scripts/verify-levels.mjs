@@ -33,6 +33,8 @@ import {
   GRIP_MAX,
   PLAYER_H,
   ROPE_NODES,
+  T_PLATE,
+  T_SHUTTER,
 } from '../packages/core/dist/index.js';
 
 /**
@@ -82,6 +84,31 @@ function placePair(world, x, y) {
   world.cargo.hp = 100;
   world.cargo.calm = 0;
   world.restartTimer = 0;
+}
+
+/**
+ * Put the pair down apart: one on a plate, one off it.
+ *
+ * The hold is the only step in the game they do not start a step side by side
+ * for. Standing them both on the plate makes the first half of the leapfrog a
+ * lie, because the hauler who walks off it is the one whose weight was holding
+ * the door in the first place.
+ */
+function placeHold(world, start, plate, holder) {
+  placePair(world, start.x, start.y);
+  const p = world.players[holder];
+  p.x = plate.x * TILE + TILE / 2;
+  p.y = (plate.y + 1) * TILE - PLAYER_H / 2 - 1;
+  p.vx = 0;
+  p.vy = 0;
+  p.grounded = 1;
+  for (let i = 0; i < ROPE_NODES; i++) {
+    const t = i / (ROPE_NODES - 1);
+    world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t;
+    world.ropeY[i] = world.players[0].y + (world.players[1].y - world.players[0].y) * t;
+    world.ropePX[i] = world.ropeX[i];
+    world.ropePY[i] = world.ropeY[i];
+  }
 }
 
 /** Sample launch columns across a ledge, always including both ends. */
@@ -273,6 +300,229 @@ function canGate(ctx, from, to) {
   return true;
 }
 
+/* --------------------------------------------------------------- hold rooms */
+
+/** Ways to walk a room: push, then steer, with one jump somewhere in it. */
+const HOLD_SCRIPTS = [];
+for (const turn of [0, 40, 90, 150]) {
+  for (const jumpAt of [-1, 0, 6, 12, 20, 30, 45, 60]) {
+    for (const hold of [14, 26]) HOLD_SCRIPTS.push({ turn, jumpAt, hold });
+  }
+}
+
+/**
+ * The doors the route goes through, one entry per room.
+ *
+ * A hold is not a climbing step, and a pair crossing a shutter along a floor
+ * never turns up in `ledgeSteps` at all — the ledge on either side of the door
+ * is the same row, and that list is only the steps that gain height. So the
+ * rooms are pulled out of the fill instead: it hands back the cells it could
+ * only reach through a door, and each one names its room, which is enough to
+ * find that room's plates and which way through the pair went.
+ *
+ * A room with no plate on one side of its shutter is reported here rather than
+ * replayed. It is the one shape of hold room that cannot work: the hauler
+ * holding the door can never be through it themselves, so the room is a wall
+ * with a mechanism on it.
+ */
+function holdCrossings(level, result) {
+  const w = level.w;
+  const out = [];
+  for (const hold of result.holds) {
+    if (out.some((c) => c.group === hold.group)) continue;
+    let doorX0 = w;
+    let doorX1 = -1;
+    const plates = [];
+    for (let i = 0; i < level.tiles.length; i++) {
+      if (level.holdGroup[i] !== hold.group) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      if (level.tiles[i] === T_SHUTTER) {
+        doorX0 = Math.min(doorX0, x);
+        doorX1 = Math.max(doorX1, x);
+      } else if (level.tiles[i] === T_PLATE && y > 0 && result.standable[(y - 1) * w + x]) {
+        plates.push({ x, y: y - 1 });
+      }
+    }
+
+    // Which way through the room the pair were going, read off the fill's
+    // parent links: walk back from the cell the door was opened to reach until
+    // the trail comes out on one side of the shutter or the other.
+    let dir = hold.x > doorX1 ? 1 : hold.x < doorX0 ? -1 : 0;
+    let trail = result.seen[hold.y * w + hold.x];
+    for (let n = 0; n < 64; n++) {
+      const x = trail % w;
+      if (x < doorX0) {
+        dir = 1;
+        break;
+      }
+      if (x > doorX1) {
+        dir = -1;
+        break;
+      }
+      const next = result.seen[trail];
+      if (next === trail || next < 0) break;
+      trail = next;
+    }
+
+    const where = `hold room at cols ${doorX0}-${doorX1} row ${hold.y}`;
+    const behind = plates.filter((p) => (dir > 0 ? p.x < doorX0 : p.x > doorX1));
+    const ahead = plates.filter((p) => (dir > 0 ? p.x > doorX1 : p.x < doorX0));
+    behind.sort((a, b) => (dir > 0 ? b.x - a.x : a.x - b.x));
+    ahead.sort((a, b) => (dir > 0 ? a.x - b.x : b.x - a.x));
+    if (behind.length === 0 || ahead.length === 0) {
+      out.push({ group: hold.group, reason: `${where} has a plate on only one side of its shutter` });
+      continue;
+    }
+
+    // The run of floor the hauler is on, stopped a body clear of the door.
+    //
+    // The two sides of a hold room are one ledge as far as the standable grid
+    // is concerned, and an attempt that starts past the shutter has had the
+    // door opened for it. A column clear is not enough either: the pair are put
+    // down twelve pixels either side of their column, so starting them against
+    // the doorway stands one hauler *in* it — and a body in a shutter holds it
+    // open, which is a state the room has no way of reaching and enough on its
+    // own to walk the pair through.
+    const ledge = (cell) => {
+      const stopL = cell.x < doorX0 ? 0 : Math.min(doorX1 + 2, cell.x);
+      const stopR = cell.x > doorX1 ? w - 1 : Math.max(doorX0 - 2, cell.x);
+      let x0 = cell.x;
+      let x1 = cell.x;
+      while (x0 > stopL && result.standable[cell.y * w + (x0 - 1)]) x0--;
+      while (x1 < stopR && result.standable[cell.y * w + (x1 + 1)]) x1++;
+      return { y: cell.y, x0, x1 };
+    };
+
+    // Where the two of them stand to begin: the hauler who crosses is put off
+    // the plate if there is anywhere off it to stand, and on the far end of it
+    // if the shutter is right there — a plate two tiles wide is still held by
+    // somebody on the other half of it.
+    const step = { x: behind[0].x + dir, y: behind[0].y };
+    const offPlate = result.standable[step.y * w + step.x] && (dir > 0 ? step.x < doorX0 : step.x > doorX1);
+    const start = offPlate ? step : behind[0];
+    out.push({
+      group: hold.group,
+      where,
+      dir,
+      doorX0,
+      doorX1,
+      near: behind.find((p) => p.x !== start.x) ?? behind[0],
+      ahead,
+      start,
+      from: ledge(behind[0]),
+      to: ledge(ahead[0]),
+    });
+  }
+  return out;
+}
+
+/**
+ * Can the pair leapfrog a shutter — one holds, the other crosses, then swap?
+ *
+ * The two-plate room, replayed as the two co-operative acts it is: a hauler
+ * standing on a plate while their partner crosses a door that would otherwise
+ * be a wall, and then the same thing back the other way with the plates
+ * swapped. Both orderings are tried, because either hauler may be the one who
+ * happens to be on the plate when the pair arrive.
+ *
+ * A crossing is not always a walk. A room can put its far plate a step above
+ * the doorway or a drop below it, and a hauler driven straight at it climbs
+ * into the step or walks off the ledge — which is why this searches scripts the
+ * way the ledge replay above does rather than steering them along the floor. A
+ * script is how long to push towards the door before steering at the plate, and
+ * one jump: `turn` is the difference between falling off the right ledge and
+ * stopping short on the wrong one, and the jump is the step in the middle.
+ *
+ * The two halves are searched one after the other rather than together — the
+ * hauler who follows starts from a plate the first one has just walked off, so
+ * their timing is their own — and the winning first half is replayed to set the
+ * room up for each attempt at the second.
+ *
+ * The pair are through when the second of them is standing on the floor beyond
+ * the shutter, the same ledge the solo search has to fail to reach. Asking only
+ * that they are past the door's column would pass a hauler who fell off the
+ * crossing and walked out underneath the room.
+ *
+ * A hauler on a plate presses back towards it rather than standing inert. The
+ * rope drags whoever is not moving, and a plate held by somebody being towed
+ * off it is a door that shuts on the tick their partner steps into it — which
+ * is a fact about the rope, not about the room.
+ */
+function canHold(ctx, cross) {
+  const walk = cross.dir > 0 ? IN_RIGHT : IN_LEFT;
+  const cell = (p) => ({
+    x: Math.floor(p.x / TILE),
+    y: Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1,
+  });
+  const standingOn = (p, cells) => {
+    if (p.dead || p.grounded !== 1) return null;
+    const at = cell(p);
+    return cells.find((c) => c.x === at.x && c.y === at.y) ?? null;
+  };
+  const across = (p) => {
+    if (p.dead || p.grounded !== 1) return false;
+    const at = cell(p);
+    return at.y === cross.to.y && at.x >= cross.to.x0 && at.x <= cross.to.x1;
+  };
+  const towards = (p, c) => {
+    const centre = c.x * TILE + TILE / 2;
+    if (Math.abs(p.x - centre) < 3) return 0;
+    return p.x > centre ? IN_LEFT : IN_RIGHT;
+  };
+  const drive = (p, k, script) => {
+    const push = k < script.turn ? walk : towards(p, cross.ahead[0]);
+    const jumping = script.jumpAt >= 0 && k >= script.jumpAt && k < script.jumpAt + script.hold;
+    return push | (jumping ? IN_JUMP : 0);
+  };
+
+  /**
+   * One attempt. `second` null asks only whether the first hauler gets across,
+   * and the tick they did it on; with both scripts it asks for the whole room.
+   */
+  const attempt = (mover, first, second) => {
+    const holder = 1 - mover;
+    const world = createWorld(ctx);
+    placeHold(world, cross.start, cross.near, holder);
+    for (let t = 0; t < 6; t++) {
+      simStep(ctx, world, [0, 0]);
+      world.events.length = 0;
+    }
+    let plate = null;
+    let swapped = 0;
+    for (let t = 0; t < 1200; t++) {
+      if (!plate) {
+        plate = standingOn(world.players[mover], cross.ahead);
+        if (plate) {
+          if (!second) return t;
+          swapped = t;
+        }
+      }
+      const masks = [0, 0];
+      if (plate) {
+        masks[mover] = towards(world.players[mover], plate);
+        masks[holder] = drive(world.players[holder], t - swapped, second);
+      } else {
+        masks[mover] = drive(world.players[mover], t, first);
+        masks[holder] = towards(world.players[holder], cross.near);
+      }
+      simStep(ctx, world, masks);
+      world.events.length = 0;
+      if (world.restartTimer > 0) return -1;
+      if (world.players[0].dead || world.players[1].dead) return -1;
+      if (plate && across(world.players[holder])) return t;
+    }
+    return -1;
+  };
+
+  for (const mover of [0, 1]) {
+    const first = HOLD_SCRIPTS.find((s) => attempt(mover, s, null) >= 0);
+    if (!first) return false;
+    if (!HOLD_SCRIPTS.some((s) => attempt(mover, first, s) >= 0)) return false;
+  }
+  return true;
+}
+
 /**
  * Can the pair get from one ledge to the next?
  *
@@ -303,8 +553,14 @@ export function canMakeStep(ctx, from, to) {
  * the same reason. The partner is parked on the launch ledge and never presses
  * anything — present, so the rope and its weight are real, and useless, so
  * nothing here can be a boost. Any run that does register one is thrown away.
+ *
+ * `both` is what a doorway asks instead. Getting *yourself* through a shutter
+ * proves nothing, because the passenger who presses nothing can be dragged onto
+ * the near plate and that is enough to walk through — the far plate is the one
+ * they cannot be dragged onto. So a hold room is only beaten alone if the
+ * passenger comes out of the far side of it too.
  */
-function soloCanCross(ctx, from, to, tries) {
+function soloCanCross(ctx, from, to, tries, both = false) {
   let seed = 0x5eed | 0;
   const rand = () => {
     seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
@@ -325,12 +581,23 @@ function soloCanCross(ctx, from, to, tries) {
       simStep(ctx, world, [mask(t), 0]);
       world.events.length = 0;
       if (world.restartTimer > 0 || world.boosts > 0) return null;
-      const p = world.players[0];
-      if (p.dead) return null;
-      if (p.grounded !== 1) continue;
-      const cy = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
-      const cx = Math.floor(p.x / TILE);
-      if (cy === to.y && cx >= to.x0 && cx <= to.x1) return { lx, tick: t };
+      // A hauler who dies comes back at their partner's shoulder, and the rule
+      // that keeps that from being a lift measures height and nothing else — so
+      // a passenger who walks into a spike is rescued through a shutter however
+      // many plates it has. Every hold room in the library falls to that, which
+      // makes it a fact about the rescue rather than about any of them; thrown
+      // away here for the same reason a run that registers a boost is.
+      if (both && world.players[1].dead) return null;
+      const arrived = (p) => {
+        if (p.dead || p.grounded !== 1) return false;
+        const cy = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
+        const cx = Math.floor(p.x / TILE);
+        return cy === to.y && cx >= to.x0 && cx <= to.x1;
+      };
+      if (world.players[0].dead) return null;
+      if (!arrived(world.players[0])) continue;
+      if (both && !arrived(world.players[1])) continue;
+      return { lx, tick: t };
     }
     return null;
   };
@@ -414,12 +681,30 @@ export function verifyLevel(level, mode, seed, options = {}) {
       }
     }
   }
+  // Hold rooms are replayed on their own terms rather than as a climbing step,
+  // and the solo search is pointed at them as well: a door one hauler can get
+  // both bodies through is a room that does not need anybody's partner.
+  const crossings = failures.length >= 5 ? [] : holdCrossings(level, result);
+  for (const cross of crossings) {
+    if (cross.reason) {
+      failures.push(cross.reason);
+    } else {
+      if (!canHold(ctx, cross)) failures.push(`${cross.where}: the pair cannot leapfrog it`);
+      if (options.solo !== false) {
+        const got = soloCanCross(ctx, cross.from, cross.to, options.soloTries ?? 1500, true);
+        if (got) failures.push(`${cross.where} — ONE PLAYER CLEARED IT from column ${got.lx}`);
+      }
+    }
+    if (failures.length >= 5) break;
+  }
+
   return {
     ok: failures.length === 0,
     level: level.id,
     reached: result.reached,
     total: result.total,
     steps: steps.length,
+    holds: crossings.length,
     failures,
   };
 }
@@ -430,7 +715,9 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
   let bad = 0;
   const campaign = buildCampaign();
   const r = verifyLevel(campaign, 0, 1);
-  console.log(`campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps replayed`);
+  console.log(
+    `campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps and ${r.holds} hold rooms replayed`,
+  );
   if (!r.ok) {
     bad++;
     if (r.reason) console.log(`  ${r.reason}`);
@@ -443,7 +730,9 @@ if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
     const level = buildTower(seed, 6 + (i % 10));
     const t = verifyLevel(level, 1, seed);
     const label = `tower ${String(seed).padStart(7)}`;
-    console.log(`${label}  ${t.ok ? 'OK  ' : 'FAIL'}  ${t.reached}/${t.total} footholds reachable, ${t.steps} climbing steps replayed`);
+    console.log(
+      `${label}  ${t.ok ? 'OK  ' : 'FAIL'}  ${t.reached}/${t.total} footholds reachable, ${t.steps} climbing steps and ${t.holds} hold rooms replayed`,
+    );
     if (!t.ok) {
       bad++;
       for (const f of t.failures ?? []) console.log(`  unmakeable step: ${f}`);

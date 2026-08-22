@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   Bot,
+  GRIP_MAX,
   IN_LEFT,
   IN_RESTART,
   IN_RIGHT,
@@ -8,19 +9,27 @@ import {
   MAX_RISE,
   MODE_GAUNTLET,
   MODE_HAUL,
+  PLAYER_H,
   REACH_BY_RISE,
   RESET_DELAY,
   RESTART_HOLD,
+  ROPE_NODES,
   TILE,
   T_GOAL,
+  T_PLATE,
+  T_SHUTTER,
   analyseLevel,
   assembleLevel,
   buildCampaign,
   buildTower,
+  createWorld,
   planRoute,
+  step,
   BOOST_RISE_TILES,
   tileAt,
   type ChunkDef,
+  type Level,
+  type World,
 } from '@haulmates/core';
 
 /** Climb with two bots and report what they managed. */
@@ -44,6 +53,197 @@ function botRun(mode: number, seed: number, seconds: number, length = 10) {
     climbedTiles: (startY - bestY) / TILE,
   };
 }
+
+/**
+ * A corridor with a shutter across it and a plate on each side of the door.
+ *
+ * The plates sit six columns back from the door because that is the geometry
+ * that makes the room a two-person problem. Put a plate a tile or two from its
+ * door and a pair walking in convoy hold it for each other without meaning to —
+ * half the rooms in the library can be crossed that way, and a bot crossing one
+ * of those has demonstrated nothing except that it can walk. Nine columns plate
+ * to plate is the other half of it: that is inside the rope, so the leapfrog is
+ * available, and a hauler on one plate is not within reach of the other.
+ */
+function holdRoom(): Level {
+  const w = 40;
+  const h = 16;
+  const floor = h - 3;
+  const rows: string[] = [];
+  for (let r = 0; r < h; r++) {
+    let s = '';
+    for (let c = 0; c < w; c++) {
+      if (c < 2 || c >= w - 2) s += '#';
+      else if (r === floor) s += c === 6 || c === 15 ? '_' : '#';
+      else if (r > floor - 6 && r < floor && (c === 12 || c === 13)) s += 'H';
+      else if (r <= 1) s += '#';
+      else s += '.';
+    }
+    rows.push(s);
+  }
+  const put = (r: number, c: number, glyph: string): void => {
+    rows[r] = rows[r].slice(0, c) + glyph + rows[r].slice(c + 1);
+  };
+  put(floor - 1, 3, 'S');
+  put(floor - 1, 25, 'F');
+  return assembleLevel('room', 'ROOM', [{ id: 'room', biome: 0, difficulty: 0, rows, tags: ['start'] }]);
+}
+
+/** Stand the pair on a row, with the rope and the crate laid out between them. */
+function standPair(world: World, cols: number[], row: number): void {
+  const y = (row + 1) * TILE - PLAYER_H / 2 - 1;
+  for (let i = 0; i < 2; i++) {
+    const p = world.players[i];
+    p.x = cols[i] * TILE + TILE / 2;
+    p.y = y;
+    p.vx = 0;
+    p.vy = 0;
+    p.grounded = 1;
+    p.dead = 0;
+    p.grip = GRIP_MAX;
+  }
+  for (let i = 0; i < ROPE_NODES; i++) {
+    const t = i / (ROPE_NODES - 1);
+    world.ropeX[i] = world.players[0].x + (world.players[1].x - world.players[0].x) * t;
+    world.ropeY[i] = y;
+    world.ropePX[i] = world.ropeX[i];
+    world.ropePY[i] = y;
+  }
+  world.cargo.x = (world.players[0].x + world.players[1].x) / 2;
+  world.cargo.y = y;
+  world.cargo.px = world.cargo.x;
+  world.cargo.py = world.cargo.y;
+  world.cargo.hp = 100;
+  world.restartTimer = 0;
+}
+
+/**
+ * Every hold room the route goes through, read the way the level verifier reads
+ * them: the fill hands back the cells it could only reach through a door, and
+ * each one names its room and sits on the far side of it, which is where the
+ * way through comes from.
+ */
+function holdRooms(level: Level): { door: number[]; plates: { x: number; y: number }[]; exit: number }[] {
+  const { w } = level;
+  const out: { group: number; door: number[]; plates: { x: number; y: number }[]; exit: number }[] = [];
+  for (const hold of analyseLevel(level, { coop: true }).holds) {
+    if (out.some((r) => r.group === hold.group)) continue;
+    const room = { group: hold.group, door: [w, -1], plates: [] as { x: number; y: number }[], exit: 1 };
+    for (let i = 0; i < level.tiles.length; i++) {
+      if (level.holdGroup[i] !== hold.group) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      if (level.tiles[i] === T_SHUTTER) {
+        room.door[0] = Math.min(room.door[0], x);
+        room.door[1] = Math.max(room.door[1], x);
+      } else if (level.tiles[i] === T_PLATE) {
+        room.plates.push({ x, y: y - 1 });
+      }
+    }
+    room.exit = hold.x > room.door[1] ? 1 : -1;
+    out.push(room);
+  }
+  return out;
+}
+
+describe('the hold', () => {
+  /**
+   * The second thing in this game two people have to do together, played by
+   * two bots.
+   *
+   * Nothing about this room is optional for the bot: a shutter is the only wall
+   * in the game that opens because somebody is standing somewhere else, so a
+   * bot that treats it as scenery walks into it and stays there. Measured
+   * before the bot knew the verb: the pair spent the minute shuffling either
+   * side of the door and finished nine columns behind where they started.
+   */
+  it('leapfrogs a shutter neither hauler could cross alone', () => {
+    const level = holdRoom();
+    const ctx = { level, seed: 1, mode: MODE_HAUL };
+    const world = createWorld(ctx);
+    const bots = [new Bot(level), new Bot(level)];
+    let finished = -1;
+    for (let t = 0; t < 60 * 60 && finished < 0; t++) {
+      step(ctx, world, [bots[0].think(world, 0), bots[1].think(world, 1)]);
+      world.events.length = 0;
+      if (world.finished) finished = t;
+    }
+    // Measured at 624 ticks of the 3600 allowed. The bar is the whole minute
+    // because the crossing is two co-operative acts either of which can be
+    // fumbled and retried, and a tight bound would be measuring the retry.
+    expect(finished, 'the pair should hold the door for each other and reach the goal').toBeGreaterThan(0);
+  });
+
+  /**
+   * A shutter is a wall to one hauler, and the bot has to be the half of the
+   * pair that knows it.
+   *
+   * Nobody presses anything in slot zero here. The bot cannot cross — that is
+   * the design of the room — so the useful thing it can do is take the plate
+   * and hold the door open, which is what a person on the other end of the
+   * controller needs it to do.
+   */
+  it('takes the plate and holds the door for a partner who is not helping', () => {
+    const level = holdRoom();
+    const ctx = { level, seed: 1, mode: MODE_HAUL };
+    const world = createWorld(ctx);
+    const bot = new Bot(level);
+    // The bot's own weight on the plate, not the door being open: the crate
+    // hangs off the middle of the rope and ends up parked on a plate all by
+    // itself, which opens the door and proves nothing about the bot.
+    let onPlate = 0;
+    for (let t = 0; t < 30 * 60; t++) {
+      step(ctx, world, [0, bot.think(world, 1)]);
+      world.events.length = 0;
+      const p = world.players[1];
+      if (Math.floor(p.x / TILE) === 6 && p.grounded === 1) onPlate++;
+    }
+    // Most of the run, and deliberately not all of it: every wait in this bot
+    // is bounded, and this one most of all. A hold with no timeout is a
+    // deadlock waiting for a partner who never obliges, and a hauler stood on a
+    // plate looks exactly like one doing the right thing — so it lets go every
+    // ten seconds, plays the route for two, and comes back to the plate.
+    expect(onPlate / (30 * 60), 'fraction of the run spent standing on the plate').toBeGreaterThan(0.5);
+    expect(onPlate, 'a hold that never lets go is a deadlock').toBeLessThan(30 * 60);
+    expect(world.cargo.hp, 'and it does not wreck the crate while it waits').toBeGreaterThan(90);
+  });
+
+  /**
+   * The same thing on the rooms that ship, in both directions.
+   *
+   * The library builds them either way round — the tower is a serpentine, so
+   * half of its doors are crossed leftwards — and a bot that had quietly
+   * assumed the exit was to its right would pass every hand-made test in here
+   * and stand still in front of two of the campaign's four rooms.
+   */
+  it('crosses every hold room in the campaign', () => {
+    const level = buildCampaign();
+    const ctx = { level, seed: 7, mode: MODE_HAUL };
+    const rooms = holdRooms(level);
+    expect(rooms.length, 'hold rooms on the campaign route').toBeGreaterThan(0);
+    for (const room of rooms) {
+      const world = createWorld(ctx);
+      const bots = [new Bot(level), new Bot(level)];
+      // Both haulers on the near side, a body clear of the plate so that
+      // arriving already standing on it is not what proves the crossing.
+      const near = room.plates
+        .filter((p) => (room.exit > 0 ? p.x < room.door[0] : p.x > room.door[1]))
+        .sort((a, b) => (room.exit > 0 ? b.x - a.x : a.x - b.x))[0];
+      standPair(world, [near.x - room.exit * 2, near.x - room.exit * 4], near.y);
+      let through = -1;
+      for (let t = 0; t < 60 * 60 && through < 0; t++) {
+        step(ctx, world, [bots[0].think(world, 0), bots[1].think(world, 1)]);
+        world.events.length = 0;
+        const past = world.players.filter(
+          (p) => (room.exit > 0 ? p.x > (room.door[1] + 1) * TILE : p.x < room.door[0] * TILE),
+        );
+        if (past.length === 2) through = t;
+      }
+      // Measured between 1.2 and 4.0 seconds a room.
+      expect(through, `both haulers through the door at cols ${room.door.join('-')}`).toBeGreaterThan(0);
+    }
+  });
+});
 
 describe('route planning', () => {
   it('finds a route from the spawn to the goal of the campaign', () => {

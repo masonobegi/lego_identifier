@@ -17,6 +17,8 @@ import {
   EV_RESTART,
   EV_BOOST,
   EV_ROPE_YANK,
+  EV_SHUTTER_OPEN,
+  EV_SHUTTER_SHUT,
   EV_STEP,
   GROUND_ICE,
   GROUND_MOVER,
@@ -113,6 +115,30 @@ export class Sfx {
         // tell "I let go" from "I could not hold it" without looking.
         e.noise({ freq: 1500, to: 220, q: 1.5, dur: 0.3, gain: 0.11 * g, bus });
         e.tone({ freq: 330, to: 110, dur: 0.26, type: 'sawtooth', gain: 0.09 * g, send: 0.2, bus });
+        return;
+      }
+      case EV_SHUTTER_OPEN: {
+        // A motor taking the weight, and the door going up.
+        //
+        // The two door sounds are the only cues in the game that routinely
+        // play with nothing to look at: a hauler standing on a plate can be
+        // most of a rope away from the shutter it moves, and what they need to
+        // know is not that something happened but which way it went. So the
+        // pair are built as opposites — this one climbs and settles, the other
+        // falls and lands — rather than as one sound with a filter on it.
+        e.tone({ freq: 66, to: 128, dur: 0.32, type: 'sawtooth', gain: 0.08 * g, bus });
+        e.noise({ freq: 420, to: 1600, q: 1.6, dur: 0.3, gain: 0.08 * g, bus });
+        e.tone({ freq: 700, to: 1050, dur: 0.09, type: 'square', gain: 0.05 * g, at: e.now + 0.27, bus });
+        return;
+      }
+      case EV_SHUTTER_SHUT: {
+        // The same motor running down, and then the leading edge hitting the
+        // floor. The weight is in the landing rather than in the run, because
+        // the news is that a room somebody was walking through is a wall again.
+        e.tone({ freq: 128, to: 62, dur: 0.2, type: 'sawtooth', gain: 0.08 * g, bus });
+        e.noise({ freq: 1500, to: 300, q: 1.6, dur: 0.2, gain: 0.07 * g, bus });
+        e.noise({ freq: 220, to: 70, q: 0.9, dur: 0.18, type: 'lowpass', gain: 0.18 * g, at: e.now + 0.19, bus });
+        e.tone({ freq: 96, to: 44, dur: 0.22, type: 'sine', gain: 0.16 * g, at: e.now + 0.19, send: 0.25, bus });
         return;
       }
       case EV_ROPE_YANK: {

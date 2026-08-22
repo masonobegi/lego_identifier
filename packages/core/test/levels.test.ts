@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CHUNKS,
+  ROPE_MAX,
   TILE,
+  T_PLATE,
   buildCampaign,
   buildTower,
   MAX_RISE,
@@ -345,5 +347,147 @@ describe('structural variety', () => {
       }
     }
     expect(widths.size).toBeGreaterThanOrEqual(4);
+  });
+});
+
+/**
+ * The rooms built around the second co-op verb.
+ *
+ * A hold is two plates with a shutter between them, and every part of that is
+ * load-bearing. A door narrower than the crate is one the pair cannot take
+ * their cargo through, and the crate hangs off the middle of the rope, so
+ * leaving it behind is not on offer. A door shorter than a jump is scenery. A
+ * door with one plate is a wall, because whoever holds it can never be the one
+ * who goes through.
+ *
+ * None of that is visible to anything else in this file: the route past a shut
+ * door is still a legal staircase of three row steps, so the generator, the
+ * fill and the replay all walk it happily. These are the checks that the rooms
+ * are rooms.
+ */
+describe('the hold rooms', () => {
+  const HOLD = (c: ChunkDef): boolean => c.tags?.includes('hold') ?? false;
+  const SPARE = (c: ChunkDef): boolean => c.tags?.includes('spare') ?? false;
+  const FOOTING = '#=icC_';
+
+  /** Where a chunk's shutter stands, and where its plates are. */
+  const holdOf = (c: ChunkDef) => {
+    const shutter: { r: number; x: number }[] = [];
+    const plates: { r: number; x: number }[] = [];
+    c.rows.forEach((row, r) => {
+      for (let x = 0; x < row.length; x++) {
+        if (row[x] === 'H') shutter.push({ r, x });
+        if (row[x] === '_') plates.push({ r, x });
+      }
+    });
+    const cols = [...new Set(shutter.map((t) => t.x))].sort((a, b) => a - b);
+    const rows = shutter.map((t) => t.r);
+    return { plates, cols, top: Math.min(...rows), bottom: Math.max(...rows) };
+  };
+
+  const rooms = CHUNKS.filter(HOLD);
+
+  it('puts one in every biome, and in both the campaign and the Gauntlet', () => {
+    expect(new Set(rooms.map((c) => c.biome))).toEqual(new Set([0, 1, 2, 3]));
+    expect(rooms.filter((c) => !SPARE(c)).length).toBeGreaterThanOrEqual(3);
+    expect(rooms.filter(SPARE).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('makes every doorway wide enough for the crate and taller than a jump', () => {
+    for (const c of rooms) {
+      const { cols, top, bottom } = holdOf(c);
+      // 26px of crate in a 24px tile, so one column is a door the pair fit
+      // through and their cargo does not.
+      expect(cols.length, `${c.id}: doorway columns`).toBeGreaterThanOrEqual(2);
+      expect(cols[cols.length - 1] - cols[0], `${c.id}: doorway is in one piece`).toBe(cols.length - 1);
+      // A plain jump rises 4.50 tiles. Four tiles of door is one somebody
+      // eventually hops; five is not.
+      expect(bottom - top + 1, `${c.id}: doorway height`).toBeGreaterThanOrEqual(5);
+      for (const x of cols) {
+        expect(FOOTING, `${c.id}: the doorway has no floor under it at column ${x}`).toContain(
+          c.rows[bottom + 1][x],
+        );
+        for (let r = top; r <= bottom; r++) {
+          expect(c.rows[r][x], `${c.id}: a hole in the door at row ${r}`).toBe('H');
+        }
+      }
+    }
+  });
+
+  it('puts a plate on each side of every shutter, within a rope of each other', () => {
+    for (const c of rooms) {
+      const { plates, cols } = holdOf(c);
+      const near = plates.filter((p) => p.x < cols[0]);
+      const far = plates.filter((p) => p.x > cols[cols.length - 1]);
+      expect(near.length, `${c.id}: no plate on the near side`).toBeGreaterThan(0);
+      expect(far.length, `${c.id}: no plate on the far side`).toBeGreaterThan(0);
+      // One hauler holds the near plate at the moment the other reaches the far
+      // one, and the rope between them is fixed. Further apart than that and the
+      // door opens once and never lets the second one through.
+      const reach = Math.min(
+        ...near.map((a) => Math.min(...far.map((b) => Math.hypot(a.x - b.x, a.r - b.r)))),
+      );
+      expect(reach * TILE, `${c.id}: the two plates are ${reach.toFixed(1)} tiles apart`).toBeLessThan(
+        ROPE_MAX,
+      );
+    }
+  });
+
+  /**
+   * Both plates on the floor the door is in, which is not a stylistic choice.
+   *
+   * The leapfrog is a walk: one hauler stands on a plate and the other walks
+   * through a door that would otherwise be a wall. Put the near plate on the
+   * foothold below the door instead and the hauler holding it has to jump to
+   * follow their partner through, which is not a walk and not something the
+   * pair can do in the order the room asks for. Worse, the crate hangs a rope's
+   * length under the pair, so a plate one step below the door is exactly where
+   * it comes to rest: one hauler alone then strolls through a door the crate is
+   * holding open for them.
+   */
+  it('stands both plates on the floor the door is in', () => {
+    for (const c of rooms) {
+      const { plates, bottom } = holdOf(c);
+      for (const p of plates) {
+        expect(p.r, `${c.id}: the plate at column ${p.x} is not on the door's own floor`).toBe(
+          bottom + 1,
+        );
+      }
+    }
+  });
+
+  it('leaves every plate somewhere a hauler can stand', () => {
+    for (const c of rooms) {
+      for (const p of holdOf(c).plates) {
+        // A hauler is 32px tall in a 24px tile, so both tiles above a plate are
+        // body. A plate under a spike is a plate nobody holds.
+        for (const r of [p.r - 1, p.r - 2]) {
+          expect(c.rows[r][p.x], `${c.id}: plate at ${p.x},${p.r} has ${c.rows[r][p.x]} over it`).toMatch(
+            /[.:]/,
+          );
+        }
+      }
+    }
+  });
+
+  it('gives every room its own door, however the tower is stacked', () => {
+    const level = buildCampaign();
+    const used = level.chunkIds.filter((id) => HOLD(CHUNKS.find((c) => c.id === id) as ChunkDef));
+    expect(used.length).toBeGreaterThan(0);
+    expect(level.holdGroups, 'one hold group per room that has one').toBe(used.length);
+    for (let g = 0; g < level.holdGroups; g++) {
+      const plates: number[] = [];
+      const shutters: number[] = [];
+      for (let i = 0; i < level.holdGroup.length; i++) {
+        if (level.holdGroup[i] !== g) continue;
+        (level.tiles[i] === T_PLATE ? plates : shutters).push(i % level.w);
+      }
+      expect(Math.min(...plates), `group ${g} has no plate on the near side`).toBeLessThan(
+        Math.min(...shutters),
+      );
+      expect(Math.max(...plates), `group ${g} has no plate on the far side`).toBeGreaterThan(
+        Math.max(...shutters),
+      );
+    }
   });
 });

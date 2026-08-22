@@ -315,7 +315,7 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
 
 Running `npm run verify` exercises, in order:
 
-- **178 unit and integration tests** — simulation determinism over thousands of ticks,
+- **210 unit and integration tests** — simulation determinism over thousands of ticks,
   rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
   and full online matches against the real server under 25–130 ms latency, jitter, and a
   simulated connection freeze.

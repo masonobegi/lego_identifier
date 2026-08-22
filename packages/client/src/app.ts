@@ -17,10 +17,12 @@ import {
   MODE_HAUL,
   NetClient,
   TILE,
+  T_SHUTTER,
   analyseLevel,
   buildCampaign,
   levelFloors,
   modeName,
+  shutterOpen,
   towerId,
   type MatchResult,
   type SimEvent,
@@ -65,8 +67,13 @@ export const VERSION = '1.0.0';
  * fifteen seconds, next to a gate they will not reach for another four minutes,
  * is the same as not explaining it. So its condition is a place rather than a
  * time — standing under one, looking up at a step that is not there.
+ *
+ * The hold is the same shape of problem and gets the same treatment. It has no
+ * button at all, the rooms that use it are scattered up the tower rather than
+ * met at a fixed minute, and a shut shutter is indistinguishable from a wall
+ * until somebody connects it to the panel in the floor across the room.
  */
-const HINTS: { id: string; text: string; when: (w: World, tick: number, atGate: boolean) => boolean }[] = [
+const HINTS: { id: string; text: string; when: (w: World, tick: number, atGate: boolean, atShutter: boolean) => boolean }[] = [
   { id: 'move', text: 'Move with A and D. Jump with SPACE.', when: (_w, t) => t > 90 && t < 480 },
   { id: 'rope', text: 'The rope will not stretch past its limit — run too far and you drag your partner with you.', when: (_w, t) => t > 520 && t < 900 },
   { id: 'grip', text: 'Hold SHIFT to brace in place. Your partner can then swing from you.', when: (_w, t) => t > 940 && t < 1400 },
@@ -76,6 +83,11 @@ const HINTS: { id: string; text: string; when: (w: World, tick: number, atGate: 
     id: 'boost',
     text: 'Nobody climbs this alone. One of you holds SHIFT to brace; the other stands against them and jumps.',
     when: (_w, _t, atGate) => atGate,
+  },
+  {
+    id: 'hold',
+    text: 'The plate in the floor holds the shutter open while somebody stands on it. One of you waits on it — there is another plate on the far side to let them through.',
+    when: (_w, _t, _atGate, atShutter) => atShutter,
   },
 ];
 
@@ -403,9 +415,10 @@ export class App {
     if (this.hintStrength > 0) this.hintStrength -= 0.006;
     if (this.profile.seenTutorial && this.shownHints.size >= HINTS.length) return;
     const atGate = this.underGate(world);
+    const atShutter = this.atShutter(world);
     for (const hint of HINTS) {
       if (this.shownHints.has(hint.id)) continue;
-      if (!hint.when(world, tick, atGate)) continue;
+      if (!hint.when(world, tick, atGate, atShutter)) continue;
       this.shownHints.add(hint.id);
       save('hints', [...this.shownHints]);
       this.hintText = hint.text;
@@ -445,6 +458,41 @@ export class App {
   /** Public so `npm run shots` can stage a picture at one. */
   gateCells: { x: number; y: number }[] = [];
   private gatesFor: unknown = null;
+
+  /**
+   * Is either hauler standing at a shut door?
+   *
+   * The hold needs telling for the same reason the leg up does: it has no
+   * button, so nobody presses it by accident, and from in front of one a
+   * shutter is a wall. Being at the door rather than on the plate is the right
+   * moment — that is where a pair stops and starts guessing, and the plate is
+   * the thing the hint has to point at. An open one says nothing, because a
+   * door standing open has already explained itself.
+   */
+  private atShutter(world: World): boolean {
+    const level = (this.net ?? this.local)?.ctx?.level;
+    if (!level) return false;
+    if (this.doorsFor !== level) {
+      this.doorsFor = level;
+      this.doorCells = [];
+      for (let i = 0; i < level.tiles.length; i++) {
+        if (level.tiles[i] === T_SHUTTER) this.doorCells.push({ x: i % level.w, y: Math.floor(i / level.w) });
+      }
+    }
+    for (const d of this.doorCells) {
+      if (shutterOpen(level, world, d.x, d.y)) continue;
+      const dx = d.x * TILE + TILE / 2;
+      const dy = d.y * TILE + TILE / 2;
+      for (const p of world.players) {
+        if (p.dead || p.grounded !== 1) continue;
+        if (Math.abs(p.x - dx) < TILE * 6 && Math.abs(p.y - dy) < TILE * 3) return true;
+      }
+    }
+    return false;
+  }
+
+  private doorCells: { x: number; y: number }[] = [];
+  private doorsFor: unknown = null;
 
   /* -------------------------------------------------------------- profile */
 

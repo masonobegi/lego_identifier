@@ -12,6 +12,7 @@ import {
   EV_RESPAWN,
   EV_BOOST,
   EV_ROPE_YANK,
+  EV_SHUTTER_SHUT,
   EV_STEP,
   TILE,
   pointSolid,
@@ -196,6 +197,12 @@ export class Renderer {
           break;
         case EV_CRUMBLE:
           this.particles.burst(12, { x: e.x, y: e.y, colour: '#8a6237', size: 2.6, life: 0.8, gravity: 1000, kind: P_CHUNK }, 1.6, 130);
+          break;
+        case EV_SHUTTER_SHUT:
+          // Dust knocked off the frame, and no camera kick: a door coming down
+          // three rooms away is news, not an impact, and shaking the screen for
+          // one would put the same weight on it as a crate exploding.
+          this.particles.burst(8, { x: e.x, y: e.y, colour: '#c9bfa6', size: 2, life: 0.45, gravity: 300 }, 2.6, 90);
           break;
         case EV_DEATH:
           this.particles.burst(26, { x: e.x, y: e.y, colour: '#ff4d6d', size: 2.8, life: 0.9, gravity: 900, kind: P_CHUNK }, 2.2, 330);

@@ -55,6 +55,8 @@ import {
   IN_RIGHT,
   IN_GRIP,
   IN_REEL,
+  T_PLATE,
+  T_SHUTTER,
   boosting,
   BOOST_REACH,
   MAX_RISE,
@@ -200,6 +202,18 @@ function noise(seed) {
   };
 }
 
+/**
+ * Ticks a person will spend working a door before they try something else.
+ *
+ * Nobody stands on a plate for a partner who is not coming, and nobody waits at
+ * a doorway all afternoon. An instrument that does either reports a hold room
+ * as a wall — worse, as a *quiet* wall, since a pair frozen either side of a
+ * shut shutter look exactly like a pair playing it correctly. Bounded and
+ * repeating, so a fumbled crossing gets another go two seconds later.
+ */
+const HOLD_TRY = 600;
+const HOLD_GIVE_UP = 120;
+
 export function makeFollower(level, phase = 0) {
   const r = analyseLevel(level, { coop: true });
   const cells = r.route;
@@ -214,6 +228,54 @@ export function makeFollower(level, phase = 0) {
     while (standable(x1 + 1, y)) x1++;
     return { x0, x1 };
   };
+  /**
+   * The rooms with a shutter in them: the door's columns and rows, the plates
+   * that hold it open, and which way through it the route goes.
+   *
+   * Only the rooms the route actually crosses, which is what the fill hands
+   * back: it lists the cells it could reach only by going through a door, and
+   * each one names its room and sits on the far side of it, which is where the
+   * direction comes from. A shutter somewhere off the route is scenery, and a
+   * person walking past one does not stop to work it out.
+   */
+  const rooms = [];
+  for (const hold of r.holds) {
+    if (rooms.some((room) => room.group === hold.group)) continue;
+    const room = { group: hold.group, x0: w, x1: -1, y0: level.h, y1: -1, plates: [], exit: 0 };
+    for (let i = 0; i < level.tiles.length; i++) {
+      if (level.holdGroup[i] !== hold.group) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      if (level.tiles[i] === T_SHUTTER) {
+        room.x0 = Math.min(room.x0, x);
+        room.x1 = Math.max(room.x1, x);
+        room.y0 = Math.min(room.y0, y);
+        room.y1 = Math.max(room.y1, y);
+      } else if (level.tiles[i] === T_PLATE && standable(x, y - 1)) {
+        room.plates.push({ x, y: y - 1 });
+      }
+    }
+    room.exit = hold.x > room.x1 ? 1 : -1;
+    rooms.push(room);
+  }
+  /** Which side of a door a body is on: -1 left, 1 right, 0 in the doorway. */
+  const sideOf = (room, x) => (x < room.x0 * TILE ? -1 : x > (room.x1 + 1) * TILE ? 1 : 0);
+  /** Is a body standing on the floor this room's door is cut into? */
+  const inRoom = (room, y) => {
+    const row = Math.floor((y + PLAYER_H / 2 + 1) / TILE) - 1;
+    return row >= room.y0 - 1 && row <= room.y1 + 1;
+  };
+  /** The plate on one side of a door, nearest the door itself. */
+  const plateOn = (room, side, row) => {
+    let best = null;
+    for (const c of room.plates) {
+      if (sideOf(room, c.x * TILE + TILE / 2) !== side || Math.abs(c.y - row) > 1) continue;
+      const d = c.x < room.x0 ? room.x0 - c.x : c.x - room.x1;
+      if (!best || d < best.d) best = { x: c.x, y: c.y, d };
+    }
+    return best;
+  };
+
   // One latched target per player: the ledge they picked while they still had
   // their feet on something.
   const held = [null, null];
@@ -382,6 +444,59 @@ export function makeFollower(level, phase = 0) {
       }
       if (Math.abs(mate.x - p.x) > BOOST_REACH * 0.7) return mate.x > p.x ? IN_RIGHT : IN_LEFT;
       return IN_GRIP;
+    }
+
+    // A shutter: the wall that is only a wall while nobody is standing on the
+    // plate. Modelled for the same reason the gate is — a person who has been
+    // shown the hint will try it, and an instrument that has not been shown it
+    // reports every hold room as a wall and everything above one as unreachable.
+    //
+    // Which of them holds first is fixed by slot rather than agreed, because a
+    // pair who both decide the considerate thing is to stand on a plate never
+    // leave the room. It is the same asymmetry the gate uses and it is there
+    // for the same measured reason.
+    //
+    // Both of them have to be in the room for any of it, because a partner who
+    // has climbed out of one is not coming back through the door, and standing
+    // on a plate is standing on the end of their rope. Measured on the
+    // campaign: one of the pair held a plate for twenty-one seconds while the
+    // other ran out of rope ten rows above it, and the run lost forty of its
+    // three hundred rows to a door nobody was using any more.
+    const room = rooms.find((it) => inRoom(it, p.y) && !mate.dead && inRoom(it, mate.y));
+    if (room && (t + phase) % (HOLD_TRY + HOLD_GIVE_UP) < HOLD_TRY) {
+      const mine = sideOf(room, p.x);
+      const mateCol = Math.floor(mate.x / TILE);
+      const mateRow = Math.floor((mate.y + PLAYER_H / 2 + 1) / TILE) - 1;
+      const theirs = sideOf(room, mate.x);
+      // Their weight on a plate, which is the only kind that lets you cross:
+      // your own leaves the plate at the same moment you do, and the door with
+      // it, and the crate is on a rope tied to the pair of you.
+      const propped = room.plates.some((c) => c.x === mateCol && c.y === mateRow);
+      if (mine === room.exit) {
+        // Through, with a partner who is not. The second half of the move, and
+        // the half a pair has to be told about: you hold the far plate for them
+        // exactly as they held the near one for you.
+        const far = plateOn(room, room.exit, row);
+        if (theirs !== room.exit && far) {
+          if (far.x !== col) return far.x > col ? IN_RIGHT : IN_LEFT;
+          return IN_GRIP;
+        }
+      } else if (propped) {
+        const far = plateOn(room, room.exit, row);
+        const to = far ? far.x : room.exit > 0 ? room.x1 + 2 : room.x0 - 2;
+        if (to !== col) return to > col ? IN_RIGHT : IN_LEFT;
+      } else {
+        const near = plateOn(room, -room.exit, row);
+        if (i === 1 && near) {
+          if (near.x !== col) return near.x > col ? IN_RIGHT : IN_LEFT;
+          return IN_GRIP;
+        }
+        // Waiting your turn, a body clear of the doorway so the shutter has
+        // somewhere to shove you when your partner steps off.
+        const edge = room.exit > 0 ? room.x0 - 1 : room.x1 + 1;
+        if (edge !== col) return edge > col ? IN_RIGHT : IN_LEFT;
+        return 0;
+      }
     }
 
     // Walk toward it, but only as far as the footing goes — a bad player still

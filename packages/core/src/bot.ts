@@ -15,6 +15,8 @@
  *     pivot on rather than a second moving one;
  *   - when your partner is stranded below, keep bracing and let them reel up
  *     you; when you are the one stranded, reel;
+ *   - stand on a plate and stay there while your partner crosses the shutter it
+ *     is holding open, and cross while they are the one standing on theirs;
  *   - never take off while the crate is still travelling, because climbing
  *     shortens the rope and the rope yanks whatever is on the end of it.
  *
@@ -82,11 +84,21 @@ import {
   TILE,
 } from './constants.js';
 import { approach } from './math.js';
-import { T_PLATFORM, isDeadlyTile, isSolidTile, sawX, sawY, tileAt, type Level } from './level.js';
+import {
+  T_PLATE,
+  T_PLATFORM,
+  T_SHUTTER,
+  isDeadlyTile,
+  isSolidTile,
+  sawX,
+  sawY,
+  tileAt,
+  type Level,
+} from './level.js';
 import { boosting } from './player.js';
 import { MAX_RISE } from './route.js';
 import { bodyCell, cellCentreX, cellCentreY, planRoute, type RouteCell, type RoutePlan } from './route.js';
-import type { World } from './types.js';
+import type { PlayerState, World } from './types.js';
 
 /** How much of the rope's length the bot will spend on a lead before waiting. */
 /** Stay inside the rope's rest length: past it the rope is a spring, and a
@@ -182,6 +194,45 @@ const BACKTRACK_REACH = 6;
 const STUCK_TICKS = 70;
 /** How long an unstick manoeuvre runs. */
 const UNSTICK_TICKS = 40;
+/**
+ * Ticks the bot will stand on a plate holding a door for a partner who is not
+ * taking it.
+ *
+ * The same bound, for the same reason, as WAIT_PATIENCE: a hold with no timeout
+ * is a deadlock waiting for a partner who never obliges, and a shutter is the
+ * worst place in the game to find one — a hauler stood on a plate looks exactly
+ * like a hauler doing the right thing, so nothing about the pair's position
+ * says whether the crossing is going well or has not started. Ten seconds is
+ * longer than a person needs to notice the door has opened and walk through it.
+ */
+const HOLD_PATIENCE = 600;
+/**
+ * Ticks of ordinary climbing between attempts at a door.
+ *
+ * Letting go and trying again is the whole anti-deadlock story here. Two bots
+ * that both decide to hold, or a bot holding for a person who has wandered off,
+ * recover because the hold is a cycle rather than a state: it lets go, plays
+ * the route for a couple of seconds, and comes back to the plate.
+ */
+const HOLD_RELIEF = 120;
+
+/**
+ * A room with a shutter in it: where its door stands, and where its plates are.
+ *
+ * Read off the level once, because none of it moves. `exit` is the way the
+ * route goes through the door, which is what decides which plate is the one you
+ * hold for your partner and which is the one you cross to.
+ */
+interface HoldRoom {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+  /** Cells a hauler stands in to put their weight on a plate. */
+  plates: RouteCell[];
+  /** 1 when the route crosses the door rightwards, -1 leftwards. */
+  exit: number;
+}
 
 interface Leap {
   launch: number;
@@ -268,6 +319,14 @@ export class Bot {
   private steerWait = 0;
   /** True while standing on a mark, so small shoves do not restart the walk. */
   private settled = false;
+  /** Every room with a shutter in it, indexed by hold group. */
+  private rooms: HoldRoom[];
+  /** The hold group the route crosses on the leg out of each route cell, or -1. */
+  private doors: Int32Array;
+  /** The room the pair are working through, held until both of them are past it. */
+  private room = -1;
+  /** Ticks spent on it, so a hold that is going nowhere can be let go of. */
+  private roomTicks = 0;
   private slack: number;
   private leash: number;
   private leadRows: number;
@@ -281,6 +340,8 @@ export class Bot {
   constructor(level: Level, options: BotOptions = {}) {
     this.level = level;
     this.plan = planRoute(level);
+    this.rooms = this.mapRooms();
+    this.doors = this.mapDoors();
     this.slack = options.slack ?? 0;
     this.leash = options.leash ?? LEASH;
     this.leadRows = options.leadRows ?? LEAD_ROWS;
@@ -314,6 +375,8 @@ export class Bot {
     this.leap = null;
     this.leapFor = -1;
     this.steerWait = 0;
+    this.room = -1;
+    this.roomTicks = 0;
     this.age = 0;
   }
 
@@ -359,6 +422,16 @@ export class Bot {
       }
       return mask | (flee > 0 ? IN_RIGHT : IN_LEFT);
     }
+
+    /* --------------------------------------------------------------- hold */
+    // A shutter is the only wall in the game that opens because somebody is
+    // standing somewhere else, so it is the only one the bot cannot walk at.
+    // Checked ahead of the rope rules below because all of those are about
+    // where a partner is relative to *you*, and a door is about where they are
+    // relative to a plate — a bot that braced instead of stepping onto the
+    // plate simply stood in the room until the level was restarted.
+    const door = this.hold(world, index, airborne);
+    if (door >= 0) return door;
 
     /* ------------------------------------------------------------- anchor */
     const canAnchor = !airborne || p.wallDir !== 0;
@@ -655,6 +728,209 @@ export class Bot {
     // the middle of it is what pays for that.
     if (away < BRAKE_DIST && vx * d > 0 && Math.abs(vx) > BRAKE_SPEED) return 0;
     return d > 0 ? 1 : -1;
+  }
+
+  /**
+   * The hold, from the bot's side: hold a door for your partner, or take one
+   * they are holding for you.
+   *
+   * Returns an input mask, or -1 for "nothing here concerns me".
+   *
+   * The room is a wall to a single hauler and a door to a pair, and getting it
+   * wrong is worse than getting a jump wrong: a bot that walks at a shut
+   * shutter walks at it for the rest of the session. So the state is the
+   * *room*, not the bot — it is picked up when the route's next leg crosses a
+   * door and put down only when both haulers are past it — and everything
+   * inside it is derived from where the two of them are standing, because
+   * anything the bot remembered about a crossing would be a thing it could be
+   * wrong about.
+   *
+   * Who holds first is fixed by slot rather than worked out, for the same
+   * reason the takeoff gate is: what a pair needs is not a fair rule but a
+   * settled one, and two haulers each deducing that the considerate thing is to
+   * stand on a plate is a room neither of them ever leaves. Slot one holds and
+   * slot zero crosses, which also gets the human case right for nothing — a
+   * person playing with the Autohauler is player zero, so the bot is the one
+   * who takes the plate and waits.
+   */
+  private hold(world: World, index: number, airborne: boolean): number {
+    if (this.rooms.length === 0) return -1;
+    const ahead = this.doors[Math.min(this.cursor, this.doors.length - 1)];
+    if (ahead >= 0 && ahead !== this.room) {
+      this.room = ahead;
+      this.roomTicks = 0;
+    }
+    if (this.room < 0) return -1;
+
+    const p = world.players[index];
+    const mate = world.players[1 - index];
+    const room = this.rooms[this.room];
+    const side = this.sideOf(room, p.x);
+    const row = bodyCell(p.x, p.y).y;
+    // Both of us past the door, or the pair climbed out of the room by some
+    // other way: it is behind us and the plates in it are somebody else's
+    // problem. A partner past the door in *columns* is not past it — they may
+    // be five rows below on the far side of a serpentine — so the room's own
+    // rows have to agree.
+    const mateThrough =
+      !mate.dead && this.sideOf(room, mate.x) === room.exit && this.inRoom(room, mate.y);
+    if (side === room.exit && (mateThrough || row < room.y0 - 1)) {
+      this.room = -1;
+      return -1;
+    }
+    if (airborne) return -1;
+
+    // A partner who is not in the room is not about to use the door, and a
+    // hauler with their weight on a plate is an anchor on the end of that
+    // partner's rope. Measured on the campaign: one bot held a plate for
+    // twenty-one seconds while the other, tethered ten rows above it, spent
+    // them running back and forth at the end of a taut rope — the pair lost
+    // forty rows of a three-minute climb to a door they had already given up on.
+    if (mate.dead || !this.inRoom(room, mate.y)) return -1;
+
+    // Bounded, and it repeats. See HOLD_PATIENCE.
+    if (this.roomTicks++ % (HOLD_PATIENCE + HOLD_RELIEF) >= HOLD_PATIENCE) return -1;
+
+    // Their weight on one of this room's plates is the only thing the bot will
+    // cross on. Its own weight goes with it, and the crate hangs off the middle
+    // of a rope tied to both of them, so a door either of those is holding is a
+    // door about to shut.
+    if (this.onPlate(room, mate)) return -1;
+
+    this.charging = false;
+    // Standing still on purpose is not a stall, and the unstick shuffle that
+    // rescues a wedged bot would walk this one off the plate it is holding.
+    this.stallTicks = 0;
+    // Through it already, with a partner who is not: theirs is the plate on
+    // this side, and holding it is the second of the two co-operative acts the
+    // room asks for. Still on the near side: slot one takes the plate and slot
+    // zero is the one who goes.
+    const plate = this.plateOn(room, side === room.exit ? room.exit : -room.exit, row);
+    if (plate && (side === room.exit || index === 1)) return this.standOn(p, plate);
+
+    // Waiting to cross: a body clear of the doorway, so the shutter has
+    // somewhere to shove us when our partner steps off their plate.
+    const edge = room.exit > 0 ? room.x0 - 1 : room.x1 + 1;
+    const dir = this.toward(p.x, cellCentreX(edge), p.vx);
+    return dir > 0 ? IN_RIGHT : dir < 0 ? IN_LEFT : 0;
+  }
+
+  /** Walk onto a plate, then pin yourself to it. */
+  private standOn(p: PlayerState, cell: RouteCell): number {
+    const dir = this.toward(p.x, cellCentreX(cell.x), p.vx);
+    if (dir !== 0) return dir > 0 ? IN_RIGHT : IN_LEFT;
+    // A plate you can be shoved off is not a hold. The partner crossing is on
+    // the other end of the rope and the last thing they do before they are
+    // through is pull it taut, which walks an ungripped hauler off the plate
+    // and shuts the door on the crossing that was already half made.
+    //
+    // Only once the weight is actually on it, though: gripping pins a hauler
+    // exactly where it stands, and the last few pixels onto a mark are coasted
+    // rather than driven, so a grip taken on the way in nails the bot to the
+    // tile next door for as long as its patience lasts.
+    return bodyCell(p.x, p.y).x === cell.x ? IN_GRIP : 0;
+  }
+
+  /** Which side of a door a body is on: -1 left, 1 right, 0 in the doorway. */
+  private sideOf(room: HoldRoom, x: number): number {
+    if (x < room.x0 * TILE) return -1;
+    if (x > (room.x1 + 1) * TILE) return 1;
+    return 0;
+  }
+
+  /** Is a body standing on the floor this room's door is cut into? */
+  private inRoom(room: HoldRoom, y: number): boolean {
+    const row = Math.floor((y + PLAYER_H / 2 + 1) / TILE) - 1;
+    return row >= room.y0 - 1 && row <= room.y1 + 1;
+  }
+
+  /** Is this hauler's weight on one of the room's plates? */
+  private onPlate(room: HoldRoom, p: PlayerState): boolean {
+    const cell = bodyCell(p.x, p.y);
+    return room.plates.some((c) => c.x === cell.x && c.y === cell.y);
+  }
+
+  /**
+   * The plate on one side of a door, nearest the door itself.
+   *
+   * Nearest, because the rope is the reason the room is a puzzle: every column
+   * between the plate and the doorway is a column of rope the hauler crossing
+   * does not have. Plates a row or more off the hauler's own floor are ignored
+   * rather than walked at, since the only thing this can do is walk sideways.
+   */
+  private plateOn(room: HoldRoom, side: number, row: number): RouteCell | null {
+    let best: RouteCell | null = null;
+    let nearest = Infinity;
+    for (const c of room.plates) {
+      if (this.sideOf(room, cellCentreX(c.x)) !== side) continue;
+      if (Math.abs(c.y - row) > 1) continue;
+      const d = c.x < room.x0 ? room.x0 - c.x : c.x - room.x1;
+      if (d < nearest) {
+        nearest = d;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  /** Every shutter and plate in the level, gathered into rooms. */
+  private mapRooms(): HoldRoom[] {
+    const { w, tiles, holdGroup, holdGroups } = this.level;
+    const rooms: HoldRoom[] = [];
+    for (let g = 0; g < holdGroups; g++) {
+      rooms.push({ x0: w, x1: -1, y0: this.level.h, y1: -1, plates: [], exit: 1 });
+    }
+    for (let i = 0; i < tiles.length; i++) {
+      const g = holdGroup[i];
+      if (g < 0) continue;
+      const x = i % w;
+      const y = (i - x) / w;
+      const room = rooms[g];
+      if (tiles[i] === T_SHUTTER) {
+        room.x0 = Math.min(room.x0, x);
+        room.x1 = Math.max(room.x1, x);
+        room.y0 = Math.min(room.y0, y);
+        room.y1 = Math.max(room.y1, y);
+      } else if (tiles[i] === T_PLATE && y > 0 && this.plan.standable[(y - 1) * w + x] === 1) {
+        room.plates.push({ x, y: y - 1 });
+      }
+    }
+    return rooms;
+  }
+
+  /**
+   * Which leg of the route goes through which door.
+   *
+   * A shutter is the one thing in a level that is a wall across a floor rather
+   * than a hole in one, so it never shows up as a rise and never shows up as a
+   * gap: the two sides of a hold room are the same ledge on the same row, and
+   * to everything else in here the crossing is a stroll. The columns an edge
+   * passes over are what tell the two apart, which is the same question
+   * analyseLevel asks before it will let the fill through a door.
+   */
+  private mapDoors(): Int32Array {
+    const cells = this.plan.cells;
+    const doors = new Int32Array(Math.max(1, cells.length)).fill(-1);
+    if (this.rooms.length === 0) return doors;
+    for (let i = 1; i < cells.length; i++) {
+      const a = cells[i - 1];
+      const b = cells[i];
+      const lo = Math.min(a.x, b.x) + 1;
+      const hi = Math.max(a.x, b.x) - 1;
+      const top = Math.max(0, Math.min(a.y, b.y) - MAX_RISE);
+      const bottom = Math.max(a.y, b.y);
+      for (let x = lo; x <= hi && doors[i - 1] < 0; x++) {
+        for (let y = top; y <= bottom; y++) {
+          if (tileAt(this.level, x, y) !== T_SHUTTER) continue;
+          const g = this.level.holdGroup[y * this.level.w + x];
+          if (g < 0) continue;
+          doors[i - 1] = g;
+          this.rooms[g].exit = b.x > a.x ? 1 : -1;
+          break;
+        }
+      }
+    }
+    return doors;
   }
 
   /** Every cell between two columns on one row is standable. */

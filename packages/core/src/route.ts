@@ -16,12 +16,27 @@
  * so it is free to be slow. It is not: a full campaign fill is ~30 ms.
  */
 import { PLAYER_H, TILE } from './constants.js';
-import { T_CRUMBLE, T_GOAL, T_PLATFORM, isDeadlyTile, isSolidTile, tileAt, type Level } from './level.js';
+import {
+  T_CRUMBLE,
+  T_GOAL,
+  T_PLATE,
+  T_PLATFORM,
+  T_SHUTTER,
+  isDeadlyTile,
+  isSolidTile,
+  tileAt,
+  type Level,
+} from './level.js';
 
 /** One standable cell: the tile a player's body occupies while standing. */
 export interface RouteCell {
   x: number;
   y: number;
+}
+
+/** A cell on the far side of a shutter, and which room's shutter that was. */
+export interface HoldCell extends RouteCell {
+  group: number;
 }
 
 /** A run of adjacent standable cells on one row. */
@@ -45,7 +60,8 @@ export interface LevelAnalysis {
   /** Flood-fill parent index per cell, or -1 if never reached. */
   seen: Int32Array;
   /**
-   * Cells that could only be reached by asking a partner for a leg up.
+   * Cells that could only be reached with a partner: a leg up onto a shelf, or
+   * a shutter somebody had to stand on a plate to hold open.
    *
    * The difference between what one player can do and what two can, as a list
    * of places. The renderer paints a mark on them so a pair can see that the
@@ -54,6 +70,16 @@ export interface LevelAnalysis {
    * before it explains the move.
    */
   gates: RouteCell[];
+  /**
+   * The cells among them that were reached through a shutter rather than off a
+   * partner's shoulders, each naming the door it went through.
+   *
+   * Kept apart because the two are different verbs and a count of one is not a
+   * count of the other. The verifier replays a hold as a leapfrog off a plate
+   * on each side and a boost as a brace and a haul, and a mark that told a pair
+   * to boost at a doorway would be a lie.
+   */
+  holds: HoldCell[];
 }
 
 /**
@@ -143,6 +169,65 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
   const seen = new Int32Array(w * h).fill(-1);
   const queue: number[] = [];
 
+  // Where the doors are, where a body would be standing inside one, and where
+  // it would have its weight on a plate. Read once per fill rather than once
+  // per edge: the fill offers a cell to a few thousand edges before it takes
+  // one. A body standing a row under a shutter has its head in it, which is as
+  // solid as one across its boots.
+  const hasDoors = level.holdGroups > 0;
+  const doorAt = new Int32Array(hasDoors ? w * h : 0).fill(-1);
+  const insideDoor = new Int32Array(hasDoors ? w * h : 0).fill(-1);
+  const plateAt = new Int32Array(hasDoors ? w * h : 0).fill(-1);
+  for (let i = 0; hasDoors && i < level.tiles.length; i++) {
+    const g = level.holdGroup[i];
+    if (g < 0) continue;
+    if (level.tiles[i] === T_SHUTTER) {
+      doorAt[i] = g;
+      insideDoor[i] = g;
+      if (i + w < insideDoor.length) insideDoor[i + w] = g;
+    } else if (level.tiles[i] === T_PLATE && i >= w) {
+      plateAt[i - w] = g;
+    }
+  }
+
+  /**
+   * The door standing between two cells, or -1.
+   *
+   * Every other edge in this fill is indifferent to what lies between its ends,
+   * because what lies between them is a gap and a gap is empty. A shutter is
+   * the one thing in a level that is a wall across a floor rather than a hole
+   * in one, so the columns an edge passes over have to be looked at: otherwise
+   * a two-tile jump hops a floor-to-ceiling door and the room stops being a
+   * room.
+   *
+   * A climb is measured against the arc it flies through, so a door that stops
+   * short of that arc is one a hauler can hop — which is a room that does not
+   * need anybody, and what the solo replay in scripts/verify-levels.mjs exists
+   * to catch. A fall is measured against the whole descent instead, because it
+   * crosses the column at whatever height it happens to be passing and only a
+   * door covering all of it is in the way.
+   */
+  const doorBetween = (from: number, x: number, y: number): number => {
+    const fx = from % w;
+    const fy = (from - fx) / w;
+    const first = Math.min(fx, x) + 1;
+    const last = Math.max(fx, x) - 1;
+    for (let c = first; c <= last; c++) {
+      if (y - fy > MAX_RISE) {
+        let covered = true;
+        for (let r = fy; r <= y && covered; r++) covered = doorAt[r * w + c] >= 0;
+        if (covered) return doorAt[y * w + c];
+        continue;
+      }
+      const top = Math.max(0, Math.min(fy, y) - MAX_RISE);
+      const bottom = Math.max(fy, y);
+      for (let r = top; r <= bottom; r++) {
+        if (doorAt[r * w + c] >= 0) return doorAt[r * w + c];
+      }
+    }
+    return -1;
+  };
+
   const start = findStart(level, standable);
   if (!start) {
     return {
@@ -156,16 +241,35 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
       standable,
       seen,
       gates: [],
+      holds: [],
     };
   }
   const startIndex = start.y * w + start.x;
   seen[startIndex] = startIndex;
   queue.push(startIndex);
 
+  /** Rooms whose plate the fill has reached, and the doors waiting on them. */
+  const held = new Uint8Array(level.holdGroups);
+  const holdPending = new Uint8Array(hasDoors ? w * h : 0);
+  const holdDeferred: { from: number; x: number; y: number; group: number }[] = [];
+
   const visit = (from: number, x: number, y: number): void => {
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const i = y * w + x;
     if (!standable[i] || seen[i] !== -1) return;
+    const shutter = hasDoors ? (insideDoor[i] >= 0 ? insideDoor[i] : doorBetween(from, x, y)) : -1;
+    if (shutter >= 0) {
+      // A shutter is a wall to one player whatever they can jump: the plate
+      // that opens it is on the far end of a rope tied to somebody else. To a
+      // pair it is a door, and it waits alongside the boost — spent only once
+      // ordinary climbing has run out, and only once the plate is somewhere
+      // they have already stood.
+      if (options.coop && !holdPending[i]) {
+        holdPending[i] = 1;
+        holdDeferred.push({ from, x, y, group: shutter });
+      }
+      return;
+    }
     seen[i] = from;
     queue.push(i);
   };
@@ -184,6 +288,7 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
    * boost only where there is no other way on.
    */
   const gates: RouteCell[] = [];
+  const holds: HoldCell[] = [];
   const deferred: { from: number; x: number; y: number }[] = [];
   const defer = (from: number, x: number, y: number): void => {
     if (x < 0 || y < 0 || x >= w || y >= h) return;
@@ -200,6 +305,10 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
     const x = i % w;
     const y = (i - x) / w;
     if (y < highest) highest = y;
+
+    // Standing on a plate is what opens a room's shutter, so a cell with one
+    // under it is the key to that room rather than one more foothold.
+    if (hasDoors && plateAt[i] >= 0) held[plateAt[i]] = 1;
 
     visit(i, x - 1, y);
     visit(i, x + 1, y);
@@ -244,14 +353,44 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
     // tower. It remains in the game, and it is how the second hauler follows
     // the first over a gate; it is just not a way through the level.
 
-    if (head === queue.length - 1 && deferred.length > 0) {
+    if (head === queue.length - 1 && (deferred.length > 0 || holdDeferred.length > 0)) {
       // Nothing left that one player could do. Cash in the co-op moves that
       // have been waiting, and let the ordinary fill run on from them.
-      const pending = deferred.splice(0, deferred.length);
-      for (const d of pending) {
-        const before = seen[d.y * w + d.x];
-        visit(d.from, d.x, d.y);
-        if (before === -1 && seen[d.y * w + d.x] !== -1) gates.push({ x: d.x, y: d.y });
+      //
+      // Doors first, and boosts only in a round that spent no door. Between the
+      // two of them a door is the cheaper thing to ask for — somebody stands on
+      // a plate, and nobody has to line up on a ledge and time anything — and a
+      // room built around a shutter is a room the pair are meant to walk
+      // through. Cashed in together the fill takes the shoulders instead: two
+      // of the eight hold rooms in the library come back with their shutter
+      // never opened and a six-row boost over the top of it in the route, which
+      // leaves the room unproved — the verifier replays the boost the fill
+      // invented and never replays the crossing somebody cut.
+      //
+      // A door whose plate is still somewhere the pair have not reached stays
+      // on the list, because a boost cashed in on a later round can be what
+      // opens the way to it.
+      let opened = 0;
+      for (let k = holdDeferred.length - 1; k >= 0; k--) {
+        const d = holdDeferred[k];
+        if (!held[d.group]) continue;
+        holdDeferred.splice(k, 1);
+        const target = d.y * w + d.x;
+        if (seen[target] !== -1) continue;
+        seen[target] = d.from;
+        queue.push(target);
+        const cell = { x: d.x, y: d.y, group: d.group };
+        gates.push(cell);
+        holds.push(cell);
+        opened++;
+      }
+      if (opened === 0) {
+        const pending = deferred.splice(0, deferred.length);
+        for (const d of pending) {
+          const before = seen[d.y * w + d.x];
+          visit(d.from, d.x, d.y);
+          if (before === -1 && seen[d.y * w + d.x] !== -1) gates.push({ x: d.x, y: d.y });
+        }
       }
     }
   }
@@ -296,8 +435,20 @@ export function analyseLevel(level: Level, options: AnalyseOptions = {}): LevelA
   // one of those is an invitation to a dead end.
   const onRoute = new Set(route.map((c) => c.y * w + c.x));
   const used = gates.filter((g) => onRoute.has(g.y * w + g.x));
+  const usedHolds = holds.filter((g) => onRoute.has(g.y * w + g.x));
 
-  return { ok: goalCell >= 0, highest, reached, total, route, start, standable, seen, gates: used };
+  return {
+    ok: goalCell >= 0,
+    highest,
+    reached,
+    total,
+    route,
+    start,
+    standable,
+    seen,
+    gates: used,
+    holds: usedHolds,
+  };
 }
 
 /**

@@ -1,4 +1,8 @@
 import {
+  CARGO_H,
+  CARGO_W,
+  PLAYER_H,
+  PLAYER_HALF_W,
   TILE,
   T_BOUNCE,
   T_CHECKPOINT,
@@ -11,13 +15,16 @@ import {
   T_GRIP,
   T_ICE,
   T_LAVA,
+  T_PLATE,
   T_PLATFORM,
+  T_SHUTTER,
   T_SOLID,
   T_SPIKE_D,
   T_SPIKE_L,
   T_SPIKE_R,
   T_SPIKE_U,
   T_WIND,
+  shutterOpen,
   type Level,
   type World,
 } from '@haulmates/core';
@@ -31,7 +38,9 @@ const CACHE_SIZE = 10;
 
 /** Tiles whose appearance changes at runtime are never baked. */
 function isDynamic(t: number): boolean {
-  return t === T_CRUMBLE || t === T_CHECKPOINT || t === T_GOAL || t === T_WIND;
+  return (
+    t === T_CRUMBLE || t === T_CHECKPOINT || t === T_GOAL || t === T_WIND || t === T_SHUTTER || t === T_PLATE
+  );
 }
 
 /**
@@ -235,8 +244,27 @@ function plankEnd(t: number): boolean {
   return t !== T_PLATFORM && t !== T_ICE && t !== T_CONV_L && t !== T_CONV_R;
 }
 
+/**
+ * Does this tile fill its cell, for the purposes of edging and occlusion?
+ *
+ * A plate counts. It is solid to the simulation, and leaving it out gave the
+ * concrete underneath one a hazard cap band of its own — so a plate set into a
+ * floor sat above a painted ledge edge that no player could ever stand on,
+ * wearing two lots of tape one row apart. A shutter deliberately does not
+ * count: it is a hole in the wall half the time, and the floor under it is a
+ * floor you walk along.
+ */
 function isFilled(t: number): boolean {
-  return t === T_SOLID || t === T_GRIP || t === T_ICE || t === T_CONV_L || t === T_CONV_R || t === T_BOUNCE || t === T_CRUMBLE;
+  return (
+    t === T_SOLID ||
+    t === T_GRIP ||
+    t === T_ICE ||
+    t === T_CONV_L ||
+    t === T_CONV_R ||
+    t === T_BOUNCE ||
+    t === T_CRUMBLE ||
+    t === T_PLATE
+  );
 }
 
 type TilePass = 'field' | 'reads';
@@ -571,6 +599,179 @@ function drawSpikes(ctx: CanvasRenderingContext2D, x: number, y: number, t: numb
   else ctx.fillRect(x, y, 4, TILE);
 }
 
+/** Width of a shutter's side rail, and the depth of the housing it rolls into. */
+const POST = 3;
+const HEAD = 5;
+/** Height of one shutter slat. Four to a tile, so a door is never a flat slab. */
+const SLAT = 6;
+
+/**
+ * Hazard tape laid down a stripe at a time.
+ *
+ * The baked chevron is a repeating pattern phase-locked to the block it is
+ * painted on, which is what makes one painter appear to have walked the whole
+ * climb. A shutter and a floor plate are single objects rather than runs of
+ * ledge: their tape starts at their own edge, and stripes that carried the
+ * wall's phase across a door would say the door was part of the wall.
+ */
+function paintTape(
+  ctx: CanvasRenderingContext2D,
+  p: BiomePalette,
+  highContrast: boolean,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  if (highContrast) {
+    // The same flattening every other chevron gets in this mode: a solid rule.
+    ctx.fillStyle = p.ink;
+    ctx.fillRect(x, y, w, h);
+    return;
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = p.hazA;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = p.hazB;
+  for (let i = -h; i < w; i += 8) {
+    ctx.beginPath();
+    ctx.moveTo(x + i, y + h);
+    ctx.lineTo(x + i + h, y);
+    ctx.lineTo(x + i + h + 4, y);
+    ctx.lineTo(x + i + 4, y + h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * Is there weight on this particular plate?
+ *
+ * The simulation keeps one byte per room rather than one per plate, because a
+ * door only cares whether *something* holds it and a room has a plate on each
+ * side of its shutter. The eye cares which: the leapfrog is only legible if
+ * you can see your partner step off the near plate while the door stays up,
+ * so this asks the question `updateHolds` does not need to — with the same
+ * rule, a body's contact strip against the tile it is standing on.
+ */
+function plateHeld(world: World, tx: number, ty: number): boolean {
+  const covers = (x: number, y: number, hw: number, hh: number): boolean =>
+    tx >= Math.floor((x - hw) / TILE) &&
+    tx <= Math.floor((x + hw) / TILE) &&
+    ty >= Math.floor((y - hh) / TILE) &&
+    ty <= Math.floor((y + hh) / TILE);
+  for (const p of world.players) {
+    if (p.dead) continue;
+    if (covers(p.x, p.y + PLAYER_H / 2 + 2, PLAYER_HALF_W, 2)) return true;
+  }
+  const c = world.cargo;
+  return c.hp > 0 && covers(c.x, c.y + CARGO_H / 2 + 2, CARGO_W / 2, 2);
+}
+
+/**
+ * A floor plate, and whether anything is standing on it.
+ *
+ * It has to read as a plate with nobody on it, because noticing the plate is
+ * the whole of working the room out — so the shape carries it rather than the
+ * state: a taped panel set into the floor with a steel lid riding in guides
+ * above it. The lid is the only part that moves and it moves the one direction
+ * a plate can, into its own recess. The tape is what makes it findable across
+ * a room, where the five pixels the lid travels are not.
+ */
+function drawPlate(
+  ctx: CanvasRenderingContext2D,
+  p: BiomePalette,
+  highContrast: boolean,
+  x: number,
+  y: number,
+  held: boolean,
+): void {
+  ctx.fillStyle = p.tileBody;
+  ctx.fillRect(x, y, TILE, TILE);
+  ctx.fillStyle = shade(p.tileBody, -60);
+  ctx.fillRect(x + 3, y + 1, TILE - 6, 11);
+  paintTape(ctx, p, highContrast, x + 2, y + 13, TILE - 4, 6);
+
+  ctx.fillStyle = p.ink;
+  ctx.fillRect(x, y, TILE, 1);
+  ctx.fillRect(x + 1, y + 1, 2, 12);
+  ctx.fillRect(x + TILE - 3, y + 1, 2, 12);
+  ctx.fillRect(x, y + 19, TILE, 2);
+
+  const lid = held ? 7 : 2;
+  ctx.fillStyle = p.tileTop;
+  ctx.fillRect(x + 4, y + lid, TILE - 8, 6);
+  ctx.fillStyle = p.tileEdge;
+  ctx.fillRect(x + 4, y + lid + 6, TILE - 8, 1);
+  ctx.fillStyle = p.tileDetail;
+  ctx.fillRect(x + 6, y + lid + 2, TILE - 12, 2);
+}
+
+/**
+ * A shutter, which is either a wall or a doorway and must never be mistaken
+ * for the other.
+ *
+ * The frame stays whatever the door is doing — rails down both sides, a
+ * housing across the head, a sill on the floor — because a pair plans a
+ * crossing around a doorway they can still see when it is standing open, and
+ * because an opening that appears out of blank air reads as the level
+ * breaking. What changes is everything between the rails: a slatted steel
+ * curtain, or nothing at all with the curtain stacked up under the housing.
+ *
+ * Nothing here animates. The door is instant in the simulation — a tile either
+ * blocks this tick or it does not — and a leaf sliding through the gap would
+ * spend those frames either painting a doorway you cannot walk through or a
+ * wall you can walk through, which is the one lie a mechanic about timing
+ * cannot afford.
+ */
+function drawShutter(
+  ctx: CanvasRenderingContext2D,
+  p: BiomePalette,
+  highContrast: boolean,
+  x: number,
+  y: number,
+  open: boolean,
+  head: boolean,
+  foot: boolean,
+  capL: boolean,
+  capR: boolean,
+): void {
+  const steel = shade(p.tileBody, -58);
+  const lip = shade(p.tileBody, -34);
+  if (!open) {
+    ctx.fillStyle = steel;
+    ctx.fillRect(x, y, TILE, TILE);
+    for (let sy = 0; sy < TILE; sy += SLAT) {
+      ctx.fillStyle = lip;
+      ctx.fillRect(x, y + sy, TILE, 2);
+      ctx.fillStyle = p.ink;
+      ctx.fillRect(x, y + sy + SLAT - 1, TILE, 1);
+    }
+    // The leading edge: the part of the door that comes down on the floor, and
+    // the part you are looking at when you are deciding whether to run for it.
+    if (foot) paintTape(ctx, p, highContrast, x, y + TILE - 8, TILE, 6);
+  }
+
+  ctx.fillStyle = p.ink;
+  if (capL) ctx.fillRect(x, y, POST, TILE);
+  if (capR) ctx.fillRect(x + TILE - POST, y, POST, TILE);
+  if (head) {
+    ctx.fillRect(x, y, TILE, HEAD);
+    if (open) {
+      ctx.fillStyle = steel;
+      ctx.fillRect(x + POST, y + HEAD, TILE - POST * 2, 5);
+      ctx.fillStyle = p.ink;
+      ctx.fillRect(x + POST, y + HEAD + 2, TILE - POST * 2, 1);
+      ctx.fillRect(x + POST, y + HEAD + 4, TILE - POST * 2, 1);
+    }
+  }
+  if (foot) ctx.fillRect(x, y + TILE - 2, TILE, 2);
+}
+
 /** Tiles that animate, drawn fresh every frame over the baked blocks. */
 export function drawDynamicTiles(
   ctx: CanvasRenderingContext2D,
@@ -639,6 +840,26 @@ export function drawDynamicTiles(
             ctx.globalAlpha = 1;
           }
           ctx.restore();
+          break;
+        }
+        case T_PLATE: {
+          drawPlate(ctx, p, options.highContrast, x, y, plateHeld(world, tx, ty));
+          break;
+        }
+        case T_SHUTTER: {
+          const i = ty * level.w + tx;
+          drawShutter(
+            ctx,
+            p,
+            options.highContrast,
+            x,
+            y,
+            shutterOpen(level, world, tx, ty),
+            ty === 0 || level.tiles[i - level.w] !== T_SHUTTER,
+            ty === level.h - 1 || level.tiles[i + level.w] !== T_SHUTTER,
+            tx === 0 || level.tiles[i - 1] !== T_SHUTTER,
+            tx === level.w - 1 || level.tiles[i + 1] !== T_SHUTTER,
+          );
           break;
         }
         case T_CHECKPOINT: {

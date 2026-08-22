@@ -28,6 +28,8 @@ import {
   EV_FINISH,
   EV_RESPAWN,
   EV_RESTART,
+  EV_SHUTTER_OPEN,
+  EV_SHUTTER_SHUT,
   type SimContext,
   type World,
 } from './types.js';
@@ -36,6 +38,49 @@ const HALF_H = PLAYER_H / 2;
 /** Death hitbox is inset from the body so near misses stay near misses. */
 const HURT_INSET_X = 5;
 const HURT_INSET_Y = 5;
+
+/**
+ * Last tick's doors, kept only long enough to notice one moving.
+ *
+ * `world.open` is recomputed from nothing at the top of every tick and never
+ * snapshotted, so the previous answer is the only thing a door transition can
+ * be spotted against. It lives here rather than in the world because it must
+ * stay out of the snapshot and out of the state hash: a shutter noise is
+ * presentation, and a rollback that replays this tick recomputes the door and
+ * the noise together. Written and read inside one call to `updateShutters`, so
+ * two matches stepping in the same process cannot see each other's doors.
+ */
+let shutterWas = new Uint8Array(0);
+
+/**
+ * Recompute the doors, and report the ones that moved.
+ *
+ * The position is the middle of the group's shutter rather than a corner of
+ * it, because a door is up to five tiles tall and the mix places a sound by
+ * how far it is from the camera. Scanned on the tick it moves rather than kept
+ * in the level: a door changes state a handful of times in a room, and the
+ * alternative is another per-level array every peer would have to agree about.
+ */
+function updateShutters(level: Level, world: World): void {
+  if (shutterWas.length !== world.open.length) shutterWas = new Uint8Array(world.open.length);
+  shutterWas.set(world.open);
+  updateHolds(level, world);
+
+  for (let g = 0; g < world.open.length; g++) {
+    if (world.open[g] === shutterWas[g]) continue;
+    let count = 0;
+    let sx = 0;
+    let sy = 0;
+    for (let i = 0; i < level.tiles.length; i++) {
+      if (level.tiles[i] !== T_SHUTTER || level.holdGroup[i] !== g) continue;
+      sx += (i % level.w) * TILE + TILE / 2;
+      sy += Math.floor(i / level.w) * TILE + TILE / 2;
+      count++;
+    }
+    if (count === 0) continue;
+    pushEvent(world, world.open[g] === 1 ? EV_SHUTTER_OPEN : EV_SHUTTER_SHUT, sx / count, sy / count, g, 0);
+  }
+}
 
 function updateCrumble(world: World): void {
   const c = world.crumble;
@@ -166,7 +211,10 @@ function doorBetween(level: Level, world: World, from: { x: number; y: number },
   if (level.holdGroups === 0) return false;
   const dx = to.x - from.x;
   const dy = to.y - from.y;
-  const steps = Math.ceil(Math.hypot(dx, dy) / (TILE / 2));
+  // Chebyshev rather than a real distance: this only picks how many samples to
+  // take, and hypot is not required to be bit-identical across platforms, which
+  // in a lockstep simulation is a desync waiting for a player on the wrong CPU.
+  const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / (TILE / 2));
   for (let n = 0; n <= steps; n++) {
     const t = steps === 0 ? 0 : n / steps;
     const tx = Math.floor((from.x + dx * t) / TILE);
@@ -181,7 +229,7 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   world.tick++;
   // Before anything moves, so both peers read the same doors all tick, and so
   // a shutter that is about to close is still open for whoever is inside it.
-  updateHolds(level, world);
+  updateShutters(level, world);
   updateCrumble(world);
 
   for (let i = 0; i < world.crumble.length; i++) {

@@ -152,6 +152,18 @@ export const EV_BOOST = 18;
  * did nothing to cause it and gets no other signal that it happened.
  */
 export const EV_GRIP_FAIL = 19;
+/**
+ * A shutter that has just moved, and which way it went.
+ *
+ * Two kinds rather than one with a flag, because they are the only events in
+ * the game that routinely fire off-screen: the plate that opens a door can be
+ * most of a rope away from it, so for the hauler standing on the plate the
+ * sound is the entire report of what they just did. `a` is the hold group and
+ * the position is the middle of its shutter, so a door at the far end of a
+ * long room is quieter than the one you are standing in.
+ */
+export const EV_SHUTTER_OPEN = 20;
+export const EV_SHUTTER_SHUT = 21;
 
 export const MODE_HAUL = 0;
 export const MODE_GAUNTLET = 1;

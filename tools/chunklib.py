@@ -19,6 +19,9 @@ can eyeball. The rules, all calibrated against the simulation:
     foothold or the headroom above it. Hazards go on the route through
     `hazard()`, which refuses to write into the columns the climb is proved
     from; the route is placed by rule, and the rule wins.
+  * A shutter across the route has a plate on each side of it. A door only one
+    of you can hold open is a wall, and it is a wall none of the rules above
+    can see: the route past it is still a legal staircase.
   * Every chunk has a landing platform at local row 1 and another at row h-2,
     horizontally offset from each other. Stacked, those two sit exactly 3 rows
     apart with clear rows between, so any chunk can follow any other.
@@ -100,6 +103,67 @@ MIN_OVERLAP = 3
 # arithmetic and then fails the replay: the pair has one launch column, the
 # brace is stood on air beside it, and nobody goes anywhere.
 GATE_OVERLAP = 6
+
+# How wide a shutter has to be, which the crate decides rather than the haulers.
+#
+# A hauler is 20px across and the crate is 26, in a 24px tile. So a one column
+# doorway is a door the pair walk through and the thing they are carrying does
+# not — and it hangs off the middle of the rope, so leaving it on the wrong
+# side of a door is not on offer. Two columns is 48px of clear air: the crate,
+# and a shoulder beside it.
+DOOR_W = 2
+
+# ...and how tall, which is decided by how high a hauler can jump.
+#
+# A plain jump rises 4.50 tiles, measured on the campaign's flat ledge at row
+# 666 (packages/core/src/player.ts). Three tiles of door is one you hop over
+# without breaking stride. Four leaves 42px of travel above the lip against the
+# 68px of door and shoulder that have to cross it: it does not work, and it is
+# near enough to working that somebody would eventually find the frame it works
+# on. Five is a door nobody argues with, and open it is still two clear tiles to
+# walk through, which is what a 32px hauler needs.
+DOOR_H = 5
+
+# Columns of plate under each end of the leapfrog.
+#
+# One column is a tile you have to stop on exactly, which is not a thing to ask
+# of somebody being towed about by a rope, and it is narrower than the crate
+# that is meant to be able to hold a door down in their place.
+PLATE_W = 2
+
+# How far apart a door's two plates may sit, in tiles.
+#
+# `ROPE_MAX` is 232px, a shade under ten tiles, and the leapfrog needs one
+# hauler standing on the near plate at the moment the other reaches the far
+# one. Plates further apart than the rope make a door that opens once and never
+# lets the second one through, which is a room the pair can only lose in. Nine
+# is the room `hold.test.ts` proves the leapfrog on, and it is the whole of the
+# rope: the two ends of a hold are as far apart as they can be made.
+HOLD_ROPE = 9
+
+# Columns of clear floor between the near plate and the door.
+#
+# It is a run-up, and it is what keeps one hauler from doing this room alone.
+# The crate hangs off the middle of the rope, so it creeps forward at about
+# half the speed of a hauler walking away from an inert partner: a plate close
+# to its door is still under the crate when that hauler reaches the doorway,
+# and they walk through a door their own cargo is holding open for them.
+# `verify-levels.mjs` walked one player and their passenger through a four
+# column run-up and said so. Five clear columns puts the plate six from its
+# door, which is what `hold.test.ts` builds its room from, and at six the crate
+# has been towed clear of the plate before anybody reaches the door. It cannot
+# go further: the two plates have to stay inside a rope end to end.
+PLATE_GAP = 5
+
+# The narrowest a ledge may be shaved to, to make room for a door beneath it.
+#
+# A door, its run-up and its two plates are twelve columns, a third of the
+# shaft, and the foothold above the door has to sit past all of them. Left
+# at the width the serpentine gave it there is no room, and every wide room in
+# the library turns a door down. Eight columns is still a ledge with a column of
+# slack at each end of the bands it is landed on and launched from; seven is a
+# plank.
+MIN_LEDGE = 8
 
 
 def launch_columns(lower, upper):
@@ -332,8 +396,10 @@ class C:
     # Tiles a player can actually come to rest on. A bounce pad throws you
     # straight back off, and a crumbling crate is gone a third of a second
     # after you touch it — neither can be the only thing holding the route up.
-    # They still appear everywhere, just never as the sole footing.
-    FOOTING = set('#=icC')
+    # They still appear everywhere, just never as the sole footing. A plate is
+    # in here because it is ordinary floor with a switch under it, and a route
+    # that could not be walked over one would be a route with a hole in it.
+    FOOTING = set('#=icC_')
     # ...and of those, the ones you can also rise straight up through. This is
     # the distinction the whole tower is built on now: a solid foothold three
     # rows above you blocks your head, so the cell under it is not a place you
@@ -737,6 +803,236 @@ class C:
             self.tags.append('gate')
         return self
 
+    def _hold_columns(self, index):
+        """Where a hold at `index` would put its door, or None if it will not fit.
+
+        Everything lands on one ledge: plate, run-up, door, plate. That is not
+        a preference, it is the only arrangement the pair can play. A near plate
+        on the foothold *below* the door reads better and fails twice over. The
+        hauler holding it is three rows under the door, so following their
+        partner through is a jump and not a walk, and the leapfrog is a walk —
+        `verify-levels.mjs` could not get a pair through a single room shaped
+        that way. And the crate hangs a rope's length under the pair, which is
+        precisely where that plate is: one hauler alone strolled through a door
+        the crate was holding open for them from the ledge below.
+
+        The room that is left is a corridor, and this tower is a stack of
+        serpentines with no corridor anywhere in it, so one has to be built: the
+        ledge is stretched sideways until it can carry a plate, a run-up, a door
+        and a plate, and the foothold above it is moved out past all four. That
+        is the same trade `gate` makes — the shape the verb needs is bought by
+        rewriting the two platforms it lands between, and where the serpentine
+        happens to be when it gets there decides whether it can be.
+        """
+        if not (1 <= index and index + 1 <= len(self.path) - 2):
+            return None
+        r, c0, c1 = self.path[index]
+        if r - DOOR_H < 0 or (r - DOOR_H) in seam_rows(self.h):
+            return None
+        landed = self.band(index, self.BODY_MARGIN)
+        if not landed:
+            return None
+
+        # The door leads away from the columns the ledge is landed on, whichever
+        # end of it those are. At a turn in the serpentine they sit in the
+        # middle, and then neither side is a way out and this step cannot carry
+        # a door at all.
+        d = 1 if min(landed) - c0 <= c1 - max(landed) else -1
+        edge = max(landed) if d > 0 else min(landed)
+        near = [edge + (1 + k) * d for k in range(PLATE_W)]
+        door = [near[-1] + (PLATE_GAP + 1 + k) * d for k in range(DOOR_W)]
+        far = [door[-1] + (2 + k) * d for k in range(PLATE_W)]
+        # The rope, measured between the two tiles the leapfrog is actually
+        # stood on: the end of the near plate the holder waits at, and the end
+        # of the far plate their partner arrives on.
+        if (far[0] - near[-1]) * d > HOLD_ROPE:
+            return None
+
+        # The foothold above the door is moved out past it, and shaved if it has
+        # to be. A door, its run-up and its two plates are twelve columns and the
+        # ledge above still has to fit past them inside the same shaft, so a
+        # room with a wide serpentine cannot have a door at all unless the one
+        # platform that is being rebuilt anyway is allowed to come back
+        # narrower. It never comes back narrower than a step needs: a column of
+        # slack at each end of the columns it is landed on and launched from.
+        kr, e0, e1 = self.path[index + 1]
+        above = self.path[index + 2] if index + 2 < len(self.path) else None
+        best = None
+        for width in range(e1 - e0 + 1, MIN_LEDGE - 1, -1):
+            for c in range(max(LO, 2), min(HI, W - 3 - (width - 1)) + 1):
+                up = (kr, c, c + width - 1)
+                # Nothing on the near side of the door may be a column the step
+                # above can be launched from, or the door has a way round it
+                # that costs one jump and no co-operation at all.
+                reach = (c - LAUNCH_REACH) if d > 0 else (c + width - 1 + LAUNCH_REACH)
+                if (reach - door[-1]) * d < 1:
+                    continue
+                if not reachable(self._hold_run(index, up, d), up):
+                    continue
+                if above is not None and not reachable(up, above):
+                    continue
+                if best is None or abs(c - e0) < abs(best[1] - e0):
+                    best = (kr, c, c + width - 1)
+            if best is not None:
+                break
+        if best is None:
+            return None
+        up = best
+        run = self._hold_run(index, up, d)
+        if not (run[1] <= min(near + far) and max(near + far) <= run[2]):
+            return None
+
+        # Nothing overhead on the near side of the door, six rows up or three.
+        #
+        # A pair can climb six rows with no foothold in between — brace, boost,
+        # reel — which is the whole of what `gate` is made out of. Moving the
+        # foothold above the door out past it leaves exactly that gap over the
+        # near side, and if the next one along reaches back over it the room has
+        # a way round the door that costs one gate and no plate at all. Nothing
+        # downstream would notice: the route past it is still a legal staircase,
+        # and the fill walks it.
+        skip = self.path[index + 2] if index + 2 < len(self.path) else None
+        approach = (r, run[1], min(door) - 1) if d > 0 else (r, max(door) + 1, run[2])
+        if skip is not None and overlap(approach, skip) > 0:
+            return None
+
+        # The three rows the moved foothold vacates are wiped, and so is the
+        # shaft over the near side, so what is painted in them now is no reason
+        # to turn a step down.
+        wiped = {kr - 1, kr, kr + 1}
+
+        def air(row, cols):
+            return row in wiped or all(self.rows[row][c] in '.:' for c in cols)
+
+        if not all(air(row, door) for row in range(r - DOOR_H, r)):
+            return None
+        if not (air(r - 1, far) and air(r - 2, far)):
+            return None
+
+        # A blade in a doorway is the same bargain a blade on a gate landing
+        # was: two people funnelling through a two column gap one at a time
+        # cannot dodge, so it is not a hazard, it is a wall with a rumour of a
+        # way through.
+        if not self._entity_free(r - DOOR_H, r, min(door) - 1, max(door) + 1):
+            return None
+        return run, up, door, near, far, approach
+
+    def _hold_run(self, index, up, d):
+        """The ledge at `index` stretched to the door, the far plate, and no more.
+
+        It only ever grows away from the columns it is landed on, so the step
+        from below stays exactly as `climb` proved it and every new column is on
+        the far side of the door.
+
+        And it stops the moment the step up on to `up` is legal, rather than
+        running out under the whole of it. Floor past the far plate is floor for
+        the hauler who got through to walk away down, and the rope does not let
+        go at the far end: an inert partner is towed rather than left behind,
+        with the crate riding the middle of the rope and propping the door open
+        on the way past. Three columns is a corridor that stops where it stops
+        being needed, and nobody is towed anywhere from it."""
+        r, c0, c1 = self.path[index]
+        if d > 0:
+            return (r, c0, min(W - 3, max(c1, up[1] + MIN_OVERLAP - 1)))
+        return (r, max(2, min(c0, up[2] - MIN_OVERLAP + 1)), c1)
+
+    def _entity_free(self, r0, r1, c0, c1):
+        """Is this box clear of every blade and press, over the whole stroke?
+
+        An entity is placed at a column and a row and then given a distance to
+        travel, so where one *is* is a span and not a point — and a tile of
+        margin around it besides, because a blade threatens the cell next to the
+        one it is in. Asking about the point is how a gate ended up with a saw
+        parked on its landing."""
+        for e in self.ents:
+            ey1 = e['y'] + max(0, e.get('ay', 0)) + e.get('h', 1)
+            ey0 = e['y'] - max(0, -e.get('ay', 0)) - 1
+            ex1 = e['x'] + max(0, e.get('ax', 0)) + e.get('w', 1)
+            ex0 = e['x'] - max(0, -e.get('ax', 0)) - 1
+            if ey1 >= r0 and ey0 <= r1 and ex1 >= c0 and ex0 <= c1:
+                return False
+        return True
+
+    def hold(self, index):
+        """Put a door across the route that only two people get through.
+
+        The leg up was the only co-operative act in the game, which is seven
+        moments in a forty-five minute campaign, and every complaint about this
+        game traced back to there being exactly one of them. This is the second,
+        and it is deliberately a different *shape*: a leg up is vertical and
+        instantaneous, a hold is horizontal and it makes you wait for each other.
+
+        A shutter with one plate is a wall, because whoever holds it can never
+        be the one who goes through. So a hold lays two, one on each side, and
+        the pair leapfrog: you hold, they cross, they hold, you cross. Two
+        co-operative acts in a row, and neither of them can be faked by one
+        player with a passenger — a partner who presses nothing can be dragged
+        on to the near plate and never on to the far one.
+        `packages/core/test/hold.test.ts` is where all of that is proved.
+
+        The crate is not a way out of the second half of it. It hangs off the
+        middle of the rope, so it goes where the pair go and cannot be parked on
+        a plate and left; what it does buy is the *first* crossing, which is why
+        the near plate is wide enough for it to sit on.
+
+        Called last, for the same reason `gate` is: it rewrites `self.path`.
+        """
+        # Which step can carry a door depends on where the serpentine happens to
+        # be when it gets there, so the index is a preference rather than an
+        # instruction, exactly as it is for a gate.
+        for candidate in sorted(range(1, len(self.path) - 2), key=lambda i: abs(i - index)):
+            plan = self._hold_columns(candidate)
+            if plan is not None:
+                index = candidate
+                break
+        else:
+            self.skipped.append(f'hold near path[{index}]')
+            return self
+        run, up, door, near, far, approach = plan
+        r, run_c0, run_c1 = run
+        kr, up_c0, up_c1 = up
+
+        # The foothold above moves out past the door, and whatever was hanging
+        # off it goes with it — the same trade `gate` makes when it takes one
+        # out. A spike left behind belongs to a ledge that is no longer there.
+        for row in (kr - 1, kr, kr + 1):
+            for c in range(2, W - 2):
+                self.rows[row][c] = '.'
+
+        # ...and the shaft on the near side of the door is emptied too.
+        #
+        # The foothold that used to sit three rows over the near side has gone
+        # out past the door, so what is left there is six clear rows, and
+        # anything standing in them is a staircase around the door: a stub of
+        # scenery halfway up is one jump and then another, which one hauler can
+        # do alone. Decoration is placed by eye and the door is placed by rule,
+        # and the rule wins.
+        for row in range(r - DOOR_H, r):
+            for c in range(approach[1], approach[2] + 1):
+                self.rows[row][c] = '.'
+
+        self.put(kr, up_c0, '=' * (up_c1 - up_c0 + 1))
+        self._protect(kr, up_c0, up_c1)
+        self.path[index + 1] = up
+
+        # Only the columns the ledge did not already have, so a chunk that
+        # restyled it keeps its ice and its conveyors.
+        _, c0, c1 = self.path[index]
+        for c in range(run_c0, run_c1 + 1):
+            if not c0 <= c <= c1:
+                self.rows[r][c] = '='
+        self._protect(r, run_c0, run_c1)
+        self.path[index] = run
+
+        for c in door:
+            for row in range(r - DOOR_H, r):
+                self.rows[row][c] = 'H'
+        for c in near + far:
+            self.rows[r][c] = '_'
+        if 'hold' not in self.tags:
+            self.tags.append('hold')
+        return self
+
     def sweep(self, index, period=200, phase=0, reach=None, side=1):
         """A blade that crosses the route, by rule rather than by eye.
 
@@ -846,7 +1142,7 @@ class C:
     # the first tower unlucky enough to draw it — `deco` takes a string and
     # writes it through, so one typo in a decoration is a crash nobody sees
     # until a player finds the room.
-    GLYPHS = set('.#=^v<>~*oxicCW!F:S')
+    GLYPHS = set('.#=^v<>~*oxicCW!F:S_H')
 
     def check(self, is_start=False, is_goal=False):
         for i, r in enumerate(self.rows):
@@ -916,6 +1212,27 @@ class C:
                 assert self.rows[r][x] in self.FOOTING, (
                     f'{self.id}: foothold at row {r} col {x} is {self.rows[r][x]!r}, '
                     f'which cannot be stood on')
+
+        # A shutter with a plate on only one side of it is a wall.
+        #
+        # Whoever holds a lone plate can never be the one who goes through, so
+        # the room is impassable — and impassable in a way none of the checks
+        # above notice, because every one of them is about the staircase and the
+        # staircase is fine. Two plates with the door between them is the
+        # leapfrog, and it is the only arrangement that is a room.
+        doors = [c for row in self.rows for c, ch in enumerate(row) if ch == 'H']
+        plates = [c for row in self.rows for c, ch in enumerate(row) if ch == '_']
+        if doors:
+            assert any(c < min(doors) for c in plates), (
+                f'{self.id}: the shutter at column {min(doors)} has no plate on the near side')
+            assert any(c > max(doors) for c in plates), (
+                f'{self.id}: the shutter at column {max(doors)} has no plate on the far side')
+            # ...and one door per room, because a room is one hold group: a
+            # second shutter anywhere in the chunk is opened by the first one's
+            # plates and closed by them, so neither of them is a door.
+            assert max(doors) - min(doors) + 1 == len(set(doors)), (
+                f'{self.id}: shutters at columns {sorted(set(doors))} share the '
+                f"room's only hold group")
 
         for e in self.ents:
             assert 0 <= e['y'] < self.h, f"{self.id}: entity y={e['y']} out of range"

@@ -380,8 +380,11 @@ describe('rope gates', () => {
     // a whole foothold — so the moment boosting became an edge the route used
     // one wherever it could, and 98 of the campaign's steps came back as
     // two-person moves when four had been authored.
+    //
+    // Counted without the doorways: a shutter crossing is a gate as well, and a
+    // room built around one is not the fill helping itself to a boost.
     const pair = analyseLevel(buildCampaign(), { coop: true });
-    expect(pair.gates.length).toBeLessThanOrEqual(8);
+    expect(pair.gates.length - pair.holds.length).toBeLessThanOrEqual(8);
   });
 });
 

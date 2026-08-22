@@ -795,6 +795,15 @@ function controlsScreen(app: App): HTMLElement {
       // reads this screen and leaves still not knowing it exists will spend
       // four minutes at the first gate deciding the game is broken.
       verb('Leg up', ['SHIFT', '+', 'SPACE'], 'The only way past a two-person lift. One of you braces on the ground; the other stands against them and jumps, and goes half again as high. It costs the brace a chunk of grip, so it is not free and it is not spammable.'),
+      // Under the leg up because it is the other half of the same lesson, and
+      // with no key on it because it does not have one: the whole of the hold
+      // is standing somewhere, which is exactly why a pair can walk into a room
+      // with a shut door in it and never once suspect the panel in the floor.
+      verb(
+        'The hold',
+        ['NO KEY'],
+        'A floor plate holds its shutter open only while something is standing on it, and a shutter always has a plate on each side. You hold, they cross, they hold, you cross. The crate can hold one down, but it hangs off the middle of the rope and follows you both.',
+      ),
       verb('Emote', ['T'], 'Apologise. Or do not.'),
       verb('Restart', ['R'], 'Hold to go back to the last checkpoint. With a friend on the other end of the rope, both of you have to hold it; the Autohauler holds it with you.'),
       verb('Pause', ['ESC'], 'Online play keeps running while you are in the menu.'),
