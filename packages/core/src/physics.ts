@@ -174,6 +174,9 @@ export function rectHitsMover(level: Level, tick: number, left: number, top: num
   for (let i = 0; i < level.movers.length; i++) {
     const m = level.movers[i];
     if (!m.solid) continue;
+    // The rows it can ever occupy, settled when the level was assembled, so a
+    // hauler on floor two is not asking a press on floor thirty where it is.
+    if (bottom < m.top || top > m.bottom) continue;
     const mx = moverX(m, tick);
     const my = moverY(m, tick);
     if (left < mx + m.w && right > mx && top < my + m.h && bottom > my) return i;

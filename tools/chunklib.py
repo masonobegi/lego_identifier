@@ -275,6 +275,7 @@ class C:
         self.cleared = []       # entities lifted out of a gate's airspace, on purpose
         self.gates = set()      # path indices reached only by hauling on the rope
         self.holds = 0          # shutters the pair have to take turns opening
+        self.two_person = set() # rows a floor condition must leave alone
 
     # ------------------------------------------------------------- painting
     def put(self, r, c, s):
@@ -924,6 +925,38 @@ class C:
             keep.append(e)
         self.ents = keep
 
+        # The rows a floor condition may not touch.
+        #
+        # A gate is six rows of nothing, and the Gauntlet's CROSSWIND paints a
+        # band of updraught into every fourth row of the shaft. Wind is 1550 of
+        # upward acceleration against gravity's 2400, which is most of a free
+        # lift — and a free lift in the one place in the game nobody is supposed
+        # to have one turns the gate off. Found by the build gate on tower
+        # 104729 at six floors: freeze_airlock's gate, cleared by one player
+        # from column 20, with a wind band sitting in the gap.
+        for r in range(max(0, up[0] - 2), min(self.h, low[0] + 2)):
+            self.two_person.add(r)
+
+        # And nothing within reach of the gate that gives away height.
+        #
+        # The gap wipe clears the rows between the two ledges, which is where a
+        # foothold would be. It is not where a *bounce pad* has to be: one
+        # painted two rows above the launch ledge and a column outside it is a
+        # trampoline, and `deco` was free to put it there because a gate's gap
+        # is not on the route until the gate cuts it. The build gate found one —
+        # tower 104729 at six floors, row 51 to row 45, cleared by one player
+        # from column 20 off a pad at row 50 — and a crumbling tile does the
+        # same job for the third of a second it takes to jump off it.
+        #
+        # So both are cleared from every column of the shaft for the whole
+        # height of the gate, plus a row of margin either side. Decoration is
+        # placed by eye and the gate is placed by rule, and the rule wins.
+        for r in range(max(0, up[0] - 2), min(self.h, low[0] + 2)):
+            for c in range(2, W - 2):
+                if self.rows[r][c] in 'ox':
+                    self.rows[r][c] = '.'
+                    self.eaten.add(f'a springboard beside the gate at path[{index}]')
+
         self.path = self.path[:index + 1] + self.path[index + 2:]
         self.gates.add(index + 1)
         if 'gate' not in self.tags:
@@ -1171,6 +1204,8 @@ class C:
         for c in near + far:
             self.rows[r][c] = '_'
         self.holds += 1
+        for row in range(max(0, r - DOOR_H - 1), min(self.h, r + 2)):
+            self.two_person.add(row)
         if 'hold' not in self.tags:
             self.tags.append('hold')
         return self
@@ -1401,6 +1436,9 @@ class C:
             counts += f"    gates: {len(self.gates)},\n"
         if self.holds:
             counts += f"    holds: {self.holds},\n"
+        if self.two_person:
+            rows_list = ', '.join(str(r) for r in sorted(self.two_person))
+            counts += f"    twoPersonRows: [{rows_list}],\n"
         return (f"  {{\n    id: '{self.id}',\n    biome: {self.biome},\n    difficulty: {self.diff},\n"
                 f"{tags}{counts}    rows: [\n      {rows},\n    ],\n{ents}  }}")
 

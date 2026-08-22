@@ -51,8 +51,15 @@ export function towerId(seed: number, floors: number): string {
  * because the build gate proves every step of every tower and a condition that
  * could make a room unclimbable would be a condition that shipped a tower
  * nobody can finish.
+ *
+ * And shy of the two-person moments in particular, which is the harder half of
+ * that. A condition may not make a gate or a doorway *easier* either: an
+ * updraught in a gate's gap is 1550 of upward acceleration against gravity's
+ * 2400, which is most of a free lift, and a free lift is exactly what a gate is
+ * defined by nobody having. Every room writes down which of its rows a
+ * two-person moment lives in, and no rule here touches them.
  */
-const FLOOR_RULES: { name: string; apply: (rows: string[]) => string[] }[] = [
+const FLOOR_RULES: { name: string; apply: (rows: string[], chunk: ChunkDef) => string[] }[] = [
   {
     // The stakes, with nothing added to the room at all. A floor you cannot
     // bank is a floor you have to climb twice if it goes wrong, and knowing
@@ -65,10 +72,17 @@ const FLOOR_RULES: { name: string; apply: (rows: string[]) => string[] }[] = [
     // makes it a problem about the thing you are carrying — and the crate is
     // the only object in the game both of you are responsible for.
     name: 'CROSSWIND',
-    apply: (rows) =>
-      rows.map((r, i) =>
-        i % 4 === 2 ? r.slice(0, 3) + r.slice(3, 37).replace(/\.{6}/g, 'WW....') + r.slice(37) : r,
-      ),
+    apply: (rows, chunk) => {
+      // Never into the rows a two-person moment lives in. See
+      // `ChunkDef.twoPersonRows`: an updraught in a gate's gap is a free lift
+      // up the one step in the game that is supposed to need a partner, and
+      // `npm run verify:levels` found one player clearing freeze_airlock's gate
+      // on tower 104729 off exactly that.
+      const spare = new Set(chunk.twoPersonRows ?? []);
+      return rows.map((r, i) =>
+        i % 4 === 2 && !spare.has(i) ? r.slice(0, 3) + r.slice(3, 37).replace(/\.{6}/g, 'WW....') + r.slice(37) : r,
+      );
+    },
   },
   {
     // Nothing is drawn differently; the crate simply starts this floor's tower
@@ -97,7 +111,7 @@ export function buildTower(seed: number, length: number): Level {
       if (height < 0.5 || cracked) return chunk;
       cracked = true;
     }
-    return { ...chunk, rows: pick.apply(chunk.rows), rule: pick.name };
+    return { ...chunk, rows: pick.apply(chunk.rows, chunk), rule: pick.name };
   });
 
   const level = assembleLevel(towerId(seed, floors), 'THE GAUNTLET', dressed);

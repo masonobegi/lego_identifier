@@ -70,6 +70,10 @@ export function hazardAt(
 
   for (let i = 0; i < level.saws.length; i++) {
     const s = level.saws[i];
+    // Rows first. A tower is a thousand rows tall and this used to ask every
+    // blade in it where it was, which cost a modulo, a wave and two multiplies
+    // apiece — `hazardAt` was 37% of the whole simulation. See `Saw.top`.
+    if (bottom < s.top || top > s.bottom) continue;
     const cx = sawX(s, world.tick);
     const cy = sawY(s, world.tick);
     // Closest point on the AABB to the saw centre.
@@ -83,6 +87,7 @@ export function hazardAt(
   for (let i = 0; i < level.movers.length; i++) {
     const m = level.movers[i];
     if (!m.deadly) continue;
+    if (bottom < m.top || top > m.bottom) continue;
     const mx = moverX(m, world.tick);
     const my = moverY(m, world.tick);
     if (left < mx + m.w && right > mx && top < my + m.h && bottom > my) return true;

@@ -10,6 +10,8 @@ import {
   isDeadlyTile,
   isSolidTile,
   levelFloors,
+  moverY,
+  sawY,
   tileAt,
   type ChunkDef,
   type Level,
@@ -602,5 +604,47 @@ describe('the hold rooms', () => {
         Math.max(...shutters),
       );
     }
+  });
+});
+
+/**
+ * The moving parts carry the rows they can ever reach, so a collision query can
+ * skip the ones on other floors without working out where they are.
+ *
+ * That is the single biggest cost in the simulation: a tower is a thousand rows
+ * tall and holds forty blades and presses, and every question about a hazard or
+ * a solid platform used to ask all forty of them where they were — a modulo, a
+ * wave and two multiplies apiece. `hazardAt` alone was 37% of the profile, and
+ * the whole step ran at 13.4us. It is 6.7us with the span check in front of it.
+ *
+ * The optimisation is only sound while the span really does bound the motion,
+ * and nothing about `oscillate` guarantees that from the outside — so it is
+ * checked here rather than argued for in a comment.
+ */
+describe('the moving parts', () => {
+  it('never leave the rows they say they can reach', () => {
+    let checked = 0;
+    for (const level of [buildCampaign(), buildTower(104729, 12), buildTower(7, 20)]) {
+      expect(level.saws.length + level.movers.length, `${level.id} has moving parts`).toBeGreaterThan(0);
+      // Two thousand ticks is more than thirty seconds and many periods of every
+      // blade in the library; the phases are all coprime with nothing here.
+      for (const s of level.saws) {
+        for (let t = 0; t < 2000; t++) {
+          const y = sawY(s, t);
+          checked++;
+          expect(y - s.r).toBeGreaterThanOrEqual(s.top);
+          expect(y + s.r).toBeLessThanOrEqual(s.bottom);
+        }
+      }
+      for (const m of level.movers) {
+        for (let t = 0; t < 2000; t++) {
+          const y = moverY(m, t);
+          checked++;
+          expect(y).toBeGreaterThanOrEqual(m.top);
+          expect(y + m.h).toBeLessThanOrEqual(m.bottom);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(50_000);
   });
 });

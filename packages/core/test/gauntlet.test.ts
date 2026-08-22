@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARGO_HP, analyseLevel, buildCampaign, buildTower } from '../src/index.js';
+import { CARGO_HP, CHUNKS, TILE_CHARS, T_EMPTY, analyseLevel, buildCampaign, buildTower, tileAt } from '../src/index.js';
 
 /**
  * The Gauntlet had to stop being a reshuffle.
@@ -69,6 +69,48 @@ describe('floor conditions', () => {
     for (let seed = 1; seed <= 40; seed++) {
       const l = buildTower(seed * 7919, 10);
       expect(analyseLevel(l, { coop: true }).ok, `tower ${seed * 7919}`).toBe(true);
+    }
+  });
+
+  /**
+   * The harder half of "never makes a tower unclimbable": never makes one
+   * *easier* at the one step that is supposed to need two people.
+   *
+   * CROSSWIND paints a band of updraught into every fourth row of the shaft,
+   * and wind is 1550 of upward acceleration against gravity's 2400 — most of a
+   * free lift. One landing in a gate's six-row gap turns the gate off, and
+   * `npm run verify:levels` found exactly that: one player clearing
+   * freeze_airlock's gate on tower 104729 from column 20.
+   */
+  it('never puts a condition inside a gate or a doorway', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const chunks = CHUNKS.filter((c) => (c.twoPersonRows?.length ?? 0) > 0);
+      expect(chunks.length, 'rooms with a two-person moment in them').toBeGreaterThan(20);
+      const l = buildTower(seed * 7919, 12);
+      // Every dressed floor still has its two-person rows exactly as authored.
+      const byId = new Map(CHUNKS.map((c) => [c.id, c]));
+      let checked = 0;
+      let cursor = l.h;
+      for (const id of l.chunkIds) {
+        const chunk = byId.get(id)!;
+        cursor -= chunk.rows.length;
+        for (const r of chunk.twoPersonRows ?? []) {
+          // A condition may take things out of a two-person row — NO CHECKPOINT
+          // blanks the '!' wherever it falls, and a checkpoint is not a lift —
+          // but it may never put anything in. Some rooms have wind of their own
+          // in a wall column beside a gate, authored and proved against the
+          // solo search; what must not happen is a *rule* adding any.
+          for (let x = 0; x < l.w; x++) {
+            const was = TILE_CHARS[chunk.rows[r][x]];
+            const now = tileAt(l, x, cursor + r);
+            expect(now === was || now === T_EMPTY, `${id} row ${r} col ${x} on tower ${seed * 7919}: ${was} became ${now}`).toBe(
+              true,
+            );
+          }
+          checked++;
+        }
+      }
+      expect(checked, `tower ${seed * 7919} has two-person rows`).toBeGreaterThan(0);
     }
   });
 

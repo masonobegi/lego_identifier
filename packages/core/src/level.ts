@@ -99,6 +99,18 @@ export interface Mover {
   solid: number;
   deadly: number;
   smooth: number;
+  /**
+   * The rows this thing can ever occupy, so the collision walks can skip it
+   * without working out where it is this tick.
+   *
+   * A tower is a thousand rows tall and holds forty moving parts, and every
+   * query about a hazard or a solid platform used to ask all forty of them —
+   * each answer a modulo, a wave and two multiplies. `hazardAt` alone was 37%
+   * of the simulation. A pair of numbers settled when the level is assembled
+   * turns almost all of that into one comparison.
+   */
+  top: number;
+  bottom: number;
 }
 
 /** A deadly circle that slides along a line. */
@@ -111,6 +123,9 @@ export interface Saw {
   period: number;
   phase: number;
   spin: number;
+  /** The rows this blade can ever reach. See `Mover.top`. */
+  top: number;
+  bottom: number;
 }
 
 /** Triangle or cosine wave in [0,1], evaluated deterministically from the tick. */
@@ -179,6 +194,18 @@ export interface ChunkDef {
    */
   gates?: number;
   holds?: number;
+  /**
+   * The rows a two-person moment lives in, which a floor condition must leave
+   * exactly as they are.
+   *
+   * A gate is six rows of nothing between two ledges, and CROSSWIND paints a
+   * band of updraught into every fourth row of the shaft — 1550 of upward
+   * acceleration against gravity's 2400, which is most of a free lift. A free
+   * lift in the one place in the game nobody is supposed to have one is not a
+   * gate any more, and the build gate caught exactly that on a seeded tower.
+   * Written out by the chunk painter alongside the counts.
+   */
+  twoPersonRows?: number[];
   /**
    * The name of the condition this floor is being climbed under, if any.
    *
@@ -297,29 +324,37 @@ function parseChunk(chunk: ChunkDef, builder: LevelBuilder, topRow: number): voi
     const px = e.x * TILE;
     const py = (topRow + e.y) * TILE;
     if (e.type === 'saw') {
+      const r = (e.r ?? 1) * TILE;
+      const ay = (e.ay ?? 0) * TILE;
       builder.saws.push({
         x: px,
         y: py,
-        r: (e.r ?? 1) * TILE,
+        r,
         ax: (e.ax ?? 0) * TILE,
-        ay: (e.ay ?? 0) * TILE,
+        ay,
         period: e.period ?? 180,
         phase: e.phase ?? 0,
         spin: 1,
+        top: py - r + Math.min(0, ay),
+        bottom: py + r + Math.max(0, ay),
       });
     } else {
+      const mh = (e.h ?? 1) * TILE;
+      const may = (e.ay ?? 0) * TILE;
       builder.movers.push({
         x: px,
         y: py,
         w: (e.w ?? 3) * TILE,
-        h: (e.h ?? 1) * TILE,
+        h: mh,
         ax: (e.ax ?? 0) * TILE,
-        ay: (e.ay ?? 0) * TILE,
+        ay: may,
         period: e.period ?? 200,
         phase: e.phase ?? 0,
         solid: e.solid === false ? 0 : 1,
         deadly: e.type === 'crusher' || e.deadly ? 1 : 0,
         smooth: e.smooth ?? 1,
+        top: py + Math.min(0, may),
+        bottom: py + mh + Math.max(0, may),
       });
     }
   }
