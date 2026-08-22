@@ -99,6 +99,36 @@ export interface DailyRecord {
   streak: number;
 }
 
+/**
+ * What you and one particular person have done together.
+ *
+ * Everything else the profile remembers is about you: your runs, your deaths,
+ * your best time. None of it is a reason to open the game on night four with
+ * the same friend, which is the only night that matters for a co-op game with
+ * no matchmaking population — and the whole product is a two-player game whose
+ * store page says so. A crew record is the smallest thing that makes the
+ * fourth evening different from the first: a number the two of you own, that
+ * only goes up when both of you are here.
+ */
+export interface Crew {
+  /** Their hauler name, as it appeared on the rope. */
+  name: string;
+  /** Hauls started together. */
+  runs: number;
+  /** ...and finished. */
+  finishes: number;
+  /** Best campaign time together, in ticks. Zero until you finish one. */
+  bestTicks: number;
+  /** Tallest Gauntlet the two of you have topped out. */
+  bestFloors: number;
+  /** Times one of you stood on the other. The number that needs both of you. */
+  boosts: number;
+  /** Crates lost, because a crew record that only flatters is not a record. */
+  crates: number;
+  /** When you last hauled together, as a day number. */
+  lastDay: number;
+}
+
 export interface Profile {
   runs: number;
   finishes: number;
@@ -114,6 +144,8 @@ export interface Profile {
   unlockedHats: number[];
   seenTutorial: boolean;
   daily: DailyRecord;
+  /** Keyed by hauler name, newest kept — see `Crew`. */
+  crews: Crew[];
 }
 
 export const DEFAULT_PROFILE: Profile = {
@@ -130,6 +162,7 @@ export const DEFAULT_PROFILE: Profile = {
   unlockedHats: [0],
   seenTutorial: false,
   daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0 },
+  crews: [],
 };
 
 /**
@@ -181,9 +214,38 @@ export function saveSettings(s: Settings): void {
 }
 
 export function loadProfile(): Profile {
-  const p = load<Profile>(PROFILE_STATS_KEY, DEFAULT_PROFILE);
+  // Merged over the defaults, so a save written before a field existed does not
+  // hand back an object missing it. `crews` arrived this way.
+  const p: Profile = { ...DEFAULT_PROFILE, ...load<Partial<Profile>>(PROFILE_STATS_KEY, {}) };
   if (!Array.isArray(p.unlockedHats) || p.unlockedHats.length === 0) p.unlockedHats = [0];
+  if (!Array.isArray(p.crews)) p.crews = [];
   return p;
+}
+
+/** How many crews a profile keeps. Beyond this the least recent is dropped. */
+const CREW_LIMIT = 12;
+
+/**
+ * Find or start the record for the person on the other end of the rope.
+ *
+ * Keyed by name because that is the only identity this game has: there are no
+ * accounts, and a room code is a room, not a person. Two different friends who
+ * both left the name generator alone and both landed on RUSTY BRICK will share
+ * a record, which is a smaller wrong answer than having no record at all.
+ */
+export function crewFor(p: Profile, name: string, day: number): Crew {
+  const key = name.trim().toUpperCase();
+  let crew = p.crews.find((c) => c.name === key);
+  if (!crew) {
+    crew = { name: key, runs: 0, finishes: 0, bestTicks: 0, bestFloors: 0, boosts: 0, crates: 0, lastDay: day };
+    p.crews.push(crew);
+  }
+  crew.lastDay = day;
+  if (p.crews.length > CREW_LIMIT) {
+    p.crews.sort((a, b) => b.lastDay - a.lastDay);
+    p.crews.length = CREW_LIMIT;
+  }
+  return crew;
 }
 
 export function saveProfile(p: Profile): void {

@@ -37,6 +37,7 @@ import type { HudState } from './render/hud.js';
 import { createWebSocketTransport, normaliseServerUrl } from './net/transport.js';
 import {
   defaultSettings,
+  crewFor,
   loadProfile,
   loadSettings,
   randomName,
@@ -1020,7 +1021,35 @@ export class App {
    * whole return loop in a game like this, and it was the one thing the results
    * screen could not tell you.
    */
+  /**
+   * The record the two of you own, updated whichever way the run went.
+   *
+   * Only for a person. The Autohauler is not somebody you have history with,
+   * and a crew line that fills up on evenings you spent alone is not a reason
+   * to call anybody.
+   */
+  private recordCrew(result: MatchResult | null, mode: number): void {
+    const mate = this.net?.peers[1 - this.net.localIndex]?.name;
+    if (!mate) return;
+    const crew = crewFor(this.profile, mate, this.today);
+    crew.runs++;
+    const w = this.net?.world;
+    if (w) {
+      crew.boosts += w.boosts;
+      crew.crates += w.cargoBreaks;
+    }
+    if (result && this.finishedRun) {
+      crew.finishes++;
+      if (mode === MODE_HAUL) {
+        if (crew.bestTicks === 0 || result.finishTick < crew.bestTicks) crew.bestTicks = result.finishTick;
+      } else {
+        crew.bestFloors = Math.max(crew.bestFloors, this.runFloors());
+      }
+    }
+  }
+
   private recordBest(result: MatchResult, mode: number): void {
+    this.recordCrew(result, mode);
     if (!this.finishedRun) return;
     if (mode === MODE_HAUL) {
       const best = this.profile.bestCampaignTicks;

@@ -538,6 +538,7 @@ function resultsScreen(app: App): HTMLElement {
     h('h2', { class: 'title' }, app.finishedRun ? 'Delivered' : 'Run over'),
     h('div', { class: 'verdict' }, verdict),
     against ? h('p', { class: 'sub' }, against) : null,
+    crewLine(app),
     h(
       'div',
       { class: 'stats' },
@@ -1002,6 +1003,29 @@ function achievementsScreen(app: App): HTMLElement {
   );
 }
 
+/**
+ * What you and this particular person have done together, so far.
+ *
+ * Every other number the game keeps is about one player, and none of them is a
+ * reason to open it again on night four with the same friend — which for a
+ * two-player game with no matchmaking population is the only night that
+ * decides whether it was worth buying. This is the smallest thing that makes
+ * the fourth evening different from the first: a tally the two of you own,
+ * that only moves when both of you are here.
+ */
+function crewLine(app: App): HTMLElement | null {
+  const mate = app.net?.peers[1 - app.net.localIndex]?.name;
+  if (!mate) return null;
+  const crew = app.profile.crews.find((c) => c.name === mate.trim().toUpperCase());
+  if (!crew || crew.runs < 2) return null;
+  const bits = [`${crew.runs} hauls with ${crew.name}`];
+  if (crew.finishes > 0) bits.push(`${crew.finishes} delivered`);
+  if (crew.bestTicks > 0) bits.push(`best together ${formatTime(crew.bestTicks / 60)}`);
+  if (crew.bestFloors > 0) bits.push(`tallest ${crew.bestFloors} floors`);
+  if (crew.boosts > 0) bits.push(`${crew.boosts} legs up`);
+  return h('p', { class: 'sub crew' }, bits.join(' · '));
+}
+
 /** "1 TIMES ONE OF YOU STOOD ON THE OTHER" was on the funniest screen in the game. */
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
@@ -1035,6 +1059,27 @@ function ledger(heading: string, rows: [what: string, value: string, tone?: stri
  * about its own columns: what arrived, what it cost, what the pair of you did
  * for each other on the way.
  */
+/** The people you have hauled with, most recent first. */
+function crewLedger(app: App): HTMLElement | null {
+  const crews = [...app.profile.crews].sort((a, b) => b.lastDay - a.lastDay || b.runs - a.runs);
+  if (crews.length === 0) return null;
+  return ledger(
+    'Crews',
+    crews.map((c) => [
+      c.name,
+      [
+        `${c.runs} haul${c.runs === 1 ? '' : 's'}`,
+        c.finishes > 0 ? `${c.finishes} delivered` : null,
+        c.bestTicks > 0 ? formatTime(c.bestTicks / 60) : null,
+        c.bestFloors > 0 ? `${c.bestFloors} floors` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      c.finishes > 0 ? 'good' : '',
+    ]) as [string, string, string?][],
+  );
+}
+
 function recordsScreen(app: App): HTMLElement {
   const p = app.profile;
   const d = p.daily;
@@ -1087,6 +1132,7 @@ function recordsScreen(app: App): HTMLElement {
         ['Times one of you stood on the other', String(p.boosts), 'good'],
         ['Moments spent braced for your partner', String(p.bonds), 'good'],
       ]),
+      crewLedger(app),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );

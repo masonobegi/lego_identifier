@@ -76,3 +76,45 @@ describe('accessibility defaults', () => {
     expect(s.reducedFlash, 'what it did not').toBe(true);
   });
 });
+
+/**
+ * The record that makes night four different from night one.
+ *
+ * Everything else the profile keeps is about one player. For a two-player game
+ * with no matchmaking population, the number that decides whether it was worth
+ * buying is the one you and one particular friend own together.
+ */
+describe('crews', () => {
+  async function mod(): Promise<typeof import('../src/settings.js')> {
+    return import('../src/settings.js');
+  }
+
+  it('starts a record the first time and finds it again after', async () => {
+    const { DEFAULT_PROFILE, crewFor } = await mod();
+    const p = { ...DEFAULT_PROFILE, crews: [] };
+    const a = crewFor(p, 'Rusty Brick', 10);
+    a.runs = 3;
+    const b = crewFor(p, 'RUSTY BRICK', 11);
+    expect(b, 'the same person typed differently').toBe(a);
+    expect(b.runs).toBe(3);
+    expect(b.lastDay).toBe(11);
+    expect(p.crews).toHaveLength(1);
+  });
+
+  it('keeps the people you played with most recently', async () => {
+    const { DEFAULT_PROFILE, crewFor } = await mod();
+    const p = { ...DEFAULT_PROFILE, crews: [] };
+    for (let i = 0; i < 20; i++) crewFor(p, `HAULER ${i}`, i);
+    expect(p.crews.length).toBeLessThanOrEqual(12);
+    expect(p.crews.some((c) => c.name === 'HAULER 19')).toBe(true);
+    expect(p.crews.some((c) => c.name === 'HAULER 0')).toBe(false);
+  });
+
+  it('survives a save written before crews existed', async () => {
+    const { DEFAULT_PROFILE, PROFILE_STATS_KEY, loadProfile } = await mod();
+    const stored = { ...DEFAULT_PROFILE } as Record<string, unknown>;
+    delete stored.crews;
+    saved[PROFILE_STATS_KEY] = JSON.stringify(stored);
+    expect(loadProfile().crews).toEqual([]);
+  });
+});
