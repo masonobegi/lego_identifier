@@ -3,6 +3,26 @@
 This is the file you edit to add a floor. The grid, the climbability rules and
 the checks that enforce them are in `chunklib.py`.
 
+Every room ends with two or three `gate` and `hold` calls, and those are the
+game rather than a garnish on it. The campaign ran 384 climbing steps with
+eleven moments in it that took two people — one every 35 steps, about one every
+four minutes, and seven of the eleven were the same leg up. Randomly generated
+towers were worse: eight of thirteen sampled reported no hold room at all and
+several had no gate either, so a pair could climb a whole Gauntlet floor
+without turning to look at each other. A scoring panel put the game at 5/10 and
+every judge traced it to that. Two or three per room puts a co-operative act
+every four or five climbing steps, campaign and towers alike — measured at one
+per 4.6 across The Long Haul and between one per 4.2 and one per 4.9 across
+thirteen seeded towers.
+
+How many a room can carry is decided by its serpentine and not by the author.
+Both verbs rewrite the two platforms they land between, so a stride that leaves
+no shape for one is a room that turns it down through `skipped`; seventeen of
+the sixty rooms can carry a door and the rest take a second gate instead. The
+calls come last, and in ascending order, because both of them rewrite
+`self.path`: every other authoring call is indexed off it, and `gate` takes a
+foothold out, which renumbers any gate already recorded above it.
+
 Usage: python3 tools/gen_chunks.py packages/core/src/chunks.ts
 """
 import io, os, sys

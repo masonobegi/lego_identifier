@@ -741,11 +741,20 @@ class C:
             self.skipped.append(f'gate near path[{index}]')
             return self
         low = self.path[index]
-        mid_r = self.path[index + 1][0]
         up = self.path[index + 2]
 
-        # Wipe the middle foothold and anything hanging off it.
-        for r in (mid_r - 1, mid_r, mid_r + 1):
+        # Wipe the gap: the middle foothold, whatever was hanging off it, and
+        # the row directly under the far side.
+        #
+        # That last row does not belong to the foothold being removed, and
+        # leaving it standing was the difference between a gate and a
+        # staircase. `spurs` hangs its stub shelves one row under a platform,
+        # so yard_stack and freeze_rime each had four or five columns of floor
+        # a plain jump below the far side: one player went up onto the spur and
+        # in from there, from column 24 and column 16, and the build gate named
+        # both. A spike hanging there is no better — the climber comes up
+        # through that row on the way to the landing.
+        for r in range(up[0] + 1, low[0] - 1):
             for c in range(2, W - 2):
                 self.rows[r][c] = '.'
 

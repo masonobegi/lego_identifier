@@ -179,7 +179,7 @@ function stencil(text, size, colour, tracking, bridges) {
   return { canvas: off, pad, asc, capW: total };
 }
 
-function render([mode, W, H, name]) {
+function render([mode, W, H]) {
   const canvas = document.getElementById('c');
   canvas.width = W;
   canvas.height = H;
@@ -298,18 +298,19 @@ function render([mode, W, H, name]) {
       cranes: 7,
       figures: false,
       wm: null,
-      hazeY: 0.68,
-      yardTop: 0.88,
-      tower: { x1: 176, top: -10 },
+      hazeY: 0.60,
+      yardTop: 0.80,
+      tower: { x1: 264, top: -10 },
       girders: [
-        { x0: -8, x1: 300, y: 262, h: 20 },
-        { x0: -8, x1: 190, y: 130, h: 17, mark: 'NO STEP' },
-        { x0: -8, x1: 236, y: 356, h: 18 },
-        { x0: 520, x1: 727, y: 300, h: 19, mark: 'SWL 2.5t' },
-        { x0: 604, x1: 727, y: 168, h: 16 },
-        { x0: 452, x1: 727, y: 392, h: 15 },
+        { x0: -8, x1: 430, y: 254, h: 22 },
+        { x0: -8, x1: 300, y: 120, h: 18, mark: 'NO STEP' },
+        { x0: -8, x1: 350, y: 360, h: 18 },
+        { x0: 470, x1: 727, y: 300, h: 20, mark: 'SWL 2.5t' },
+        { x0: 560, x1: 727, y: 176, h: 17 },
+        { x0: 620, x1: 727, y: 62, h: 15 },
       ],
-      numeral: { text: '7', cx: 82, cy: 236, h: 190 },
+      numeral: { text: '7', cx: 118, cy: 244, h: 220 },
+      hoist: { x: 430, top: -10, drop: 158, w: 104, h: 84, rot: 0.06 },
     },
     // 3.1:1, and Valve composites the separately supplied logo over the top of
     // it at a position the customer's client decides. So the tower stops inside
@@ -406,6 +407,16 @@ function render([mode, W, H, name]) {
       })),
       numeral: d.numeral
         ? { text: d.numeral.text, cx: ox + d.numeral.cx * k, cy: oy + d.numeral.cy * k, h: d.numeral.h * k }
+        : null,
+      hoist: d.hoist
+        ? {
+            x: ox + d.hoist.x * k,
+            top: d.hoist.top > 0 ? oy + d.hoist.top * k : -10,
+            drop: d.hoist.drop * k,
+            w: d.hoist.w * k,
+            h: d.hoist.h * k,
+            rot: d.hoist.rot,
+          }
         : null,
       ...(d.figures
         ? {
@@ -520,15 +531,27 @@ function render([mode, W, H, name]) {
   /* ----------------------------------------------------------------- tower */
   const T = L.tower;
   ctx.fillStyle = P.tileBody;
-  ctx.fillRect(-10, -10, T.x1 + 10, H + 20);
+  ctx.fillRect(-10, T.top, T.x1 + 10, H - T.top + 20);
 
+  const tTop = Math.max(0, T.top);
   if (D > 0) {
     ctx.fillStyle = 'rgba(27,23,20,0.10)';
-    for (let y = H * 0.07; y < H; y += H * 0.21) ctx.fillRect(0, Math.round(y), T.x1, 1.6);
+    for (let y = tTop + H * 0.07; y < H; y += H * 0.21) ctx.fillRect(0, Math.round(y), T.x1, 1.6);
     ctx.fillStyle = P.tileDetail;
     for (let i = 0; i < 44; i++) {
-      ctx.fillRect(hash(i * 3 + 1) * T.x1, hash(i * 5 + 2) * H, 3 + hash(i) * 10, 1.6);
+      ctx.fillRect(hash(i * 3 + 1) * T.x1, tTop + hash(i * 5 + 2) * (H - tTop), 3 + hash(i) * 10, 1.6);
     }
+  }
+
+  // A roof, when the design stops the tower inside the frame: the same capped
+  // edge the girders wear, so the top of it reads as concrete rather than as
+  // the picture running out.
+  if (T.top > 0) {
+    const cap = Math.max(2, H * 0.012);
+    ctx.fillStyle = P.tileTop;
+    ctx.fillRect(-10, T.top, T.x1 + 10, cap);
+    ctx.fillStyle = P.ink;
+    ctx.fillRect(-10, T.top, T.x1 + 10, Math.max(1.6, cap * 0.34));
   }
 
   // A floor number three metres tall, painted flat on the tower's face. The
@@ -545,10 +568,11 @@ function render([mode, W, H, name]) {
   // the top of the frame. On the wide capsule the tower lands under the title
   // and the edge ran straight through the letterforms, splitting the A from
   // the U. The vertical capsule never showed it because the tower sits left of
-  // the mark there.
+  // the mark there. The scene assets carry no wordmark, so theirs starts where
+  // the tower itself does.
   ctx.fillStyle = P.ink;
   const edgeW = Math.max(2, W * 0.006);
-  const edgeTop = L.wm.top + L.wm.capH + H * 0.06;
+  const edgeTop = L.wm ? L.wm.top + L.wm.capH + H * 0.06 : T.top;
   ctx.fillRect(T.x1 - edgeW, edgeTop, edgeW, H - edgeTop + 20);
 
   /* --------------------------------------------------------------- girders */
@@ -577,6 +601,67 @@ function render([mode, W, H, name]) {
     }
   }
 
+  /* ----------------------------------------------------------------- load */
+  // The crate, wherever it has ended up: on the end of the pair's rope, or on
+  // a line of its own where a design has no pair in it.
+  function crateAt(cx, cy, cw, ch, rot) {
+    const off = Math.max(1.5, cw * 0.04);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.fillStyle = P.shadow;
+    ctx.fillRect(-cw / 2 + off, -ch / 2 + off * 1.5, cw, ch);
+    ctx.fillStyle = P.cargo;
+    ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
+    ctx.fillStyle = P.cargoDark;
+    ctx.fillRect(-cw / 2, ch / 2 - ch * 0.12, cw, ch * 0.12);
+    ctx.strokeStyle = P.ink;
+    ctx.lineWidth = Math.max(1.6, cw * 0.04);
+    ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
+    ctx.fillStyle = P.ink;
+    ctx.fillRect(-cw * 0.44, -ch / 2, cw * 0.09, ch);
+    ctx.fillRect(cw * 0.35, -ch / 2, cw * 0.09, ch);
+    ctx.fillStyle = P.red;
+    const band = Math.max(1.6, ch * 0.055);
+    ctx.fillRect(-cw / 2 + cw * 0.05, -ch / 2 + ch * 0.13, cw - cw * 0.1, band);
+    ctx.fillRect(-cw / 2 + cw * 0.05, ch / 2 - ch * 0.26, cw - cw * 0.1, band);
+    if (D > 1) {
+      // Scaled to fit, not clipped to fit. Clamping the width alone squashed
+      // nothing and cropped instead, so the key art shipped a crate stencilled
+      // FRAGILB — the E cut in half by the crate's own edge, on the object the
+      // whole picture is about.
+      const f = stencil('FRAGILE', ch * 0.21, P.red, undefined, false);
+      const fit = Math.min(1, (cw * 0.8) / f.canvas.width);
+      const fw = f.canvas.width * fit;
+      const fh = f.canvas.height * fit;
+      ctx.drawImage(f.canvas, -fw / 2, -ch * 0.12, fw, fh);
+    }
+    ctx.restore();
+  }
+
+  // A crate coming down out of the frame on a crane line. The page background
+  // is the only design with nobody in it, and a yard with nothing moving in it
+  // is a photograph of some scaffolding.
+  if (L.hoist) {
+    const ho = L.hoist;
+    const hw = Math.max(2, ho.w * 0.03);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = P.ink;
+    ctx.lineWidth = hw * 2.6;
+    ctx.beginPath();
+    ctx.moveTo(ho.x, ho.top);
+    ctx.lineTo(ho.x, ho.top + ho.drop);
+    ctx.stroke();
+    ctx.strokeStyle = P.chalk;
+    ctx.lineWidth = hw * 0.95;
+    ctx.beginPath();
+    ctx.moveTo(ho.x, ho.top);
+    ctx.lineTo(ho.x, ho.top + ho.drop);
+    ctx.stroke();
+    crateAt(ho.x, ho.top + ho.drop + ho.h / 2, ho.w, ho.h, ho.rot);
+  }
+
+  if (L.figures) {
   /* ----------------------------------------------------------------- rope */
   // The rope runs from the braced hauler's fists to the other one's harness:
   // that is how the two are actually tied, and it frees his arms to flail.
@@ -626,38 +711,7 @@ function render([mode, W, H, name]) {
     ctx.moveTo(crateMid[0], crateMid[1]);
     ctx.lineTo(cx, cy - ch / 2);
     ctx.stroke();
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(L.crate.rot);
-    ctx.fillStyle = P.shadow;
-    ctx.fillRect(-cw / 2 + rw, -ch / 2 + rw * 1.5, cw, ch);
-    ctx.fillStyle = P.cargo;
-    ctx.fillRect(-cw / 2, -ch / 2, cw, ch);
-    ctx.fillStyle = P.cargoDark;
-    ctx.fillRect(-cw / 2, ch / 2 - ch * 0.12, cw, ch * 0.12);
-    ctx.strokeStyle = P.ink;
-    ctx.lineWidth = Math.max(1.6, cw * 0.04);
-    ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
-    ctx.fillStyle = P.ink;
-    ctx.fillRect(-cw * 0.44, -ch / 2, cw * 0.09, ch);
-    ctx.fillRect(cw * 0.35, -ch / 2, cw * 0.09, ch);
-    ctx.fillStyle = P.red;
-    const band = Math.max(1.6, ch * 0.055);
-    ctx.fillRect(-cw / 2 + cw * 0.05, -ch / 2 + ch * 0.13, cw - cw * 0.1, band);
-    ctx.fillRect(-cw / 2 + cw * 0.05, ch / 2 - ch * 0.26, cw - cw * 0.1, band);
-    if (D > 1) {
-      // Scaled to fit, not clipped to fit. Clamping the width alone squashed
-      // nothing and cropped instead, so the key art shipped a crate stencilled
-      // FRAGILB — the E cut in half by the crate's own edge, on the object the
-      // whole picture is about.
-      const f = stencil('FRAGILE', ch * 0.21, P.red, undefined, false);
-      const fit = Math.min(1, (cw * 0.8) / f.canvas.width);
-      const fw = f.canvas.width * fit;
-      const fh = f.canvas.height * fit;
-      ctx.drawImage(f.canvas, -fw / 2, -ch * 0.12, fw, fh);
-    }
-    ctx.restore();
+    crateAt(cx, cy, cw, ch, L.crate.rot);
   })();
 
   /* -------------------------------------------------------------- haulers */
@@ -823,14 +877,17 @@ function render([mode, W, H, name]) {
     ctx.restore();
   })();
 
+  } // end of the pair
   } // end of the scene
   /* -------------------------------------------------------------- wordmark */
-  // Not on the Library Hero. Valve composites the separately supplied Library
-  // Logo over the hero at a position the user can move, so a hero with the
-  // logotype already baked into it ships the wordmark twice, overlapping, and
-  // the store page reads as a mistake before anyone has read a word of it.
-  // Every other asset carries it.
-  if (name !== 'library-hero') (function wordmark() {
+  // The capsules carry it and the scene assets do not, which is what wm: null
+  // in a design means. Valve composites the separately supplied Library Logo
+  // over the hero at a position the user can move, so a hero with the logotype
+  // already baked into it ships the wordmark twice, overlapping, and the store
+  // page reads as a mistake before anyone has read a word of it. The page
+  // background sits behind the page's own title block and the screenshot frame
+  // stands in for a screenshot; neither wants a poster title either.
+  if (L.wm) (function wordmark() {
     const text = 'HAULMATES';
     const probe = document.createElement('canvas').getContext('2d');
     probe.font = font(100);
@@ -930,23 +987,612 @@ function icon(size) {
   g.stroke();
 }
 
+/* ------------------------------------------------- achievement pictograms */
+
+/**
+ * The badges are drawn in a 64-unit square, which is the pixel size Steam shows
+ * them at in the overlay and on the profile: a unit is a pixel, so a 2-unit
+ * line is a 2-pixel line and nothing about them is decided at a size nobody
+ * sees. The bottom 11 units are the hazard strip every badge wears, so a figure
+ * standing on GND is standing on the strip and the whole set shares a floor.
+ */
+const GND = 53;
+
+/**
+ * A hazard-taped ledge: the girder from the capsules, at badge scale.
+ *
+ * Below about four units tall the slashes and the two ink rules meet in the
+ * middle and the bar turns solid grey, so a thin floor is drawn as an ink bar
+ * with a yellow cap, which reads as the same tape seen from further away.
+ */
+function bledge(g, x, y, w, h) {
+  if (h < 4) {
+    g.fillStyle = P.ink;
+    g.fillRect(x, y, w, h);
+    g.fillStyle = P.hazA;
+    g.fillRect(x, y, w, Math.max(0.8, h * 0.42));
+    return;
+  }
+  const rule = Math.max(0.9, h * 0.18);
+  g.fillStyle = P.hazA;
+  g.fillRect(x, y, w, h);
+  g.save();
+  g.beginPath();
+  g.rect(x, y, w, h);
+  g.clip();
+  g.fillStyle = P.hazB;
+  const pitch = h * 1.9;
+  for (let i = -h * 2; i < w + h; i += pitch) {
+    g.beginPath();
+    g.moveTo(x + i, y + h);
+    g.lineTo(x + i + pitch * 0.5, y + h);
+    g.lineTo(x + i + pitch * 0.5 + h, y);
+    g.lineTo(x + i + h, y);
+    g.closePath();
+    g.fill();
+  }
+  g.restore();
+  g.fillStyle = P.ink;
+  g.fillRect(x, y, w, rule);
+  g.fillRect(x, y + h - rule, w, rule);
+}
+
+/** The rope: ink with the chalk highlight down the middle, as on the capsules. */
+function brope(g, ax, ay, cx, cy, bx, by, w) {
+  g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(ax, ay);
+  g.quadraticCurveTo(cx, cy, bx, by);
+  g.strokeStyle = P.ink;
+  g.lineWidth = w;
+  g.stroke();
+  g.strokeStyle = P.chalk;
+  g.lineWidth = Math.max(0.55, w * 0.3);
+  g.stroke();
+}
+
+/** The crate. No FRAGILE on it: seven letters inside 24 units is a red smear. */
+function bcrate(g, x, y, w, h, rot) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  g.fillStyle = P.cargo;
+  g.fillRect(-w / 2, -h / 2, w, h);
+  g.fillStyle = P.cargoDark;
+  g.fillRect(-w / 2, h / 2 - h * 0.14, w, h * 0.14);
+  g.fillStyle = P.ink;
+  g.fillRect(-w * 0.44, -h / 2, w * 0.1, h);
+  g.fillRect(w * 0.34, -h / 2, w * 0.1, h);
+  g.fillStyle = P.red;
+  const band = Math.max(1, h * 0.09);
+  g.fillRect(-w * 0.46, -h * 0.30, w * 0.92, band);
+  g.fillRect(-w * 0.46, h * 0.18, w * 0.92, band);
+  g.strokeStyle = P.ink;
+  g.lineWidth = Math.max(1.2, w * 0.06);
+  g.strokeRect(-w / 2, -h / 2, w, h);
+  g.restore();
+}
+
+/** A loose board off a crate that no longer exists. */
+function bplank(g, x, y, w, h, rot, banded) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  g.fillStyle = P.cargo;
+  g.fillRect(-w / 2, -h / 2, w, h);
+  if (banded) {
+    g.fillStyle = P.red;
+    g.fillRect(-w / 2, -h * 0.18, w, Math.max(1, h * 0.3));
+  }
+  g.strokeStyle = P.ink;
+  g.lineWidth = 1.2;
+  g.strokeRect(-w / 2, -h / 2, w, h);
+  g.restore();
+}
+
+/** The hard hat on its own, for the one badge where it is not on a head. */
+function bhat(g, x, y, s, rot) {
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  g.fillStyle = P.ink;
+  g.beginPath();
+  g.arc(0, 0, 3.8 * s, Math.PI, Math.PI * 2);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.ellipse(0, 0, 5.0 * s, 0.95 * s, 0, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
+}
+
+/** An open hook on the end of a line. */
+function bhook(g, x, y, r) {
+  g.strokeStyle = P.ink;
+  g.lineWidth = 1.6;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.arc(x, y, r, Math.PI * 1.15, Math.PI * 0.45);
+  g.stroke();
+}
+
+/** Rope that is not under tension, coiled on the deck. */
+function bcoil(g, x, y, w) {
+  g.strokeStyle = P.ink;
+  g.lineWidth = 1.6;
+  for (let i = 0; i < 3; i++) {
+    g.beginPath();
+    g.ellipse(x, y - i * 1.9, w * (1 - i * 0.16), w * 0.34, 0, 0, Math.PI * 2);
+    g.stroke();
+  }
+}
+
+/** Grit thrown off whatever just happened. */
+function bdust(g, x, y, dx, n) {
+  g.fillStyle = P.dust;
+  for (let i = 0; i < n; i++) {
+    const t = hash(400 + i * 7);
+    g.globalAlpha = 0.42 - i * 0.07;
+    g.beginPath();
+    g.arc(x + dx * (i + t), y - t * 3, 1 + t * 1.6, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.globalAlpha = 1;
+}
+
+/** One of the yard's own chevrons, pointing wherever the load is going. */
+function bchev(g, cx, cy, w, h) {
+  g.fillStyle = P.hazA;
+  g.strokeStyle = P.ink;
+  g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(cx - w / 2, cy + h / 2);
+  g.lineTo(cx, cy - h / 2);
+  g.lineTo(cx + w / 2, cy + h / 2);
+  g.lineTo(cx + w / 2 - h * 0.55, cy + h / 2);
+  g.lineTo(cx, cy - h * 0.5 + h * 0.55);
+  g.lineTo(cx - w / 2 + h * 0.55, cy + h / 2);
+  g.closePath();
+  g.fill();
+  g.stroke();
+}
+
+/**
+ * A hauler at badge scale, in the same silhouette the capsules established:
+ * ink body, worn vest, hard hat with a brim wider than its dome.
+ *
+ * A figure is 33 units tall at s = 1, hat to heel, so one of them fills a plate
+ * and a pair sits at about 0.75. Limbs are given as an end and a knee or elbow
+ * to bend through, in figure units from the hip. What the capsule figure has
+ * and this one drops — the second reflective band, the shoulder strap, the
+ * mouth — is a single grey pixel on a torso eight pixels wide.
+ */
+function bhauler(g, o) {
+  const s = o.s;
+  const rot = o.rot || 0;
+  const cs = Math.cos(rot);
+  const sn = Math.sin(rot);
+  const at = (x, y) => [o.x + (x * cs - y * sn) * s, o.y + (x * sn + y * cs) * s];
+  const lw = 2.7 * s;
+  const hip = [o.x, o.y];
+  const shoulder = at(0, -11);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const limb = (from, a, w) => {
+    const k = at(a.e[0], a.e[1]);
+    const e = at(a.h[0], a.h[1]);
+    g.strokeStyle = P.ink;
+    g.lineWidth = w;
+    g.beginPath();
+    g.moveTo(from[0], from[1]);
+    g.quadraticCurveTo(k[0], k[1], e[0], e[1]);
+    g.stroke();
+    g.fillStyle = P.ink;
+    g.beginPath();
+    g.arc(e[0], e[1], w * 0.52, 0, Math.PI * 2);
+    g.fill();
+  };
+  for (const l of o.legs) limb(hip, l, lw);
+  for (const a of o.hands) limb(shoulder, a, lw * 0.85);
+
+  g.save();
+  g.translate(o.x, o.y);
+  g.rotate(rot);
+  g.scale(s, s);
+  const tw = 11;
+  const th = 13;
+  const r = 3.2;
+  g.fillStyle = P.ink;
+  g.beginPath();
+  g.moveTo(-tw / 2 + r, -th);
+  g.arcTo(tw / 2, -th, tw / 2, -th + r, r);
+  g.arcTo(tw / 2, 1.5, tw / 2 - r, 1.5, r * 0.7);
+  g.arcTo(-tw / 2, 1.5, -tw / 2, 1.5 - r, r * 0.7);
+  g.arcTo(-tw / 2, -th, -tw / 2 + r, -th, r);
+  g.closePath();
+  g.fill();
+
+  const vx = -tw / 2 + 0.8;
+  const vw = tw - 1.6;
+  const vy = -th + 2.6;
+  const vh = th * 0.66;
+  g.fillStyle = o.vest.main;
+  g.fillRect(vx, vy, vw, vh);
+  g.fillStyle = o.vest.dark;
+  g.fillRect(vx, vy + vh - 1, vw, 1);
+  g.fillStyle = '#FFFFFF';
+  g.fillRect(vx, vy + vh * 0.36, vw, 1.4);
+
+  const hy = -th - 4.3;
+  g.fillStyle = P.ink;
+  g.beginPath();
+  g.arc(0, hy, 4.3, 0, Math.PI * 2);
+  g.fill();
+  if (o.hat !== false) {
+    g.beginPath();
+    g.arc(0, hy - 2.0, 3.8, Math.PI, Math.PI * 2);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.ellipse(o.look * 0.7, hy - 2.1, 5.0, 0.95, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  const ex = o.look * 1.1;
+  g.fillStyle = P.paper;
+  if (o.eyes === 'x') {
+    g.strokeStyle = P.paper;
+    g.lineWidth = 0.75;
+    for (const dx of [-1.2, 2.0]) {
+      g.beginPath();
+      g.moveTo(dx - 1, hy - 0.2);
+      g.lineTo(dx + 1, hy + 1.8);
+      g.moveTo(dx + 1, hy - 0.2);
+      g.lineTo(dx - 1, hy + 1.8);
+      g.stroke();
+    }
+  } else {
+    g.beginPath();
+    g.arc(ex + 1.7, hy + 0.9, 0.85, 0, Math.PI * 2);
+    g.arc(ex - 1.0, hy + 0.9, 0.85, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
+
+/** The tower's own painted floor number, behind everything, as on the capsules. */
+function bnumeral(g, text, cx, cy, h) {
+  const n = stencil(text, h, P.dust, h * 0.02, true);
+  g.save();
+  g.globalAlpha = 0.34;
+  g.drawImage(n.canvas, cx - n.canvas.width / 2, cy - n.canvas.height / 2);
+  g.restore();
+}
+
+const STAND = [{ h: [4, 10], e: [3, 5] }, { h: [-5, 10], e: [-4, 5] }];
+const BRACED = [{ h: [11, 10], e: [7, 6] }, { h: [-9, 10], e: [-6, 7] }];
+const DANGLE = [{ h: [4, 13], e: [5, 6] }, { h: [-2, 14], e: [2, 7] }];
+const SPRAWL = [{ h: [9, 12], e: [7, 5] }, { h: [-8, 13], e: [-5, 6] }];
+
+/**
+ * One drawing per achievement, keyed by the API name so the badge cannot drift
+ * from the unlock it belongs to. Several of the achievements are jokes and the
+ * drawing is expected to be in on it: the hundredth death is a chalk-outline
+ * pose with the hat somewhere else, and Human Scaffolding is two men being used
+ * as scaffolding.
+ */
+const PICTOS = {
+  // The flag is planted and the rope is still in a coil at his heels: he has
+  // reached a checkpoint but has not yet found out what the other end is for.
+  FIRST_STEPS: (g) => {
+    g.strokeStyle = P.ink;
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(47, GND);
+    g.lineTo(47, 16);
+    g.stroke();
+    g.fillStyle = P.red;
+    g.beginPath();
+    g.moveTo(47.5, 17);
+    g.lineTo(61, 22);
+    g.lineTo(47.5, 27);
+    g.closePath();
+    g.fill();
+    bcoil(g, 11, GND - 2, 6);
+    bhauler(g, {
+      x: 25, y: GND - 10, s: 0.95, look: 1, vest: VEST.orange, legs: STAND,
+      hands: [{ h: [13, -14], e: [10, -7] }, { h: [-8, 1], e: [-8, -6] }],
+    });
+  },
+
+  // The load is up on the last ledge and the hook has been thrown off it: the
+  // Long Haul, finished, in the one second before something rolls off.
+  FIRST_HAUL: (g) => {
+    brope(g, 37, 1, 43, 12, 45, 22, 2.2);
+    bhook(g, 45, 26, 3);
+    bledge(g, -2, 36, 50, 6);
+    bcrate(g, 22, 27, 26, 19, 0);
+    bdust(g, 40, 35, 3, 4);
+  },
+
+  // Two hands under it and not a board out of place. The crate is the only
+  // thing in the frame because for one whole run it was the only thing anyone
+  // was thinking about.
+  FLAWLESS_CRATE: (g) => {
+    g.strokeStyle = P.ink;
+    g.lineWidth = 3;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(6, GND);
+    g.quadraticCurveTo(10, 38, 19, 35);
+    g.moveTo(58, GND);
+    g.quadraticCurveTo(54, 38, 45, 35);
+    g.stroke();
+    g.fillStyle = P.ink;
+    g.beginPath();
+    g.arc(19, 35, 2, 0, Math.PI * 2);
+    g.arc(45, 35, 2, 0, Math.PI * 2);
+    g.fill();
+    bcrate(g, 32, 24, 30, 23, 0);
+  },
+
+  // Twenty five of them. The hook is still swinging and empty, which is how it
+  // always looks a quarter of a second too late.
+  BUTTERFINGERS: (g) => {
+    brope(g, 33, 1, 28, 8, 26, 15, 2.2);
+    bhook(g, 26, 19, 3);
+    g.strokeStyle = P.ink;
+    g.lineWidth = 1.4;
+    g.lineCap = 'round';
+    for (const a of [-2.5, -1.9, -1.2, -0.5, 0.2]) {
+      g.beginPath();
+      g.moveTo(32 + Math.cos(a) * 9, 41 + Math.sin(a) * 7);
+      g.lineTo(32 + Math.cos(a) * 15, 41 + Math.sin(a) * 12);
+      g.stroke();
+    }
+    bplank(g, 15, 42, 17, 5, -0.55, true);
+    bplank(g, 48, 39, 15, 5, 0.6, false);
+    bplank(g, 24, GND - 4, 19, 5, 0.12, false);
+    bplank(g, 44, GND - 2, 14, 4, -0.22, true);
+    bplank(g, 33, 35, 12, 4, 0.95, false);
+  },
+
+  // A hundred. He is not hurt, he is just lying there because it is quicker
+  // than admitting whose fault it was.
+  HUNDRED_DEATHS: (g) => {
+    bhauler(g, {
+      x: 31, y: 47, s: 0.85, rot: -1.55, look: 1, hat: false, eyes: 'x', vest: VEST.orange,
+      legs: [{ h: [3, 13], e: [2, 7] }, { h: [-4, 12], e: [-3, 6] }],
+      hands: [{ h: [5, -9], e: [3, -11] }, { h: [-6, -6], e: [-3, -10] }],
+    });
+    bhat(g, 51, GND - 3, 0.95, -0.35);
+    g.strokeStyle = P.ink;
+    g.lineWidth = 1.4;
+    g.lineCap = 'round';
+    for (const a of [-2.2, -1.6, -1.0]) {
+      g.beginPath();
+      g.moveTo(13 + Math.cos(a) * 7, 44 + Math.sin(a) * 7);
+      g.lineTo(13 + Math.cos(a) * 11, 44 + Math.sin(a) * 11);
+      g.stroke();
+    }
+  },
+
+  // He did not mean it. The rope went tight, the ledge ran out, and his mate
+  // left the building.
+  BETRAYAL: (g) => {
+    bledge(g, -2, 34, 30, 6);
+    brope(g, 23, 17, 36, 27, 47, 43, 2.2);
+    bhauler(g, {
+      x: 14, y: 24, s: 0.8, look: 1, vest: VEST.orange, legs: BRACED,
+      hands: [{ h: [11, -9], e: [7, -6] }, { h: [9, -3], e: [5, -2] }],
+    });
+    bdust(g, 27, 33, 3, 4);
+    bhauler(g, {
+      x: 47, y: 43, s: 0.72, rot: 0.5, look: -1, vest: VEST.lime, legs: SPRAWL,
+      hands: [{ h: [7, -17], e: [6, -10] }, { h: [-9, -12], e: [-7, -8] }],
+    });
+  },
+
+  // A hundred times, which stopped being an accident somewhere around the
+  // fourth. He is not even watching this one go.
+  BETRAYAL_100: (g) => {
+    bledge(g, -2, 26, 24, 5);
+    brope(g, 17, 12, 24, 20, 31, 28, 1.9);
+    bhauler(g, {
+      x: 10, y: 20, s: 0.62, look: -1, vest: VEST.orange, legs: BRACED,
+      hands: [{ h: [11, -11], e: [7, -7] }, { h: [-9, -6], e: [-8, -2] }],
+    });
+    const fall = [[32, 29, 0.42, 0.5], [43, 38, 0.5, 0.9], [55, 47, 0.58, 1.3]];
+    for (const [x, y, s, rot] of fall) {
+      bhauler(g, {
+        x, y, s, rot, look: -1, vest: VEST.lime, legs: SPRAWL,
+        hands: [{ h: [8, -16], e: [7, -9] }, { h: [-9, -13], e: [-7, -8] }],
+      });
+    }
+  },
+
+  // A ledge neither of them can reach, and the only ladder on site is a man.
+  FIRST_BOOST: (g) => {
+    bledge(g, -2, 6, 26, 5);
+    bhauler(g, {
+      x: 32, y: GND - 7.5, s: 0.75, look: -1, vest: VEST.orange, legs: STAND,
+      hands: [{ h: [5, -24], e: [7, -17] }, { h: [-5, -24], e: [-7, -17] }],
+    });
+    bhauler(g, {
+      x: 32, y: 21, s: 0.62, look: -1, vest: VEST.lime,
+      legs: [{ h: [4, 10], e: [5, 5] }, { h: [-4, 10], e: [-5, 5] }],
+      hands: [{ h: [-13, -21], e: [-9, -14] }, { h: [8, -16], e: [7, -9] }],
+    });
+  },
+
+  // A hundred boosts. At some point the pair of them stopped being climbers
+  // and became site equipment.
+  BOOST_100: (g) => {
+    const legs = [{ h: [4, 10], e: [3, 5] }, { h: [-4, 10], e: [-3, 5] }];
+    const up = [{ h: [5, -23], e: [7, -16] }, { h: [-5, -23], e: [-7, -16] }];
+    bhauler(g, { x: 15, y: GND - 7, s: 0.7, look: 1, vest: VEST.orange, legs, hands: up });
+    bhauler(g, { x: 45, y: GND - 7, s: 0.7, look: -1, vest: VEST.lime, legs, hands: up });
+    g.fillStyle = P.cargo;
+    g.fillRect(3, 26, 58, 4);
+    g.strokeStyle = P.ink;
+    g.lineWidth = 1.3;
+    g.strokeRect(3, 26, 58, 4);
+    bhauler(g, {
+      x: 33, y: 21, s: 0.5, look: 1, vest: VEST.orange, legs,
+      hands: [{ h: [12, -13], e: [8, -8] }, { h: [-11, -14], e: [-8, -8] }],
+    });
+  },
+
+  // Five hundred moments of being the thing the other end of the rope is
+  // attached to. A load-bearing friend, holding up the floor above.
+  ANCHOR_500: (g) => {
+    bledge(g, -2, 15, 50, 7);
+    g.strokeStyle = P.dust;
+    g.lineWidth = 0.9;
+    g.beginPath();
+    g.arc(45, 22, 19, 0.55, 1.65);
+    g.stroke();
+    brope(g, 45, 22, 47, 30, 50, 39, 2.2);
+    bhauler(g, {
+      x: 22, y: GND - 10, s: 0.95, look: 1, vest: VEST.orange, legs: BRACED,
+      hands: [{ h: [6, -23], e: [8, -16] }, { h: [-6, -23], e: [-8, -16] }],
+    });
+    bdust(g, 12, GND - 1, -3, 4);
+    bhauler(g, {
+      x: 50, y: 39, s: 0.6, rot: 0.35, look: -1, vest: VEST.lime, legs: SPRAWL,
+      hands: [{ h: [7, -16], e: [6, -9] }, { h: [-8, -14], e: [-7, -8] }],
+    });
+  },
+
+  // Ten floors of Gauntlet, counted off in ledges, with the floor number
+  // painted on the tower behind them the way the yard numbers everything.
+  GAUNTLET_10: (g) => {
+    bnumeral(g, '10', 33, 32, 34);
+    for (let i = 0; i < 6; i++) {
+      const y = GND - 3 - i * 6;
+      bledge(g, i % 2 === 0 ? 2 : 30, y, 32, 3.4);
+    }
+    bhauler(g, {
+      x: 44, y: 14, s: 0.5, look: -1, vest: VEST.orange, legs: STAND,
+      hands: [{ h: [10, -14], e: [8, -8] }, { h: [-8, -2], e: [-8, -8] }],
+    });
+  },
+
+  // Twice as far up the same tower: twice the ledges, half as deep, and the
+  // climber is a speck on the top one.
+  GAUNTLET_20: (g) => {
+    bnumeral(g, '20', 33, 32, 34);
+    for (let i = 0; i < 11; i++) {
+      const y = GND - 2 - i * 3.1;
+      bledge(g, i % 2 === 0 ? 4 : 32, y, 28, 1.8);
+    }
+    bhauler(g, {
+      x: 46, y: 14, s: 0.42, look: -1, vest: VEST.lime, legs: STAND,
+      hands: [{ h: [10, -14], e: [8, -8] }, { h: [-8, -2], e: [-8, -8] }],
+    });
+  },
+
+  // Twelve minutes for the whole tower. The crate goes up the frame with the
+  // yard's own chevrons under it and the line still snapping tight.
+  SPEEDRUN: (g) => {
+    for (let i = 0; i < 3; i++) bchev(g, 32, GND - 3 - i * 7, 22, 7);
+    brope(g, 34, 1, 33, 6, 33, 12, 2.2);
+    g.strokeStyle = P.ink;
+    g.lineWidth = 1.3;
+    g.lineCap = 'round';
+    for (const [x, y, l] of [[14, 26, 9], [50, 22, 8], [17, 14, 6], [48, 34, 6]]) {
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x, y + l);
+      g.stroke();
+    }
+    bcrate(g, 33, 23, 25, 20, 0.1);
+  },
+
+  // Nobody died, nothing broke, and they are both looking at each other about
+  // it. The whole picture is level, which never happens.
+  NO_DEATHS: (g) => {
+    bcrate(g, 32, 36, 21, 17, 0);
+    bhauler(g, {
+      x: 13, y: GND - 10, s: 0.8, look: 1, vest: VEST.orange, legs: STAND,
+      hands: [{ h: [11, -9], e: [8, -5] }, { h: [-7, 3], e: [-8, -4] }],
+    });
+    bhauler(g, {
+      x: 51, y: GND - 10, s: 0.8, look: -1, vest: VEST.lime, legs: STAND,
+      hands: [{ h: [-11, -9], e: [-8, -5] }, { h: [7, 3], e: [8, -4] }],
+    });
+  },
+
+  // A thousand metres, measured off a staff like any other survey, with the
+  // man who climbed it the smallest thing in the frame.
+  ONE_KILOMETRE: (g) => {
+    g.fillStyle = P.tileBody;
+    g.fillRect(0, 0, 27, GND);
+    g.fillStyle = 'rgba(27,23,20,0.10)';
+    for (let y = 5; y < GND; y += 8) g.fillRect(0, y, 27, 1.2);
+    g.fillStyle = P.ink;
+    g.fillRect(25.6, 0, 1.6, GND);
+    g.fillStyle = P.ink;
+    g.fillRect(46, 6, 1.4, GND - 6);
+    for (let i = 0; i < 11; i++) {
+      const y = GND - 2 - i * 4.3;
+      g.fillRect(i % 5 === 0 ? 39 : 42, y, i % 5 === 0 ? 7 : 4, 1.2);
+    }
+    g.fillStyle = P.red;
+    g.beginPath();
+    g.moveTo(46, 9);
+    g.lineTo(39, 12);
+    g.lineTo(46, 15);
+    g.closePath();
+    g.fill();
+    bhauler(g, {
+      x: 20, y: GND - 5, s: 0.45, look: 1, vest: VEST.orange,
+      legs: [{ h: [5, 10], e: [4, 5] }, { h: [-6, 8], e: [-5, 4] }],
+      hands: [{ h: [7, -18], e: [7, -12] }, { h: [-7, -14], e: [-8, -9] }],
+    });
+  },
+
+  // Twenty five runs and they are sitting on the same girder, which after
+  // everything that has happened on it is the achievement.
+  MARATHON: (g) => {
+    bledge(g, -2, 32, 68, 7);
+    bcoil(g, 9, 30, 5);
+    bhauler(g, {
+      x: 28, y: 32, s: 0.75, look: 1, vest: VEST.orange, legs: DANGLE,
+      hands: [{ h: [13, -12], e: [8, -13] }, { h: [-8, -2], e: [-8, -7] }],
+    });
+    bhauler(g, {
+      x: 39, y: 32, s: 0.75, look: -1, vest: VEST.lime, legs: DANGLE,
+      hands: [{ h: [-13, -12], e: [-8, -13] }, { h: [8, -2], e: [8, -7] }],
+    });
+    brope(g, 55, 33, 59, 42, 57, GND, 2);
+  },
+
+  // A hidden achievement shows as "???" until it is earned, so the locked badge
+  // gets the plate and not the drawing.
+  '?': (g) => {
+    const m = stencil('?', 40, P.ink, 0, false);
+    g.drawImage(m.canvas, 32 - m.canvas.width / 2, 25 - m.asc / 2 - m.pad);
+  },
+};
+
 /**
  * An achievement badge, at the 64x64 Steam shows in the overlay and on the
  * profile.
  *
- * It is the same yard as the capsules — paper ground, one hazard strip, a hard
- * ink frame and a stencil mark — because that is the size at which a player
- * decides whether these belong to the same game as the store page. There is no
- * room for the haulers: two figures and a rope at 64 pixels is a smudge, so the
- * badge is signage instead, which is what the rest of the art direction is made
- * of anyway.
+ * It is the same yard as the capsules — paper ground, a corner of painted
+ * livery, one hazard strip and a hard ink frame — because that is the size at
+ * which a player decides whether these belong to the same game as the store
+ * page. Inside the frame each one is a drawing of the thing it is for: sixteen
+ * plates that differ only in their lettering are a wall of beige in the overlay
+ * grid, and a monogram tells a player nothing he cannot already read in the
+ * name printed next to it.
  *
  * The locked variant is the achieved one drawn again and then drained: a
  * saturation blend against flat grey, then a wash of paper over the top. Doing
  * it as a post-pass rather than a second palette means a locked icon can never
  * disagree with its achieved twin about anything but colour.
  */
-function achievementBadge(mark, order, achieved, size) {
+function achievementBadge(subject, mark, order, achieved, size) {
   const canvas = document.getElementById('c');
   canvas.width = size;
   canvas.height = size;
@@ -957,9 +1603,8 @@ function achievementBadge(mark, order, achieved, size) {
   ctx.fillRect(0, 0, size, size);
 
   // A corner flash in one of the three painted yard liveries, picked off the
-  // badge's own
-  // number. Sixteen plates that differ only in their lettering are a wall of
-  // beige in the overlay grid; the colour is what makes one findable.
+  // badge's own number, so a row of them in the overlay grid has some colour
+  // running down it that is not the vests.
   const painted = P.livery.slice(0, 3);
   const flash = painted[Math.floor(hash(order * 9 + 5) * painted.length) % painted.length];
   ctx.fillStyle = flash;
@@ -977,21 +1622,26 @@ function achievementBadge(mark, order, achieved, size) {
   ctx.fillStyle = P.ink;
   ctx.fillRect(0, size - bandH, size, Math.max(1.2, 1.6 * u));
 
-  // The mark, fitted rather than assumed: three initials have to survive at the
+  // The drawing, in the 64-unit space it is authored in. An achievement that
+  // core has but no pictogram has been drawn for falls back to the initials
+  // plate, fitted rather than assumed: three initials have to survive at the
   // same plate size as one.
-  const maxW = size - 14 * u;
-  let markSize = 32 * u;
-  let m = stencil(mark, markSize, P.ink, markSize * 0.04);
-  if (m.capW > maxW) {
-    markSize *= maxW / m.capW;
-    m = stencil(mark, markSize, P.ink, markSize * 0.04);
+  ctx.save();
+  ctx.scale(u, u);
+  const picto = PICTOS[subject];
+  if (picto) {
+    picto(ctx);
+  } else {
+    const maxW = 50;
+    let markSize = 32;
+    let m = stencil(mark, markSize, P.ink, markSize * 0.04);
+    if (m.capW > maxW) {
+      markSize *= maxW / m.capW;
+      m = stencil(mark, markSize, P.ink, markSize * 0.04);
+    }
+    ctx.drawImage(m.canvas, (64 - m.canvas.width) / 2, (GND - m.asc) / 2 - m.pad + 2);
   }
-  const bodyH = size - bandH;
-  ctx.drawImage(m.canvas, (size - m.canvas.width) / 2, (bodyH - m.asc) / 2 - m.pad + 2 * u);
-
-  // The index, so the two Gauntlet floors badges are not the same picture.
-  const n = stencil(String(order), 11 * u, P.dust, 0, false);
-  ctx.drawImage(n.canvas, 4 * u - n.pad, 4 * u - n.pad);
+  ctx.restore();
 
   ctx.strokeStyle = P.ink;
   ctx.lineWidth = Math.max(1.4, 2 * u);
@@ -1007,13 +1657,13 @@ function achievementBadge(mark, order, achieved, size) {
   }
 }
 
-// Steam's layout names map onto the three authored designs, except 'logo',
-// which is the wordmark alone on transparency and has to reach the renderer
-// under that name so it can skip the scene.
-window.renderAsset = (w, h, layout, name) =>
-  render([layout === 'tall' || layout === 'thumb' || layout === 'logo' ? layout : 'wide', w, h, name]);
+// The layout named in STEAM_ASSETS is the design, except 'logo', which is the
+// wordmark alone on transparency and reaches the renderer under that name so it
+// can skip the scene. Anything unrecognised falls back to the wide capsule.
+window.renderAsset = (w, h, layout) => render([layout, w, h]);
 window.renderIcon = (size) => icon(size);
-window.renderAchievement = (mark, order, achieved, size) => achievementBadge(mark, order, achieved, size);
+window.renderAchievement = (subject, mark, order, achieved, size) =>
+  achievementBadge(subject, mark, order, achieved, size);
 </script></body></html>`;
 
 /* --------------------------------------------------------- icon containers */
@@ -1073,7 +1723,7 @@ await page.setContent(PAGE, { waitUntil: 'load' });
 
 for (const [name, w, h, layout] of STEAM_ASSETS) {
   await page.setViewportSize({ width: Math.min(w, 3840), height: Math.min(h, 2160) });
-  await page.evaluate(([w2, h2, l, n]) => window.renderAsset(w2, h2, l, n), [w, h, layout, name.replace(/-\d+x\d+$/, '')]);
+  await page.evaluate(([w2, h2, l]) => window.renderAsset(w2, h2, l), [w, h, layout]);
   const buffer = await page.locator('#c').screenshot({ omitBackground: layout === 'logo' });
   const file = join(STORE_DIR, `${name}.png`);
   writeFileSync(file, buffer);
@@ -1100,11 +1750,11 @@ for (const [index, def] of ACHIEVEMENT_DEFS.entries()) {
   const mark = achievementMark(def.name);
   for (const achieved of [true, false]) {
     // A hidden achievement shows as "???" until it is earned, so its locked
-    // badge should not spell out the answer either.
-    const face = achieved || !def.hidden ? mark : '?';
+    // badge should not give away the answer either.
+    const subject = achieved || !def.hidden ? def.id : '?';
     await page.evaluate(
-      ([m, order, on, size]) => window.renderAchievement(m, order, on, size),
-      [face, index + 1, achieved, ACHIEVEMENT_ICON],
+      ([s, m, order, on, size]) => window.renderAchievement(s, m, order, on, size),
+      [subject, mark, index + 1, achieved, ACHIEVEMENT_ICON],
     );
     const buffer = await page.locator('#c').screenshot({ type: 'jpeg', quality: 94 });
     writeFileSync(join(ACHIEVEMENT_DIR, `${def.id.toLowerCase()}${achieved ? '' : '_locked'}.jpg`), buffer);

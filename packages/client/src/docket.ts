@@ -59,9 +59,9 @@ export function dailyStrip(d: DailyRecord, today: number, span = DAILY_HISTORY):
  * Ink rather than emoji. The shape everybody copies is three coloured squares,
  * and a paste made of those reads as the game it is imitating rather than as
  * this one — and a fair share of the places it lands draw them as tofu anyway.
- * These three run from filled to empty in the order the days do, so a good
+ * These three empty out in the same order the boxes on screen do, so a good
  * fortnight keeps its shape for somebody reading it in a chat window who has
- * never been shown the legend.
+ * never been shown the key.
  */
 const MARK_INK: Record<DailyMark, string> = { delivered: '#', climbed: '+', missed: '.' };
 
@@ -121,12 +121,12 @@ export interface DocketRun {
 /**
  * The daily run as something a person would actually send.
  *
- * Four lines, none of them wide enough to fold in a chat window, and every
- * figure on it either from the run that just ended or read straight off the
- * strip printed underneath — including the run of days, which is counted from
- * the marks rather than taken from the profile's own streak. This is the one
- * thing here that leaves the machine, and a number the person receiving it
- * cannot check against the picture beside it is a number that has to be right.
+ * Four lines at most, none of them wide enough to fold in a chat window, and
+ * every figure on it either from the run that just ended or read off the strip
+ * printed underneath — the run of days included, which is counted from the
+ * marks rather than taken from the profile's own streak. This is the one thing
+ * here that leaves the machine, and whoever receives it can check nothing
+ * except what it shows them, so it shows them everything it claims.
  */
 export function docketText(run: DocketRun, d: DailyRecord, today: number): string {
   const boxes = dailyStrip(d, today);

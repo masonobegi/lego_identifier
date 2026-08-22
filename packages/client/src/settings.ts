@@ -87,11 +87,12 @@ export const PROFILE_STATS_KEY = 'stats';
  * else on it, and the point of the daily is the tower you and your friend are
  * both on tonight rather than a museum of the ones you already did. What that
  * argument missed is that one day of memory cannot show a run of days. Three
- * separate playtests reached their fourth evening and found the fourth evening
- * was the first with the platforms in a different order: the tower changes,
- * and nothing else in the save can tell you that you have been here every
- * night since Tuesday. The museum was never the point. The run of days is, and
- * it is the one thing here that gets better by coming back.
+ * separate reviews got as far as a fourth evening and all three wrote down the
+ * same thing: day seven is day one with the platforms in a different order and
+ * a personal best clock. The tower changes, and nothing else in the save can
+ * tell you that you have been here every night since Tuesday. The museum was
+ * never the point. The run of days is, and it is the one thing here that gets
+ * better by coming back.
  *
  * Fourteen because a fortnight is how people talk about showing up, and
  * because fourteen boxes fit across a phone and across a chat window without
