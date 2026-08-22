@@ -19,6 +19,7 @@ import { desktopAvailable, inviteFriend, openExternal, quitGame, steamAvailable 
 import { DEFAULT_SERVER, offlineBuild } from '../settings.js';
 import { formatTime } from '../render/hud.js';
 import type { App } from '../app.js';
+import type { MatchResult } from '@haulmates/core';
 
 export type ScreenId =
   | 'none'
@@ -508,11 +509,43 @@ function resultsScreen(app: App): HTMLElement {
       // Must end the session, not just change screens: a finished LocalMatch
       // left alive drags the player straight back here.
       button(app, '← Back to menu', '', () => app.leave(), { key: 'ESC' }),
+      app.dailyRun ? button(app, 'Copy the docket', '', () => copyDocket(app, r), ) : null,
       h('div', { class: 'spacer' }),
       app.net ? button(app, 'Rematch', 'Same friend, fresh regrets', () => app.rematch(), { primary: true }) : null,
       !app.net ? button(app, 'Play again', '', () => app.restartLocal(), { primary: true }) : null,
     ),
   );
+}
+
+/**
+ * The daily run as a line you can paste to the person you played it with.
+ *
+ * The daily's whole reason to exist is that your friend is climbing the same
+ * tower today, and a score nobody else can see is not a thing anybody compares.
+ * Written as a delivery docket rather than a scoreboard, because that is the
+ * voice the rest of the game is in, and deliberately without a grid of emoji —
+ * the shape everybody copies, and the one that would make this read as the
+ * thing it is imitating rather than as this game.
+ */
+function copyDocket(app: App, r: MatchResult): void {
+  const deaths = r.deaths[0] + r.deaths[1];
+  const lines = [
+    `HAULMATES — ${dailyLabel(app.today)}`,
+    app.finishedRun
+      ? `DELIVERED in ${formatTime(r.finishTick / 60)}`
+      : `GAVE UP at checkpoint ${r.checkpoints}`,
+    `${r.cargoBreaks} crates lost · ${deaths} deaths · ${r.boosts} lifts · ${r.betrayals} betrayals`,
+  ];
+  const text = lines.join('\n');
+  const done = (): void => toast('Docket copied. Go and gloat.');
+  try {
+    void navigator.clipboard.writeText(text).then(done, () => toast(text));
+  } catch {
+    // No clipboard (an insecure origin, an old browser, a locked-down desktop
+    // build): show it instead, so the feature degrades to something you can
+    // still read off the screen and retype rather than to nothing at all.
+    toast(text);
+  }
 }
 
 function stat(value: string, label: string, tone: string): HTMLElement {

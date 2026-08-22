@@ -10,9 +10,9 @@ Paste-ready. Steam's editor accepts the `[b]`/`[list]` markup below.
 
 ## Short description (max 300 characters)
 
-> Two players. One rope. One extremely fragile crate. Climb a tower together while tied to
-> a friend who is, at every moment, one bad step away from dragging you off a ledge.
-> Online and couch co-op.
+> Two players, one rope, one extremely fragile crate. Brace so your friend can climb off
+> your shoulders, then get hauled up after them — and try not to drag each other off the
+> ledge in between. Nobody finishes this alone. Online and couch co-op.
 
 ## About this game
 
@@ -21,6 +21,18 @@ Paste-ready. Steam's editor accepts the `[b]`/`[list]` markup below.
 Not metaphorically. There is a rope. It has a length. When one of you runs out of rope,
 the other one comes with them — off the ledge, into the spikes, or straight down the shaft
 you both spent five minutes climbing.
+
+[h2]AND YOU ARE THE ONLY WAY UP[/h2]
+
+Some steps have no foothold. Not a hard jump — no foothold. One of you plants themselves
+and holds on; the other stands against them and goes up off their shoulders, half again as
+high as anybody manages alone. Then you swap: they brace on the ledge, you haul yourself up
+the rope after them.
+
+There is one of these on every floor, and there is no version of it you can do by yourself.
+That is not a promise, it is a property of the levels — the tool that builds them proves a
+pair can climb every one and proves a single player cannot, and the build fails if either
+stops being true.
 
 [h2]AND YOU ARE CARRYING SOMETHING[/h2]
 
