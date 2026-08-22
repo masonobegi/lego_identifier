@@ -42,6 +42,7 @@ import {
   crewFor,
   loadProfile,
   loadSettings,
+  openDaily,
   randomName,
   saveProfile,
   saveSettings,
@@ -1125,20 +1126,16 @@ export class App {
   /** The time to beat for the run just finished, in ticks, or 0 if there isn't one. */
   targetTicks = 0;
 
-  /** Open today's record if it is not open yet, and count one more try at it. */
+  /**
+   * Open today's record if it is not open yet, and count one more try at it.
+   *
+   * Starting a run is the only thing that rolls the day over, which is what
+   * files the day it replaces into the fortnight the strip is drawn from. A
+   * player who opens the game, reads the ledger and closes it again has not
+   * done anything, and the strip says so.
+   */
   private beginDailyAttempt(): void {
-    const day = this.today;
-    const d = this.profile.daily;
-    if (d.day !== day) {
-      // A streak survives one missed day being yesterday and nothing more.
-      this.profile.daily = {
-        day,
-        bestTicks: 0,
-        bestCheckpoints: 0,
-        attempts: 0,
-        streak: d.day === day - 1 ? d.streak + 1 : 1,
-      };
-    }
+    this.profile.daily = openDaily(this.profile.daily, this.today);
     this.profile.daily.attempts++;
     this.persist();
   }

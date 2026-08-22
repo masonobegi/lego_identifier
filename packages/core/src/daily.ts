@@ -52,3 +52,16 @@ export function dailyLabel(day: number): string {
   ];
   return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
+
+/**
+ * The tower's own reference, short enough to say down a phone.
+ *
+ * A date is not proof of a tower. A machine whose clock is a day out, or a
+ * copy of the game from before a change to the generator, produces a different
+ * twelve floors under the same heading, and the two people comparing times
+ * have no way to notice. The seed is the tower; in base 36 it is six
+ * characters, so a docket that matches is a climb that was the same climb.
+ */
+export function dailyRef(day: number): string {
+  return dailySeed(day).toString(36).toUpperCase();
+}

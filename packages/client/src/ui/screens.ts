@@ -16,6 +16,7 @@ import { drawHat } from '../render/actors.js';
 import { drawCharacterPreview } from '../render/preview.js';
 import { ACHIEVEMENTS } from '../achievements.js';
 import { desktopAvailable, inviteFriend, openExternal, quitGame, steamAvailable } from '../steam.js';
+import { boxLabel, dailyStrip, docketText, stripTally } from '../docket.js';
 import { DEFAULT_SERVER, offlineBuild } from '../settings.js';
 import { formatTime } from '../render/hud.js';
 import type { App } from '../app.js';
@@ -159,6 +160,7 @@ function titleScreen(app: App): HTMLElement {
       ),
       button(app, 'Play on this machine', '', () => app.show('couch'), { primary: offlineBuild() }),
       button(app, "Today's haul", dailyBlurb(app), () => app.startDaily()),
+      titleStrip(app),
       button(app, 'How to play', '', () => app.show('controls')),
       button(app, 'Customise', '', () => app.show('customise')),
       button(app, 'Achievements', `${app.achievements.earned.length} / ${ACHIEVEMENTS.length}`, () => app.show('achievements')),
@@ -166,10 +168,73 @@ function titleScreen(app: App): HTMLElement {
       button(app, 'Settings', '', () => app.show('settings')),
       desktopAvailable() ? button(app, 'Quit', '', () => quitGame()) : null,
     ),
+    lastCrewLine(app),
     h(
       'p',
       { class: 'stamp' },
       `v${app.version}${steamAvailable() ? ' · STEAM' : ''}`,
+    ),
+  );
+}
+
+/**
+ * Who you were last on the rope with, on the front page.
+ *
+ * The crew record was kept from the first evening and shown three taps into
+ * the ledger, which is a screen nobody opens before they already care. The
+ * thing that gets somebody to message a friend is not a tally they went
+ * looking for; it is the name being there when they open the game, next to a
+ * number the two of them made. One line, and it says nothing about what to do
+ * next — a menu that asks you to invite somebody is a menu you learn to look
+ * past.
+ */
+function lastCrewLine(app: App): HTMLElement | null {
+  const crew = [...app.profile.crews].sort((a, b) => b.lastDay - a.lastDay || b.runs - a.runs)[0];
+  if (!crew) return null;
+  const bits = [`${crew.runs} ${plural(crew.runs, 'haul', 'hauls')}`];
+  if (crew.finishes > 0) bits.push(`${crew.finishes} delivered`);
+  if (crew.bestTicks > 0) bits.push(`best ${formatTime(crew.bestTicks / 60)}`);
+  else if (crew.bestFloors > 0) bits.push(`tallest ${crew.bestFloors} floors`);
+  return h('p', { class: 'crewline' }, 'Last on the rope with ', h('b', {}, crew.name), ` · ${bits.join(' · ')}`);
+}
+
+/**
+ * The strip under the daily button, once there is something on it.
+ *
+ * Fourteen empty boxes on the front page of a game nobody has played yet is a
+ * chore chart, and a chore chart is the thing this device turns into when it
+ * arrives before the habit does. It appears on the evening the first mark goes
+ * on it, which is also the first evening it says anything.
+ */
+function titleStrip(app: App): HTMLElement | null {
+  const d = app.profile.daily;
+  if (d.attempts === 0 && d.history.length === 0) return null;
+  return stripEl(app);
+}
+
+/**
+ * The last fortnight of dailies, one box a day, oldest on the left.
+ *
+ * Three states and no more, because the whole worth of this picture is that it
+ * can be read without being studied: filled is delivered, half is a tower you
+ * climbed and did not top out, an empty dashed box is an evening you were
+ * somewhere else. They are told apart by how much ink is in them rather than
+ * by colour, so the strip survives High Contrast and survives a reader who
+ * cannot tell the good green from the gold.
+ */
+function stripEl(app: App): HTMLElement {
+  const boxes = dailyStrip(app.profile.daily, app.today);
+  const t = stripTally(boxes);
+  const blank = boxes.length - t.delivered - t.climbed;
+  return h(
+    'div',
+    {
+      class: 'strip',
+      role: 'img',
+      'aria-label': `The last ${boxes.length} days: ${t.delivered} delivered, ${t.climbed} climbed, ${blank} not attempted.`,
+    },
+    ...boxes.map((b, i) =>
+      h('span', { class: `day ${b.mark}${i === boxes.length - 1 ? ' today' : ''}`, title: boxLabel(b) }),
     ),
   );
 }
@@ -594,20 +659,27 @@ function rematchHint(app: App): string {
  * The daily's whole reason to exist is that your friend is climbing the same
  * tower today, and a score nobody else can see is not a thing anybody compares.
  * Written as a delivery docket rather than a scoreboard, because that is the
- * voice the rest of the game is in, and deliberately without a grid of emoji —
- * the shape everybody copies, and the one that would make this read as the
- * thing it is imitating rather than as this game.
+ * voice the rest of the game is in. What it says is assembled in `docket.ts`,
+ * beside the strip it prints, so the paste and the picture on the ledger are
+ * the same fourteen days counted once.
+ *
+ * The partner is named only when there was one: the Autohauler is not somebody
+ * you climbed it with, and a docket that says otherwise is the one kind of
+ * mistake this line cannot survive.
  */
 function copyDocket(app: App, r: MatchResult): void {
-  const deaths = r.deaths[0] + r.deaths[1];
-  const lines = [
-    `HAULMATES — ${dailyLabel(app.today)}`,
-    app.finishedRun
-      ? `DELIVERED in ${formatTime(r.finishTick / 60)}`
-      : `GAVE UP at checkpoint ${r.checkpoints}`,
-    `${r.cargoBreaks} crates lost · ${deaths} deaths · ${r.boosts} lifts · ${r.betrayals} betrayals`,
-  ];
-  const text = lines.join('\n');
+  const text = docketText(
+    {
+      delivered: app.finishedRun,
+      ticks: r.finishTick,
+      checkpoints: r.checkpoints,
+      crates: r.cargoBreaks,
+      falls: r.deaths[0] + r.deaths[1],
+      mate: app.net?.peers[1 - app.net.localIndex]?.name ?? '',
+    },
+    app.profile.daily,
+    app.today,
+  );
   const done = (): void => toast('Docket copied. Go and gloat.');
   try {
     void navigator.clipboard.writeText(text).then(done, () => toast(text));
@@ -1089,6 +1161,41 @@ function crewLedger(app: App): HTMLElement | null {
   );
 }
 
+/**
+ * The strip again, with the key beside it.
+ *
+ * The title screen shows it with no explanation on purpose — fourteen boxes
+ * are legible before anybody reads a caption, and a caption on the front page
+ * is a caption on every visit forever. The ledger is where somebody has gone
+ * looking, so this is where the marks are named, counted, and set against the
+ * days running two blocks above.
+ */
+function fortnightLedger(app: App): HTMLElement {
+  const boxes = dailyStrip(app.profile.daily, app.today);
+  const t = stripTally(boxes);
+  const blank = boxes.length - t.delivered - t.climbed;
+  return h(
+    'div',
+    { class: 'ledger' },
+    h('div', { class: 'head' }, 'The last fortnight'),
+    stripEl(app),
+    markLine('delivered', 'Delivered', t.delivered, t.delivered > 0 ? 'good' : ''),
+    markLine('climbed', 'Climbed, not delivered', t.climbed, ''),
+    markLine('missed', 'Evenings you weren’t on the rope', blank, ''),
+  );
+}
+
+/** One line of the key: the mark itself, what it means, and how many. */
+function markLine(mark: string, what: string, n: number, tone: string): HTMLElement {
+  return h(
+    'div',
+    { class: `line ${tone}` },
+    h('span', { class: `day ${mark}` }),
+    h('span', { class: 'what' }, what),
+    h('span', { class: 'n' }, String(n)),
+  );
+}
+
 function recordsScreen(app: App): HTMLElement {
   const p = app.profile;
   const d = p.daily;
@@ -1132,6 +1239,7 @@ function recordsScreen(app: App): HTMLElement {
         [dailyLabel(app.today), today],
         ['Days running', streak > 0 ? `${streak}` : '—'],
       ]),
+      fortnightLedger(app),
       ledger('Damages', [
         ['Falls', String(p.deaths)],
         ['Crates destroyed', String(p.cargoBreaks), p.cargoBreaks > 0 ? 'bad' : ''],

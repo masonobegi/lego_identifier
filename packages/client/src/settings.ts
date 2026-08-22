@@ -81,11 +81,21 @@ export const DEFAULT_SETTINGS: Settings = {
 export const PROFILE_STATS_KEY = 'stats';
 
 /**
- * What you did on the daily tower, and how many days running you have shown up.
+ * What you did on the daily tower, every day for a fortnight.
  *
- * Only one day is kept. A history would be a leaderboard without anybody else
- * on it, and the point of the daily is the tower you and your friend are both
- * on today, not a museum of the ones you already did.
+ * This kept one day and argued for it: a history is a leaderboard with nobody
+ * else on it, and the point of the daily is the tower you and your friend are
+ * both on tonight rather than a museum of the ones you already did. What that
+ * argument missed is that one day of memory cannot show a run of days. Three
+ * separate playtests reached their fourth evening and found the fourth evening
+ * was the first with the platforms in a different order: the tower changes,
+ * and nothing else in the save can tell you that you have been here every
+ * night since Tuesday. The museum was never the point. The run of days is, and
+ * it is the one thing here that gets better by coming back.
+ *
+ * Fourteen because a fortnight is how people talk about showing up, and
+ * because fourteen boxes fit across a phone and across a chat window without
+ * folding.
  */
 export interface DailyRecord {
   /** UTC day number the rest of this record is about. */
@@ -97,6 +107,47 @@ export interface DailyRecord {
   attempts: number;
   /** Consecutive days with at least one attempt. */
   streak: number;
+  /** The days before this one, oldest first. At most `DAILY_HISTORY` of them. */
+  history: DailyDay[];
+}
+
+/** One closed day of the daily, and how far up that day's tower you got. */
+export interface DailyDay {
+  day: number;
+  /** Finish time in ticks, or 0 for a day that was climbed and not delivered. */
+  ticks: number;
+  checkpoints: number;
+  attempts: number;
+}
+
+/** How many days of the daily a profile keeps. */
+export const DAILY_HISTORY = 14;
+
+/**
+ * File the day that is open, and open today's.
+ *
+ * Only starting a run rolls the record over, so the day being filed can be any
+ * age: somebody who hauled on Tuesday and comes back on Sunday files Tuesday,
+ * not five blanks. The days in between are absent from the history and the
+ * strip draws them as absent, which is the only reading of a day nobody
+ * played that cannot be wrong.
+ */
+export function openDaily(d: DailyRecord, day: number): DailyRecord {
+  if (d.day === day) return d;
+  const history = d.history.filter((e) => e.day !== d.day && e.day < day && e.day > day - DAILY_HISTORY);
+  if (d.attempts > 0 && d.day < day && d.day > day - DAILY_HISTORY) {
+    history.push({ day: d.day, ticks: d.bestTicks, checkpoints: d.bestCheckpoints, attempts: d.attempts });
+  }
+  history.sort((a, b) => a.day - b.day);
+  return {
+    day,
+    bestTicks: 0,
+    bestCheckpoints: 0,
+    attempts: 0,
+    // A streak survives one missed day being yesterday and nothing more.
+    streak: d.day === day - 1 ? d.streak + 1 : 1,
+    history: history.slice(-DAILY_HISTORY),
+  };
 }
 
 /**
@@ -161,7 +212,7 @@ export const DEFAULT_PROFILE: Profile = {
   metres: 0,
   unlockedHats: [0],
   seenTutorial: false,
-  daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0 },
+  daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0, history: [] },
   crews: [],
 };
 
@@ -216,9 +267,18 @@ export function saveSettings(s: Settings): void {
 export function loadProfile(): Profile {
   // Merged over the defaults, so a save written before a field existed does not
   // hand back an object missing it. `crews` arrived this way.
-  const p: Profile = { ...DEFAULT_PROFILE, ...load<Partial<Profile>>(PROFILE_STATS_KEY, {}) };
+  const saved = load<Partial<Profile>>(PROFILE_STATS_KEY, {});
+  const p: Profile = { ...DEFAULT_PROFILE, ...saved };
   if (!Array.isArray(p.unlockedHats) || p.unlockedHats.length === 0) p.unlockedHats = [0];
   if (!Array.isArray(p.crews)) p.crews = [];
+  // That merge is one level deep, so a saved `daily` arrives whole, and a save
+  // older than the history arrives without one — a strip drawn from
+  // `undefined` is a crash on the title screen. The array is rebuilt rather
+  // than carried over by the spread, which would hand every such profile the
+  // one array `DEFAULT_PROFILE` holds and file the first day into the
+  // defaults.
+  p.daily = { ...DEFAULT_PROFILE.daily, ...saved.daily };
+  p.daily.history = Array.isArray(saved.daily?.history) ? saved.daily.history.slice(-DAILY_HISTORY) : [];
   return p;
 }
 

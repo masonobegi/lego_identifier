@@ -174,6 +174,21 @@ html, body {
   margin: 22px 0 0;
 }
 
+/* Who you last hauled with, set like the consignee at the foot of a docket:
+   the only thing on the title screen that is about a person rather than about
+   the game, and the only reason anybody picks up a phone. Quiet, because a
+   line this size is read every time and a line that asks for something is
+   read twice and then never again. */
+.crewline {
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin: 20px 0 0;
+}
+.crewline b { color: var(--ink); font-weight: 900; }
+
 h2.title {
   margin: 0 0 4px;
   font-size: clamp(24px, 3.4vw, 38px);
@@ -410,6 +425,30 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
 .ledger .line.gold .n { color: var(--gold-ink); }
 .ledger .line.bad .n { color: var(--bad); }
 .ledger .line.good .n { color: var(--good); }
+
+/* A fortnight of dailies, one box a day, oldest on the left.
+   Told apart by how much ink is in them and not by hue: the palette has one
+   green and one gold, and a strip that needs both to be read is a strip that
+   stops working in High Contrast and stops working for the eight percent of
+   men who cannot tell them apart. Filled is delivered, half-inked is climbed,
+   a dashed outline is an evening nobody was here. */
+.day {
+  width: 18px;
+  height: 14px;
+  flex: none;
+  border: 2px solid var(--edge);
+  border-radius: 3px;
+  background: var(--paper);
+}
+.day.delivered { background: var(--ink); }
+.day.climbed { background: linear-gradient(180deg, var(--paper) 0 50%, var(--ink) 50% 100%); }
+.day.missed { background: transparent; border-style: dashed; border-color: var(--concrete); }
+/* Tonight, which is the box the player is looking for. */
+.day.today { box-shadow: 0 0 0 2px var(--gold); }
+
+.strip { display: flex; gap: 4px; margin: -2px 2px 2px; }
+.strip .day { flex: 1 1 0; max-width: 26px; height: 18px; }
+.ledger .strip { margin: 10px 0 12px; }
 
 /* -------------------------------------------------------------------- misc */
 

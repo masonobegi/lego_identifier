@@ -31,23 +31,29 @@ const STEAM_ASSETS = [
   ['small-capsule-462x174', 462, 174, 'thumb'],
   ['main-capsule-616x353', 616, 353, 'wide'],
   ['vertical-capsule-374x448', 374, 448, 'tall'],
-  ['page-background-1438x810', 1438, 810, 'scene'],
+  // The three below are 16:9, 3.1:1 and 16:9 again, and Steam puts each behind
+  // something else. They get a design apiece rather than sharing the capsule's:
+  // one composition stretched over all three shapes leaves the widest of them
+  // half empty and the tallest cropped through the figures.
+  ['page-background-1438x810', 1438, 810, 'background'],
   ['library-capsule-600x900', 600, 900, 'tall'],
   ['library-header-460x215', 460, 215, 'wide'],
-  ['library-hero-3840x1240', 3840, 1240, 'scene'],
+  ['library-hero-3840x1240', 3840, 1240, 'hero'],
   ['library-logo-1280x720', 1280, 720, 'logo'],
-  ['screenshot-frame-1920x1080', 1920, 1080, 'scene'],
+  ['screenshot-frame-1920x1080', 1920, 1080, 'shot'],
 ];
 
 const ICON_SIZES = [32, 64, 128, 256, 512, 1024];
 
 /**
- * The lettering on an achievement badge: the initials of its display name, or
- * the first two letters when the name is a single word.
+ * The initials of an achievement's display name, or the first two letters when
+ * the name is a single word.
  *
- * Derived rather than authored, so adding an achievement cannot leave one
- * badge blank. Two badges can still land on the same initials — Ten and Twenty
- * Floors Up do — which is what the index numeral in the corner is for.
+ * Every achievement in ACHIEVEMENT_DEFS has a pictogram drawn for it by hand.
+ * This is the plate an achievement added to core but not yet drawn falls back
+ * to, so a badge can never come out blank; two of them landing on the same
+ * initials, as Ten and Twenty Floors Up do, is the sign that the drawing is
+ * the thing that was missed.
  */
 function achievementMark(name) {
   const words = name.split(/\s+/).filter(Boolean);
@@ -101,6 +107,14 @@ const P = {
 };
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
 const font = (px) => \`900 \${px}px \${FONT}\`;
+
+// The two vests, shared by the capsule figures and the badge figures: a player
+// learns which hauler is which from the store page before he ever presses a
+// key, and an achievement in the wrong colours is a third character.
+const VEST = {
+  orange: { main: '#FF6A00', dark: '#B23F00' },
+  lime: { main: '#C8E82A', dark: '#7E9A0F' },
+};
 
 /* ------------------------------------------------------------- helpers */
 function hash(i) {
@@ -185,11 +199,14 @@ function render([mode, W, H, name]) {
   /**
    * The composition, fitted to whatever canvas Steam has asked for.
    *
-   * The design is authored at three fixed sizes — 616x353 wide, 374x448 tall,
-   * and 231x87 for the thumbnail, which is drawn rather than shrunk because a
-   * scaled-down capsule is mud. Everything else Steam wants, from a 460x215
-   * header to a 3840x1240 library hero, is one of those three fitted into the
-   * frame and centred, at a uniform scale so the figures never stretch.
+   * Six compositions, authored at a fixed size apiece. Three are capsules —
+   * 616x353 wide, 374x448 tall, and 231x87 for the thumbnail, which is drawn
+   * rather than shrunk because a scaled-down capsule is mud — and every capsule
+   * Steam asks for is one of those three fitted into the frame and centred, at
+   * a uniform scale so the figures never stretch. The other three are the page
+   * background, the library hero and the screenshot frame, whose proportions
+   * (16:9, 3.1:1, 16:9) and jobs have nothing to do with a capsule's: each is
+   * authored at half or a third of its delivered size and fits exactly.
    *
    * Two rules keep the fit from tearing the picture. Anything the design ran
    * off the edge on purpose — the girders, the tower — is pinned back to the
@@ -198,11 +215,16 @@ function render([mode, W, H, name]) {
    * width and height, so the area the composition does not reach is more yard
    * rather than a letterbox.
    */
+  // girders[0] is the ledge the braced hauler stands on: his heels, the dust he
+  // is dragging off it and his cast shadow are all placed from it, so a design
+  // that lists some other girder first drops him into thin air.
   const DESIGNS = {
     wide: {
       W: 616,
       H: 353,
       detail: 2,
+      cranes: 3,
+      figures: true,
       wm: { cx: 308, top: 13, capH: 52, maxW: 554, sub: 'A TWO-PLAYER CO-OP DISASTER' },
       hazeY: 0.73,
       yardTop: 0.93,
@@ -224,6 +246,8 @@ function render([mode, W, H, name]) {
       W: 374,
       H: 448,
       detail: 2,
+      cranes: 3,
+      figures: true,
       wm: { cx: 187, top: 17, capH: 50, maxW: 337, sub: 'A TWO-PLAYER CO-OP DISASTER' },
       hazeY: 0.74,
       yardTop: 0.94,
@@ -245,6 +269,8 @@ function render([mode, W, H, name]) {
       W: 231,
       H: 87,
       detail: 0,
+      cranes: 0,
+      figures: true,
       wm: { cx: 115.5, top: 3, capH: 20, maxW: 208, sub: null },
       hazeY: 0.82,
       yardTop: 1.02,
@@ -260,6 +286,89 @@ function render([mode, W, H, name]) {
       crate: { w: 24, h: 18, rot: 0.14, drop: 0.12, t: 0.5 },
       ropeW: 1.6,
     },
+    // Behind the store page, dimmed by Steam and covered down the middle by the
+    // page's own content column. Valve's advice for it is atmosphere and no
+    // subject, and cropping is unpredictable: the pair belongs on the capsules,
+    // where a shopper is looking at them, not here where the content column
+    // lands across the rope and the crop can take their heads off.
+    background: {
+      W: 719,
+      H: 405,
+      detail: 2,
+      cranes: 7,
+      figures: false,
+      wm: null,
+      hazeY: 0.68,
+      yardTop: 0.88,
+      tower: { x1: 176, top: -10 },
+      girders: [
+        { x0: -8, x1: 300, y: 262, h: 20 },
+        { x0: -8, x1: 190, y: 130, h: 17, mark: 'NO STEP' },
+        { x0: -8, x1: 236, y: 356, h: 18 },
+        { x0: 520, x1: 727, y: 300, h: 19, mark: 'SWL 2.5t' },
+        { x0: 604, x1: 727, y: 168, h: 16 },
+        { x0: 452, x1: 727, y: 392, h: 15 },
+      ],
+      numeral: { text: '7', cx: 82, cy: 236, h: 190 },
+    },
+    // 3.1:1, and Valve composites the separately supplied logo over the top of
+    // it at a position the customer's client decides. So the tower stops inside
+    // the frame instead of running off the top, and the whole picture sits in
+    // the lower four fifths: everything above 62 units is empty sky for the
+    // logo to land on. The width buys the one thing no capsule has room for —
+    // the full span of rope, with the crate swinging in the middle of it.
+    hero: {
+      W: 960,
+      H: 310,
+      detail: 2,
+      cranes: 7,
+      figures: true,
+      wm: null,
+      hazeY: 0.78,
+      yardTop: 0.95,
+      tower: { x1: 250, top: 96 },
+      girders: [
+        { x0: -8, x1: 330, y: 214, h: 15 },
+        { x0: -8, x1: 200, y: 142, h: 13, mark: 'NO STEP' },
+        { x0: -8, x1: 270, y: 292, h: 14 },
+        { x0: 700, x1: 968, y: 232, h: 15, mark: 'SWL 2.5t' },
+        { x0: 840, x1: 968, y: 152, h: 13 },
+      ],
+      numeral: { text: '7', cx: 122, cy: 202, h: 84 },
+      anchor: { px: 285, py: 179, s: 1.6, rot: -0.42 },
+      flyer: { px: 690, py: 196, s: 1.5, rot: -0.32 },
+      sag: 22,
+      crate: { w: 52, h: 44, rot: 0.14, drop: 0.1, t: 0.5 },
+      ropeW: 2.4,
+    },
+    // Stands in for a screenshot in the carousel, so it is the only asset that
+    // has to look like a moment of play rather than a poster: the camera is in
+    // close, the yard has dropped away below the haze, and the floor number on
+    // the tower is not the one the capsules show.
+    shot: {
+      W: 640,
+      H: 360,
+      detail: 2,
+      cranes: 4,
+      figures: true,
+      wm: null,
+      hazeY: 0.83,
+      yardTop: 0.99,
+      tower: { x1: 196, top: -10 },
+      girders: [
+        { x0: -8, x1: 316, y: 240, h: 22 },
+        { x0: -8, x1: 176, y: 104, h: 19, mark: 'NO STEP' },
+        { x0: -8, x1: 240, y: 348, h: 18 },
+        { x0: 430, x1: 648, y: 136, h: 20, mark: 'SWL 2.5t' },
+        { x0: 556, x1: 648, y: 320, h: 18 },
+      ],
+      numeral: { text: '12', cx: 92, cy: 186, h: 132 },
+      anchor: { px: 250, py: 188, s: 2.3, rot: -0.42 },
+      flyer: { px: 478, py: 248, s: 2.0, rot: -0.5 },
+      sag: 40,
+      crate: { w: 60, h: 50, rot: 0.16, drop: 0.1, t: 0.5 },
+      ropeW: 3.0,
+    },
   };
 
   const L = (() => {
@@ -274,7 +383,9 @@ function render([mode, W, H, name]) {
     return {
       k,
       detail: d.detail,
-      wm: {
+      cranes: d.cranes,
+      figures: d.figures,
+      wm: d.wm && {
         cx: ox + d.wm.cx * k,
         top: oy + d.wm.top * k,
         capH: d.wm.capH * k,
@@ -283,7 +394,9 @@ function render([mode, W, H, name]) {
       },
       hazeY: d.hazeY,
       yardTop: d.yardTop,
-      tower: { x1: ox + d.tower.x1 * k },
+      // A tower with no top of its own runs off the frame, and is pinned there
+      // rather than scaled, the same way the girders are.
+      tower: { x1: ox + d.tower.x1 * k, top: d.tower.top > 0 ? oy + d.tower.top * k : -10 },
       girders: d.girders.map((g) => ({
         x0: sx(g.x0),
         x1: sx(g.x1),
@@ -294,11 +407,15 @@ function render([mode, W, H, name]) {
       numeral: d.numeral
         ? { text: d.numeral.text, cx: ox + d.numeral.cx * k, cy: oy + d.numeral.cy * k, h: d.numeral.h * k }
         : null,
-      anchor: { px: ox + d.anchor.px * k, py: oy + d.anchor.py * k, s: d.anchor.s * k, rot: d.anchor.rot },
-      flyer: { px: ox + d.flyer.px * k, py: oy + d.flyer.py * k, s: d.flyer.s * k, rot: d.flyer.rot },
-      sag: d.sag * k,
-      crate: { w: d.crate.w * k, h: d.crate.h * k, rot: d.crate.rot, drop: d.crate.drop, t: d.crate.t },
-      ropeW: d.ropeW * k,
+      ...(d.figures
+        ? {
+            anchor: { px: ox + d.anchor.px * k, py: oy + d.anchor.py * k, s: d.anchor.s * k, rot: d.anchor.rot },
+            flyer: { px: ox + d.flyer.px * k, py: oy + d.flyer.py * k, s: d.flyer.s * k, rot: d.flyer.rot },
+            sag: d.sag * k,
+            crate: { w: d.crate.w * k, h: d.crate.h * k, rot: d.crate.rot, drop: d.crate.drop, t: d.crate.t },
+            ropeW: d.ropeW * k,
+          }
+        : {}),
     };
   })();
 
@@ -361,8 +478,8 @@ function render([mode, W, H, name]) {
   // rather than competing with the two figures.
   if (D > 0) {
     ctx.fillStyle = P.far;
-    for (let i = 0; i < 3; i++) {
-      const cx = W * (0.30 + 0.30 * i) + hash(11 + i) * W * 0.08;
+    for (let i = 0; i < L.cranes; i++) {
+      const cx = W * ((i + 0.5) / L.cranes) + hash(11 + i) * W * 0.06;
       const hgt = H * (0.11 + hash(3 + i * 7) * 0.05);
       const t = Math.max(2, W * 0.006);
       const legs = W * 0.035;
@@ -544,11 +661,6 @@ function render([mode, W, H, name]) {
   })();
 
   /* -------------------------------------------------------------- haulers */
-  const VEST = {
-    orange: { main: '#FF6A00', dark: '#B23F00' },
-    lime: { main: '#C8E82A', dark: '#7E9A0F' },
-  };
-
   function limb(x0, y0, kx, ky, x1, y1, wdt) {
     ctx.strokeStyle = P.ink;
     ctx.lineWidth = wdt;
