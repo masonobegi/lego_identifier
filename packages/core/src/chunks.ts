@@ -265,6 +265,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 7, y: 18, r: 1, ax: 6, ay: 0, period: 240, phase: 0 },
+    ],
   },
   {
     id: 'yard_gantry',
@@ -306,6 +309,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 9, y: 15, r: 1, ax: 6, ay: 0, period: 250, phase: 0 },
     ],
   },
   {
@@ -477,6 +483,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 22, y: 12, r: 1, ax: 4, ay: 0, period: 220, phase: 0 },
+    ],
   },
   {
     id: 'foundry_conveyor',
@@ -518,6 +527,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'crusher', x: 13, y: 2, w: 4, h: 3, ax: 0, ay: 4, period: 180, phase: 0, smooth: 1 },
     ],
   },
   {
@@ -562,6 +574,7 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
     ],
     entities: [
+      { type: 'crusher', x: 26, y: 8, w: 4, h: 3, ax: 0, ay: 6, period: 170, phase: 0, smooth: 1 },
       { type: 'crusher', x: 31, y: 17, w: 4, h: 3, ax: 0, ay: 6, period: 190, phase: 70, smooth: 1 },
       { type: 'saw', x: 15, y: 21, r: 1, ax: 3, ay: 0, period: 200, phase: 60 },
     ],
@@ -606,6 +619,11 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 9, y: 9, r: 1, ax: 0, ay: 9, period: 160, phase: 0 },
+      { type: 'saw', x: 33, y: 15, r: 1, ax: 0, ay: 9, period: 160, phase: 80 },
+      { type: 'crusher', x: 30, y: 8, w: 4, h: 3, ax: 0, ay: 4, period: 170, phase: 0, smooth: 1 },
     ],
   },
   {
@@ -652,6 +670,7 @@ export const CHUNKS: ChunkDef[] = [
     ],
     entities: [
       { type: 'mover', x: 8, y: 12, w: 5, h: 1, ax: 18, ay: 0, period: 240, phase: 0, smooth: 1 },
+      { type: 'saw', x: 5, y: 24, r: 1, ax: 5, ay: 0, period: 205, phase: 0 },
     ],
   },
   {
@@ -695,6 +714,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'crusher', x: 31, y: 14, w: 4, h: 3, ax: 0, ay: 4, period: 175, phase: 0, smooth: 1 },
+    ],
   },
   {
     id: 'foundry_belt',
@@ -737,6 +759,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 8, y: 12, r: 1, ax: 5, ay: 0, period: 195, phase: 0 },
+    ],
   },
   {
     id: 'foundry_pour',
@@ -778,6 +803,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 13, y: 15, r: 1, ax: 4, ay: 0, period: 185, phase: 40 },
     ],
   },
   {
@@ -951,6 +979,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 18, y: 9, r: 1, ax: 4, ay: 0, period: 195, phase: 0 },
+    ],
   },
   {
     id: 'freeze_saws',
@@ -993,6 +1024,9 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 8, y: 20, r: 1, ax: 0, ay: 6, period: 140, phase: 40 },
+    ],
   },
   {
     id: 'freeze_pit',
@@ -1034,6 +1068,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 14, y: 18, r: 1, ax: 3, ay: 0, period: 190, phase: 0 },
     ],
   },
   {
@@ -1250,6 +1287,11 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 19, y: 16, r: 1, ax: 0, ay: 7, period: 130, phase: 0 },
+      { type: 'saw', x: 23, y: 24, r: 1, ax: 5, ay: 0, period: 180, phase: 0 },
+      { type: 'crusher', x: 16, y: 8, w: 4, h: 3, ax: 0, ay: 4, period: 165, phase: 0, smooth: 1 },
+    ],
   },
   {
     id: 'spire_crushers',
@@ -1293,9 +1335,11 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
     ],
     entities: [
+      { type: 'crusher', x: 4, y: 7, w: 4, h: 3, ax: 0, ay: 7, period: 140, phase: 0, smooth: 1 },
       { type: 'crusher', x: 29, y: 7, w: 4, h: 3, ax: 0, ay: 7, period: 140, phase: 70, smooth: 1 },
       { type: 'saw', x: 19, y: 23, r: 1, ax: 0, ay: 5, period: 120, phase: 0 },
       { type: 'saw', x: 24, y: 21, r: 1, ax: 6, ay: 0, period: 175, phase: 0 },
+      { type: 'saw', x: 24, y: 6, r: 1, ax: 6, ay: 0, period: 185, phase: 70 },
     ],
   },
   {
@@ -1339,6 +1383,11 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 22, y: 25, r: 1, ax: 0, ay: 4, period: 110, phase: 0 },
+      { type: 'saw', x: 22, y: 24, r: 1, ax: 4, ay: 0, period: 170, phase: 0 },
+      { type: 'crusher', x: 13, y: 11, w: 4, h: 3, ax: 0, ay: 4, period: 160, phase: 0, smooth: 1 },
+    ],
   },
   {
     id: 'spire_mast',
@@ -1381,6 +1430,10 @@ export const CHUNKS: ChunkDef[] = [
       '##................============........##',
       '##....................................##',
     ],
+    entities: [
+      { type: 'saw', x: 27, y: 18, r: 1, ax: 5, ay: 0, period: 165, phase: 0 },
+      { type: 'crusher', x: 13, y: 2, w: 4, h: 3, ax: 0, ay: 4, period: 155, phase: 0, smooth: 1 },
+    ],
   },
   {
     id: 'spire_wire',
@@ -1422,6 +1475,10 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 8, y: 9, r: 1, ax: 0, ay: 8, period: 140, phase: 0 },
+      { type: 'saw', x: 5, y: 24, r: 1, ax: 7, ay: 0, period: 160, phase: 0 },
     ],
   },
   {
@@ -1809,6 +1866,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'crusher', x: 12, y: 14, w: 4, h: 3, ax: 0, ay: 4, period: 190, phase: 40, smooth: 1 },
     ],
   },
   {
@@ -2446,6 +2506,9 @@ export const CHUNKS: ChunkDef[] = [
       '##....................................##',
       '##................============........##',
       '##....................................##',
+    ],
+    entities: [
+      { type: 'saw', x: 13, y: 9, r: 1, ax: 9, ay: 0, period: 160, phase: 0 },
     ],
   },
   {

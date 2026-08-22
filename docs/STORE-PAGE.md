@@ -29,10 +29,18 @@ and holds on; the other stands against them and goes up off their shoulders, hal
 high as anybody manages alone. Then you swap: they brace on the ledge, you haul yourself up
 the rope after them.
 
-There is one of these on every floor, and there is no version of it you can do by yourself.
-That is not a promise, it is a property of the levels — the tool that builds them proves a
-pair can climb every one and proves a single player cannot, and the build fails if either
-stops being true.
+There are seventy-one of these in the campaign's thirty-four floors — one every four or five
+steps of the climb — and there is no version of any of them you can do by yourself. That is
+not a promise, it is a property of the levels: the tool that builds them proves a pair can
+climb every one and proves a single player cannot, in the actual game simulation, and the
+build fails if either stops being true.
+
+[h2]AND SOME DOORS ONLY OPEN WHILE SOMEBODY IS STANDING ON THEM[/h2]
+
+A plate in the floor holds a shutter open, and it holds it open for exactly as long as there
+is weight on it. There is a plate on each side, so the way through is to take turns: you
+stand, they walk, they stand, you walk. Simple, until you remember the rope is nine tiles
+long and you are both attached to it.
 
 [h2]AND YOU ARE CARRYING SOMETHING[/h2]
 
@@ -44,7 +52,7 @@ was.
 [h2]FOUR BUTTONS. INFINITE WAYS TO RUIN THINGS.[/h2]
 
 [list]
-[*][b]Give each other a leg up[/b] — brace, and your partner clears a step neither of you reaches alone. Every floor has one. The campaign cannot be finished by one person, and that is measured rather than promised.
+[*][b]Give each other a leg up[/b] — brace, and your partner clears a step neither of you reaches alone. Sixty-two of those in the campaign, plus nine doors that need someone standing on a plate. The campaign cannot be finished by one person, and that is measured rather than promised.
 [*][b]Move and jump[/b] — generous, forgiving platforming. The rope supplies the
 difficulty.
 [*][b]GRIP[/b] — brace yourself in place and become an anchor. Now your partner can swing
@@ -61,7 +69,13 @@ usually the other person.
 full of saws and lava, a freezer with no friction, and a spire that combines everything
 that has already killed you.
 [*][b]THE GAUNTLET[/b] — an endless tower assembled fresh from a seed. Choose how tall.
-Regret it immediately.
+Regret it immediately. The higher it goes the more of its floors arrive with a name on
+them — NO CHECKPOINT, CROSSWIND, CRACKED CRATE — so a tall run is an escalation rather
+than a longer shuffle.
+[*][b]TODAY'S HAUL[/b] — one tower a day, the same one for everybody, and a fortnight of
+boxes underneath it showing which days the two of you turned up. There is a line you can
+paste into a chat window, and nothing on it is anything the person reading it cannot
+check.
 [*][b]ONLINE CO-OP[/b] — one of you reads out a five-letter code, the other types it in.
 That is the entire matchmaking system. Rollback netcode keeps the rope honest even on a
 bad connection.

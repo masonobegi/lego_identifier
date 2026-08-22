@@ -142,6 +142,20 @@ export class App {
    * is disposed on the way to the results card and the world goes with it.
    */
   lastWorst: { kind: number; tick: number; value: number } | null = null;
+  /**
+   * A photograph of the run's worst moment, taken at the instant it happened.
+   *
+   * The card already named the moment — "yanked off a ledge at 5:20, 31
+   * metres" — and a named moment is the one thing on it that people repeat to
+   * each other. A picture of it is the one thing they would send. The
+   * simulation records the worst thing it has seen as it happens, so there is
+   * nothing to rewind and no ring of frames to keep: when `worstTick` moves,
+   * the frame on screen *is* the moment, and it gets shrunk into a thumbnail
+   * and kept.
+   */
+  worstShot: string | null = null;
+  private worstShotTick = -1;
+  private shotCanvas: HTMLCanvasElement | null = null;
   finishedRun = false;
 
   attract: LocalMatch;
@@ -324,6 +338,8 @@ export class App {
       colours: this.displayColours(),
       options: this.renderOptions(),
     });
+
+    this.captureWorst(world);
 
     this.achievementTimer += dt;
     if (this.achievementTimer > 0.75) {
@@ -789,6 +805,7 @@ export class App {
     this.finishedRun = false;
     this.lastResult = null;
     this.lastWorst = null;
+    this.forgetWorstShot();
     this.connectingLabel =
       intent === INTENT_JOIN ? `Looking for haul ${code}…` : intent === INTENT_QUICKPLAY ? 'Finding someone to rope yourself to…' : 'Opening a haul…';
     this.show('connecting');
@@ -930,6 +947,7 @@ export class App {
     this.finishedRun = false;
     this.lastResult = null;
     this.lastWorst = null;
+    this.forgetWorstShot();
     this.net?.rematch();
     this.show('lobby');
   }
@@ -999,6 +1017,7 @@ export class App {
     this.finishedRun = false;
     this.lastResult = null;
     this.lastWorst = null;
+    this.forgetWorstShot();
     this.local = new LocalMatch(mode, seed, floors);
     if (this.botPartner) this.local.setBot(1, new Bot(this.local.ctx.level));
     this.renderer.reset(this.local.world);
@@ -1028,6 +1047,7 @@ export class App {
     this.finishedRun = false;
     this.lastResult = null;
     this.lastWorst = null;
+    this.forgetWorstShot();
     const reseed = !daily && this.local.ctx.mode === MODE_GAUNTLET;
     this.local.restart(reseed ? (Math.random() * 0x7fffffff) | 0 : undefined);
     if (daily) this.beginDailyAttempt();
@@ -1050,6 +1070,46 @@ export class App {
     this.local.resetToCheckpoint();
     this.show('none');
     this.input.releaseAll();
+  }
+
+  private forgetWorstShot(): void {
+    this.worstShot = null;
+    this.worstShotTick = -1;
+  }
+
+  /**
+   * Keep the frame the worst moment happened on.
+   *
+   * Called straight after the frame is drawn, so the canvas holds the crate
+   * mid-explosion or the pair mid-fall rather than the tidy second afterwards.
+   * `worstTick` only moves when something worse than everything before it
+   * happens, which is a handful of times in a run, so the cost is a downscale
+   * and an encode a handful of times in a run.
+   *
+   * A thumbnail rather than the frame: 320 across is legible on the card and
+   * on a phone, and small enough that the data URL is a few tens of kilobytes
+   * rather than a megabyte of screenshot nobody asked to keep.
+   */
+  private captureWorst(world: World): void {
+    if (world.worstKind === 0 || world.worstTick === this.worstShotTick) return;
+    this.worstShotTick = world.worstTick;
+    const src = this.canvas;
+    if (!src.width || !src.height) return;
+    const shot = (this.shotCanvas ??= document.createElement('canvas'));
+    const width = 320;
+    const height = Math.max(1, Math.round((src.height / src.width) * width));
+    shot.width = width;
+    shot.height = height;
+    const ctx = shot.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(src, 0, 0, width, height);
+    try {
+      this.worstShot = shot.toDataURL('image/png');
+    } catch {
+      // A tainted or zero-sized canvas is not worth failing a run over; the
+      // card falls back to the sentence it printed before there was a picture.
+      this.worstShot = null;
+    }
   }
 
   private finishLocalRun(): void {

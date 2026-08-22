@@ -50,6 +50,14 @@ function text(node: unknown): string {
   return ((node as FakeElement).children ?? []).map(text).join('');
 }
 
+/** Every element of one tag in the tree, so a picture can be looked at. */
+function pick(node: unknown, tag: string): FakeElement[] {
+  if (node === null || typeof node !== 'object' || !('children' in node)) return [];
+  const el = node as FakeElement;
+  const here = el.tag === tag ? [el] : [];
+  return [...here, ...el.children.flatMap((c) => pick(c, tag))];
+}
+
 /** Every element in the tree carrying a class, for the ones that are a picture. */
 function classes(node: unknown): string[] {
   if (node === null || typeof node !== 'object' || !('children' in node)) return [];
@@ -206,5 +214,66 @@ describe('the ledger', () => {
     expect(said).toContain('Climbed, not delivered');
     expect(said).toContain('Evenings you weren’t on the rope');
     expect(said, 'no stock glyphs anywhere on it').not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+});
+
+/**
+ * The card names the worst thing that happened. This is the picture of it.
+ *
+ * The photograph is the one thing on the results screen somebody would send to
+ * the person they were playing with, so the two things worth holding are that
+ * it is there when there is one, and that the sentence it replaced is still the
+ * caption under it — a run with no frame to show reads exactly as it did before
+ * there was a camera.
+ */
+describe('the worst moment', () => {
+  const finished = (over: Record<string, unknown>) =>
+    ({
+      profile: { crews: [], daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0, history: [] } },
+      today: TODAY,
+      version: '1.0.0',
+      achievements: { earned: [] },
+      sfx: { ui: () => {} },
+      input: { padCount: 0 },
+      finishedRun: true,
+      dailyRun: false,
+      targetTicks: 0,
+      net: null,
+      local: null,
+      lastResult: {
+        finishTick: 18_000,
+        deaths: [3, 4],
+        cargoBreaks: 1,
+        betrayals: 6,
+        boosts: 12,
+        bonds: 40,
+        checkpoints: 9,
+      },
+      lastWorst: { kind: 3, tick: 19_200, value: 31 },
+      worstShot: null,
+      ...over,
+    }) as unknown as App;
+
+  it('pins the photograph to the card, with the sentence as its caption', async () => {
+    const { buildScreen } = await screens();
+    const shot = 'data:image/png;base64,AAAA';
+    const screen = buildScreen(finished({ worstShot: shot }), 'results');
+    const [img] = pick(screen, 'img');
+    expect(img, 'a picture of the worst moment').toBeDefined();
+    expect(img.attrs.src).toBe(shot);
+    expect(classes(screen)).toContain('polaroid');
+    const said = text(screen);
+    expect(said).toContain('Worst moment: 5:20.00 — somebody fell 31 metres.');
+    // And the alt text is the same sentence, because a screen reader gets the
+    // moment rather than "image".
+    expect(img.attrs.alt).toContain('somebody fell 31 metres');
+  });
+
+  it('reads the way it always did when there is no frame to show', async () => {
+    const { buildScreen } = await screens();
+    const screen = buildScreen(finished({}), 'results');
+    expect(pick(screen, 'img'), 'nothing to pin up').toHaveLength(0);
+    expect(classes(screen)).not.toContain('polaroid');
+    expect(text(screen)).toContain('Worst moment: 5:20.00 — somebody fell 31 metres.');
   });
 });

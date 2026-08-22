@@ -743,6 +743,25 @@ class C:
                 return False
         return True
 
+    @staticmethod
+    def _slide_clear(ex0, ex1, up):
+        """How far sideways an entity has to go to leave a gate's airspace.
+
+        Returns the smaller of the two shifts that fit between the shaft walls,
+        or None if neither does. The band itself is `up[1] - 1` to `up[2] + 1`:
+        the landing platform and a column of tolerance either side, which is
+        what a climber coming up off a braced partner cannot steer out of."""
+        options = []
+        left = up[1] - 2 - ex1
+        if ex0 + left >= 2:
+            options.append(left)
+        right = up[2] + 2 - ex0
+        if ex1 + right <= W - 3:
+            options.append(right)
+        if not options:
+            return None
+        return min(options, key=abs)
+
     def gate(self, index):
         """Take one foothold out, so the step needs two people.
 
@@ -873,8 +892,20 @@ class C:
             overlaps_rows = ey >= lo_row and ey0 <= hi_row
             overlaps_cols = ex1 >= up[1] - 1 and ex0 <= up[2] + 1
             if overlaps_rows and overlaps_cols:
-                self.cleared.append(f"{e['type']} cleared from the gate at row {up[0]}")
-                continue
+                # Slide it out of the way rather than out of the game.
+                #
+                # The band a gate has to keep clear is eight columns of forty,
+                # and a saw is a pacing decision about a row — so the row is the
+                # part worth keeping. Deleting instead cost forty of the
+                # library's sixty-three blades and presses, which is most of the
+                # foundry, and it cost them silently.
+                dx = self._slide_clear(ex0, ex1, up)
+                if dx is None:
+                    self.cleared.append(f"{e['type']} cleared from the gate at row {up[0]}")
+                    continue
+                if dx:
+                    e['x'] += dx
+                    self.moved.append(f"{e['type']} slid {abs(dx)} column(s) clear of the gate at row {up[0]}")
             keep.append(e)
         self.ents = keep
 

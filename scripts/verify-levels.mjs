@@ -942,8 +942,16 @@ export function verifyLevel(level, mode, seed, options = {}) {
   }
   const ctx = { level, seed, mode };
   const steps = ledgeSteps(level, result.route, result.standable);
+  // Which slice of this level's work to do. The steps of a level are
+  // independent of each other, so the gate hands one level out to several
+  // processes at once and each takes every nth step; `mine` is the only thing
+  // that knows about it, and with no shard set it is every step.
+  const shard = options.shard ?? { index: 0, count: 1 };
+  const mine = (i) => i % shard.count === shard.index;
   const failures = [];
-  for (const s of steps) {
+  for (let si = 0; si < steps.length; si++) {
+    if (!mine(si)) continue;
+    const s = steps[si];
     // A step taller than any one hauler can jump is a gate, and gates are
     // replayed as the two-person move they are.
     const gate = s.from.y - s.to.y > MAX_RISE;
@@ -972,7 +980,9 @@ export function verifyLevel(level, mode, seed, options = {}) {
   // and the solo search is pointed at them as well: a door one hauler can get
   // both bodies through is a room that does not need anybody's partner.
   const crossings = failures.length >= 5 ? [] : holdCrossings(level, result);
-  for (const cross of crossings) {
+  for (let ci = 0; ci < crossings.length; ci++) {
+    if (!mine(ci)) continue;
+    const cross = crossings[ci];
     if (cross.reason) {
       failures.push(cross.reason);
     } else {
@@ -987,7 +997,9 @@ export function verifyLevel(level, mode, seed, options = {}) {
 
   // Last of all, the finish itself: the only claim in this file made by asking
   // the simulation whether the run is over rather than by reading positions.
-  if (options.crate !== false && failures.length < 5) {
+  // The finish is one claim about the level rather than one per step, so it
+  // belongs to the first slice and is not repeated by the others.
+  if (options.crate !== false && failures.length < 5 && shard.index === 0) {
     const unfinished = crateFinishes(ctx, level, result);
     if (unfinished) failures.push(unfinished);
   }
@@ -1005,38 +1017,139 @@ export function verifyLevel(level, mode, seed, options = {}) {
 
 /* ------------------------------------------------------------------- main */
 
-if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
-  let bad = 0;
-  const campaign = buildCampaign();
-  const r = verifyLevel(campaign, 0, 1);
-  console.log(
-    `campaign        ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ${r.steps} climbing steps and ${r.holds} hold rooms replayed, crate hauled up every one of them`,
-  );
-  if (!r.ok) {
-    bad++;
-    if (r.reason) console.log(`  ${r.reason}`);
-    for (const f of r.failures ?? []) console.log(`  ${f}`);
-  }
-
+/**
+ * Every level this gate is responsible for, in the order it reports them.
+ *
+ * A list rather than a loop because the run is spread across processes now:
+ * the parent hands each child a level and a slice of its steps, so the two of
+ * them cannot disagree about what was checked.
+ */
+function levels() {
   const towers = Number(process.env.TOWER_SAMPLES ?? 12);
+  const list = [{ label: 'campaign      ', build: () => buildCampaign(), mode: 0, seed: 1 }];
   for (let i = 0; i < towers; i++) {
     const seed = (i + 1) * 104729;
-    const level = buildTower(seed, 6 + (i % 10));
-    const t = verifyLevel(level, 1, seed);
-    const label = `tower ${String(seed).padStart(7)}`;
-    console.log(
-      `${label}  ${t.ok ? 'OK  ' : 'FAIL'}  ${t.reached}/${t.total} footholds reachable, ${t.steps} climbing steps and ${t.holds} hold rooms replayed, crate hauled up every one of them`,
-    );
-    if (!t.ok) {
-      bad++;
-      for (const f of t.failures ?? []) console.log(`  ${f}`);
-      if (t.reason) console.log(`  ${t.reason}`);
-    }
+    list.push({
+      label: `tower ${String(seed).padStart(7)}`,
+      build: () => buildTower(seed, 6 + (i % 10)),
+      mode: 1,
+      seed,
+    });
   }
+  return list;
+}
 
-  if (bad > 0) {
-    console.error(`\n${bad} level(s) cannot be climbed, or cannot be finished with the crate.`);
-    process.exit(1);
+function report(label, r) {
+  console.log(
+    `${label}  ${r.ok ? 'OK  ' : 'FAIL'}  ${r.reached}/${r.total} footholds reachable, ` +
+      `${r.steps} climbing steps and ${r.holds} hold rooms replayed, crate hauled up every one of them`,
+  );
+  if (r.ok) return 0;
+  if (r.reason) console.log(`  ${r.reason}`);
+  for (const f of r.failures ?? []) console.log(`  ${f}`);
+  return 1;
+}
+
+if (process.argv[1] && process.argv[1].endsWith('verify-levels.mjs')) {
+  const assignment = process.env.VERIFY_SHARD;
+  if (process.env.VERIFY_CHILD && assignment === undefined) {
+    // A child that does not understand its assignment must not become a
+    // parent. Without this a rename of the variable below turns the pool into
+    // a fork bomb, which is exactly how it was found.
+    throw new Error('verify-levels child started without a shard assignment');
   }
-  console.log('\nEvery tower is climbable, and the crate can be brought up all of it.');
+  if (assignment !== undefined) {
+    // A child. One slice of one level, one line of JSON, nothing on stdout the
+    // parent has to guess at.
+    const [level, index, count] = assignment.split(':').map(Number);
+    const job = levels()[level];
+    const r = verifyLevel(job.build(), job.mode, job.seed, { shard: { index, count } });
+    process.stdout.write(JSON.stringify(r) + '\n');
+  } else {
+    // The parent. The solo search is the expensive half of this file — it takes
+    // every gate in every level and throws five and a half thousand scripted
+    // attempts and fifteen hundred random ones at it, in the real simulation —
+    // and the library is built around sixty-two gates in the campaign alone
+    // now, where it used to have seven. Sequentially that is well over an hour
+    // of one core while the others sit idle, which is long enough that people
+    // start running the build gate less often, and a gate nobody runs is not a
+    // gate.
+    //
+    // Levels are independent of each other and a level's steps are independent
+    // of each other, so the work goes out as (level, slice) pairs, one child
+    // process at a time per core. Nothing is shared and nothing is
+    // approximated: every check that ran before still runs, on the same levels,
+    // and the report is assembled back into the same order.
+    const { fork } = await import('node:child_process');
+    const os = await import('node:os');
+    const list = levels();
+    const cores = Math.max(1, os.cpus().length);
+    // Enough slices to keep every core busy through the tail of the run: the
+    // campaign is three times the size of a tower and would otherwise be the
+    // last thing still going with everything else finished.
+    const slices = Math.max(2, cores);
+    const queue = [];
+    for (let l = 0; l < list.length; l++) {
+      for (let i = 0; i < slices; i++) queue.push({ level: l, index: i, count: slices });
+    }
+    const parts = list.map(() => []);
+    let next = 0;
+    const started = Date.now();
+
+    await new Promise((resolve, reject) => {
+      let live = 0;
+      const pump = () => {
+        while (live < cores && next < queue.length) {
+          const job = queue[next++];
+          live++;
+          const child = fork(process.argv[1], [], {
+            env: {
+              ...process.env,
+              VERIFY_CHILD: '1',
+              VERIFY_SHARD: `${job.level}:${job.index}:${job.count}`,
+            },
+            stdio: ['ignore', 'pipe', 'inherit', 'ipc'],
+          });
+          let out = '';
+          child.stdout.on('data', (chunk) => {
+            out += chunk;
+          });
+          child.on('exit', (code) => {
+            live--;
+            if (!out.trim()) {
+              reject(new Error(`${list[job.level].label.trim()} slice ${job.index} died with code ${code}`));
+              return;
+            }
+            parts[job.level].push(JSON.parse(out.trim().split('\n').pop()));
+            if (next >= queue.length && live === 0) resolve();
+            else pump();
+          });
+        }
+      };
+      pump();
+    });
+
+    let bad = 0;
+    for (let l = 0; l < list.length; l++) {
+      const slicesOf = parts[l];
+      bad += report(list[l].label, {
+        ok: slicesOf.every((p) => p.ok),
+        reached: slicesOf[0].reached,
+        total: slicesOf[0].total,
+        steps: slicesOf[0].steps,
+        holds: slicesOf[0].holds,
+        reason: slicesOf.find((p) => p.reason)?.reason,
+        failures: slicesOf.flatMap((p) => p.failures ?? []),
+      });
+    }
+    console.log(
+      `\n${list.length} levels in ${queue.length} slices on ${cores} cores, ` +
+        `${Math.round((Date.now() - started) / 1000)}s.`,
+    );
+    if (bad > 0) {
+      console.error(`${bad} level(s) cannot be climbed, or cannot be finished with the crate.`);
+      process.exit(1);
+    }
+    console.log('Every tower is climbable, and the crate can be brought up all of it.');
+  }
 }

@@ -1127,7 +1127,19 @@ function worstLine(app: App): HTMLElement | null {
       : w.kind === WORST_BETRAYAL
         ? `one of you pulled the other ${metres} metres off a ledge`
         : `somebody fell ${metres} metres`;
-  return h('p', { class: 'sub worst' }, `Worst moment: ${formatTime(w.tick / 60)} — ${said}.`);
+  const caption = `Worst moment: ${formatTime(w.tick / 60)} — ${said}.`;
+  const shot = app.worstShot;
+  if (!shot) return h('p', { class: 'sub worst' }, caption);
+  // The sentence stays exactly as it was and becomes the caption under the
+  // picture, so a card with no photograph — a run whose worst moment happened
+  // before the first frame was drawn, or a browser that will not give up its
+  // canvas — reads the same as it always did.
+  return h(
+    'figure',
+    { class: 'polaroid' },
+    h('img', { src: shot, alt: caption, width: '320' }),
+    h('figcaption', { class: 'sub worst' }, caption),
+  );
 }
 
 /**

@@ -528,13 +528,14 @@ Counted from the built data rather than remembered, because the two drift:
 
 | | |
 | --- | --- |
-| Hand-authored chunks | 32, across four biomes |
-| The Long Haul | 1047 rows — a kilometre of tower — with 32 checkpoints |
-| Two-person gates on the campaign route | 7, and at least one in every seeded tower |
-| Blades and presses | 30 saws, 16 movers |
+| Hand-authored chunks | 60, across four biomes; 24 of them held back from the campaign |
+| The Long Haul | 36 rooms, 1179 rows — a kilometre of tower — with a checkpoint in every one |
+| Two-person moments on the campaign route | 71 — 62 leg-ups and 9 doorways — one every 4.6 climbing steps, and at least one in every seeded tower |
+| Steps with something lethal on them | 70 of 329 |
+| Blades and presses on the campaign | 27 saws, 13 movers |
 | Achievements | 16, unlocking 9 hats |
-| The Gauntlet | any height from the same 32-chunk pool, on a shared seed |
-| The Daily Haul | one procedurally assembled tower per calendar day |
+| The Gauntlet | any height from the same 60-chunk pool, on a shared seed, with named conditions on the floors as it gets taller |
+| The Daily Haul | one procedurally assembled tower per calendar day, and a fortnight of them remembered |
 
 The Gauntlet and the campaign draw on the same pool, so a chunk written for one
 lengthens both — which is the only reason the content budget is affordable at

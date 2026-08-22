@@ -9,11 +9,18 @@ your friend off a ledge.
 
 **Brace, and your partner goes higher than either of you can alone.** Hold GRIP and you
 become a step: they stand against you, jump, and clear six rows where five is everybody's
-limit. Every biome has a gate cut to that — a foothold simply missing — and getting past
-one takes both verbs in order: you brace, they go up, they brace on the lip, you haul
-yourself up the rope after them. **The campaign cannot be finished by one person.** That
-is measured, not asserted: the reachability fill reaches 783 cells alone and 2739
-together, and the build fails if a pair cannot replay every gate in the real simulation.
+limit. There are sixty-two gates cut to that in the campaign — a foothold simply missing —
+and getting past one takes both verbs in order: you brace, they go up, they brace on the
+lip, you haul yourself up the rope after them. Nine more rooms are built around a doorway
+instead: a plate in the floor holds a shutter open only while somebody is standing on it,
+and there is a plate on each side, so the way through is to take turns. Seventy-one
+two-person moments in three hundred and twenty-nine climbing steps — **one every four or
+five.**
+
+**The campaign cannot be finished by one person.** That is measured, not asserted: the
+reachability fill reaches 62 of the tower's 4146 footholds alone and all 4146 together,
+and the build fails if a pair cannot replay every gate in the real simulation — or if one
+player can.
 
 > It was not always true, and the way it was false is the most useful thing in this repo.
 > See *The second player was cargo with opinions* in [docs/DESIGN.md](docs/DESIGN.md):

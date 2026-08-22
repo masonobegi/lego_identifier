@@ -542,3 +542,33 @@ kbd {
    red the game already uses for damage, because it is the one line on the card
    that is not on your side. */
 .screen .sub.worst { color: #b8341c; font-weight: 700; }
+
+/* And the photograph of it. A print pinned to the card: white border, a little
+   off square, a hard shadow. The tilt is fixed rather than random — a card that
+   sits at a different angle every time you finish reads as decoration, and this
+   is evidence. */
+.screen .polaroid {
+  margin: 14px auto 4px;
+  width: max-content;
+  max-width: 100%;
+  padding: 10px 10px 6px;
+  background: #f4f1e8;
+  border: 1px solid rgba(9, 12, 22, 0.25);
+  box-shadow: 4px 5px 0 rgba(9, 12, 22, 0.35);
+  transform: rotate(-1.1deg);
+}
+
+.screen .polaroid img {
+  display: block;
+  width: 320px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+  border: 1px solid rgba(9, 12, 22, 0.45);
+}
+
+.screen .polaroid figcaption {
+  margin: 8px 2px 0;
+  max-width: 320px;
+  text-align: center;
+}
