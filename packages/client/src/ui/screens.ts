@@ -360,6 +360,12 @@ function lobbyScreen(app: App): HTMLElement {
   const me = net?.localIndex ?? 0;
   const ready = net?.peers[me]?.ready ?? false;
   const bothHere = Boolean(net?.peers[0].present && net?.peers[1].present);
+  // Quick match on an empty server opens a public room and waits, which looks
+  // exactly like hosting one on purpose. On a game with nobody playing it yet
+  // that is the most likely first session there is, and a player who asked to
+  // be matched should be told that nobody came rather than left to work it out.
+  const waited = app.clockSeconds - app.lobbySince;
+  const stranded = !bothHere && app.lobbyIntent === INTENT_QUICKPLAY && waited > 20;
 
   return h(
     'div',
@@ -375,6 +381,14 @@ function lobbyScreen(app: App): HTMLElement {
         ? `${dailyLabel(app.today)}. The same tower as everybody else, until midnight.`
         : 'Both of you press ready. Nobody starts alone.',
     ),
+    stranded
+      ? h(
+          'div',
+          { class: 'notice' },
+          h('p', {}, 'Nobody else is looking for a haul right now. The code above still works if you want to send it to somebody.'),
+          button(app, 'Climb it with the Autohauler', 'Start now, on your own', () => app.giveUpWaiting(), { primary: true }),
+        )
+      : null,
     h(
       'div',
       { class: 'codebox' },

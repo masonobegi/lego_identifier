@@ -117,7 +117,14 @@ export class App {
 
   attract: LocalMatch;
   private lastFrame = 0;
-  private clockSeconds = 0;
+  /** Seconds since the app started. Read by screens that time a wait. */
+  clockSeconds = 0;
+  /** How this room was entered, so the lobby can tell a wait from a plan. */
+  lobbyIntent = 0;
+  /** When this lobby opened, in client seconds. */
+  lobbySince = 0;
+  /** Whether this lobby has already redrawn to say nobody is coming. */
+  private saidStranded = false;
   /** When the match went to 'paused', in client seconds; 0 when it has not. */
   private pausedSince = 0;
   private hintText = '';
@@ -232,6 +239,17 @@ export class App {
     } else if (this.screen !== 'none') {
       if (menu.cancel) this.dismiss();
       else this.navigate(menu);
+    }
+
+    // The lobby only redraws when something happens to it, and nobody arriving
+    // is not an event. One redraw, on the tick the wait becomes long enough to
+    // be worth saying out loud.
+    if (this.screen === 'lobby' && !this.saidStranded && this.lobbyIntent === INTENT_QUICKPLAY) {
+      const alone = !(this.net?.peers[0].present && this.net?.peers[1].present);
+      if (alone && this.clockSeconds - this.lobbySince > 20) {
+        this.saidStranded = true;
+        this.refresh();
+      }
     }
 
     const session = this.net ?? this.local;
@@ -699,6 +717,7 @@ export class App {
    * asks for one by name, which is how both ends of a daily agree on it.
    */
   connect(intent: number, code = '', seed = 0): void {
+    this.lobbyIntent = intent;
     this.audio.unlock();
     this.disposeSession();
     this.errorMessage = '';
@@ -756,6 +775,8 @@ export class App {
     client.onPhase = (phase) => {
       switch (phase) {
         case 'lobby':
+          this.lobbySince = this.clockSeconds;
+          this.saidStranded = false;
           this.lobbyMode = client.mode;
           this.lobbyTowerLength = client.towerLength;
           this.resetRunStats();
@@ -885,6 +906,22 @@ export class App {
     this.lobbyMode = MODE_GAUNTLET;
     this.lobbyTowerLength = DAILY_FLOORS;
     this.connect(INTENT_CREATE, '', dailySeed(this.today));
+  }
+
+  /**
+   * Give up on finding a stranger and take the Autohauler instead.
+   *
+   * Quick match on an empty server is not an error and does not look like one:
+   * the server opens a public room, hands over a code and waits, so a player
+   * who asked to be matched with somebody sits in what looks like a private
+   * lobby until they work out that nobody is coming. On a game with no players
+   * yet — which is every game on its launch day — that is the most likely first
+   * session there is, and the answer to it is one button.
+   */
+  giveUpWaiting(): void {
+    this.botPartner = true;
+    this.leave();
+    this.startCouch();
   }
 
   startCouch(mode = this.lobbyMode, seed = (Math.random() * 0x7fffffff) | 0, floors = this.lobbyTowerLength): void {
