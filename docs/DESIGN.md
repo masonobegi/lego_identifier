@@ -633,12 +633,34 @@ the same chunk twice in a row.
 
 ## Modes
 
-**The Long Haul** — twenty authored chunks across four biomes: a builder's yard, a
-foundry, a freezer, and a spire that combines everything. Around 650 tiles of climb, with
-a checkpoint at the top of every chunk.
+**The Long Haul** — the authored tower, across four biomes: a builder's yard, a foundry, a
+freezer, and a spire that combines everything, with a checkpoint at the top of every
+chunk. It is deliberately *not* the whole chunk library. It used to be — the two were
+byte-identical in the same order — which meant finishing it once showed a player every
+room in the game and left the other modes reshuffling floors they had already climbed.
+Twenty of the sixty rooms are held back for them.
 
-**The Gauntlet** — a seeded tower of 3 to 30 floors drawn from the same chunk library. The
-seed is shared, so both players build the same tower from the same twelve bytes.
+**The Gauntlet** — a seeded tower of 3 to 30 floors drawn from the same library. The seed
+is shared, so both players build the same tower from the same twelve bytes.
+
+Floors in it can be handed a named condition, which arrives as the tower gets taller and
+never on the ground floor or the roof: **NO CHECKPOINT** adds nothing to the room but means
+you cannot bank it, **CROSSWIND** blows through the empty shaft and reaches the crate as
+well as the pair, and **CRACKED CRATE** starts the run's cargo already hurt — dealt once,
+and never below the halfway mark, because a cracked crate on floor two is a run that was
+over before it began.
+
+This exists because "a different tower every time" was delivering a different *order*, and
+sixty rooms dealt in a new sequence is sixty rooms however you cut it. All of it is level
+data applied when the tower is assembled: no simulation change, no state, nothing over the
+wire, and nothing that moves a foothold — a condition that could make a room unclimbable
+would be a condition that shipped a tower nobody can finish, and forty seeded towers are
+checked for exactly that.
+
+**The daily haul** — one tower everybody gets, from the date. The profile keeps a fortnight
+of them rather than only today, because the point of a daily is the row of evenings behind
+it; day seven being day one with a different platform order and a personal-best clock is
+not a reason to come back.
 
 **Local play** — either mode with both haulers on one machine. No server involved, which
 also means it works as a demo, a review build, and an offline fallback. The second hauler
