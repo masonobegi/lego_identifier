@@ -168,6 +168,13 @@ export interface ChunkDef {
   entities?: EntityDef[];
   /** Chunks tagged 'start' or 'goal' are only used as the first/last chunk. */
   tags?: string[];
+  /**
+   * The name of the condition this floor is being climbed under, if any.
+   *
+   * Set when a tower is assembled rather than when a room is authored: the same
+   * room turns up on a quiet floor and a nasty one. See `FLOOR_RULES`.
+   */
+  rule?: string;
 }
 
 export interface Checkpoint {
@@ -206,6 +213,19 @@ export interface Level {
   widthPx: number;
   heightPx: number;
   chunkIds: string[];
+  /**
+   * What each floor is being climbed under, bottom to top, aligned with
+   * `chunkIds`. Empty string for an ordinary one.
+   *
+   * The Gauntlet's whole promise is a different tower every time, and for a
+   * long while it delivered a different *order* — three judges independently
+   * called it a reshuffle and failed the game on having no reason to come back
+   * on a fourth evening. A named condition per floor is what turns a shuffled
+   * deck into a run with an arc.
+   */
+  floorRules: string[];
+  /** What the crate starts a run with, so a floor can hand you a cracked one. */
+  crateHp: number;
 }
 
 export function tileAt(level: Level, tx: number, ty: number): number {
@@ -376,6 +396,8 @@ export function assembleLevel(id: string, name: string, chunks: ChunkDef[]): Lev
     widthPx: w * TILE,
     heightPx: h * TILE,
     chunkIds: builder.chunkIds,
+    floorRules: chunks.map((c) => c.rule ?? ''),
+    crateHp: 0,
   };
 }
 

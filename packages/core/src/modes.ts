@@ -1,5 +1,7 @@
 import { CHUNKS } from './chunks.js';
 import { assembleLevel, generateTower, type ChunkDef, type Level } from './level.js';
+import { CARGO_HP } from './constants.js';
+import { Rng } from './rng.js';
 import { MODE_GAUNTLET, MODE_HAUL } from './types.js';
 
 /** The authored campaign, bottom to top. */
@@ -29,11 +31,78 @@ export function towerId(seed: number, floors: number): string {
   return `tower-${seed >>> 0}-${floors}`;
 }
 
+/**
+ * The conditions a Gauntlet floor can be handed, and what each one does to it.
+ *
+ * The Gauntlet's promise is a different tower every time and for a long while
+ * it delivered a different *order*: three judges independently described it as
+ * a reshuffle and failed the game on having no reason to come back for a fourth
+ * evening. Sixty rooms in a shuffled deck is sixty rooms however you cut it. A
+ * named condition on a floor multiplies them instead — the same room climbed in
+ * the dark, or with the wind up, or with the crate already cracked, is a
+ * different problem and reads as one before you have taken a step.
+ *
+ * Every one of these is a change to the level DATA, applied when the tower is
+ * assembled. None of them touches the simulation, carries state, or needs to
+ * cross the wire: both peers build the same tower from the same seed and get
+ * the same conditions, exactly as they already do for the rooms themselves.
+ *
+ * They are also deliberately shy of the climb. Nothing here moves a foothold,
+ * because the build gate proves every step of every tower and a condition that
+ * could make a room unclimbable would be a condition that shipped a tower
+ * nobody can finish.
+ */
+const FLOOR_RULES: { name: string; apply: (rows: string[]) => string[] }[] = [
+  {
+    // The stakes, with nothing added to the room at all. A floor you cannot
+    // bank is a floor you have to climb twice if it goes wrong, and knowing
+    // that on the way in is the whole effect.
+    name: 'NO CHECKPOINT',
+    apply: (rows) => rows.map((r) => r.replace(/!/g, '.')),
+  },
+  {
+    // Wind in the empty shaft. It reaches the crate rather than the pair, which
+    // makes it a problem about the thing you are carrying — and the crate is
+    // the only object in the game both of you are responsible for.
+    name: 'CROSSWIND',
+    apply: (rows) =>
+      rows.map((r, i) =>
+        i % 4 === 2 ? r.slice(0, 3) + r.slice(3, 37).replace(/\.{6}/g, 'WW....') + r.slice(37) : r,
+      ),
+  },
+  {
+    // Nothing is drawn differently; the crate simply starts this floor's tower
+    // already hurt. Handed out only above the halfway mark, because a cracked
+    // crate on floor two is a run that was over before it started.
+    name: 'CRACKED CRATE',
+    apply: (rows) => rows,
+  },
+];
+
 /** A seeded endless tower drawn from the same chunk library. */
 export function buildTower(seed: number, length: number): Level {
   const floors = Math.max(1, Math.min(60, length));
   const chunks: ChunkDef[] = generateTower(seed, CHUNKS, floors);
-  return assembleLevel(towerId(seed, floors), 'THE GAUNTLET', chunks);
+
+  // Conditions arrive as the tower gets taller, and never on the ground floor:
+  // the first thing a player meets should be the game, not a modifier on it.
+  const rng = new Rng(seed ^ 0x51ed7a11);
+  let cracked = false;
+  const dressed = chunks.map((chunk, i) => {
+    const height = chunks.length <= 2 ? 0 : (i - 1) / (chunks.length - 2);
+    const start = chunk.tags?.includes('start') || chunk.tags?.includes('goal');
+    if (start || i < 2 || rng.nextFloat() > 0.18 + height * 0.34) return chunk;
+    const pick = FLOOR_RULES[rng.nextU32() % FLOOR_RULES.length];
+    if (pick.name === 'CRACKED CRATE') {
+      if (height < 0.5 || cracked) return chunk;
+      cracked = true;
+    }
+    return { ...chunk, rows: pick.apply(chunk.rows), rule: pick.name };
+  });
+
+  const level = assembleLevel(towerId(seed, floors), 'THE GAUNTLET', dressed);
+  if (cracked) level.crateHp = Math.round(CARGO_HP * 0.55);
+  return level;
 }
 
 export const DEFAULT_TOWER_LENGTH = 10;

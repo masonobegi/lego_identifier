@@ -137,7 +137,7 @@ export function createWorld(ctx: SimContext): World {
     ropePY: new Float64Array(ROPE_NODES),
     cargo: {
       x: 0, y: 0, px: 0, py: 0, rot: 0, rotV: 0,
-      hp: CARGO_HP, shake: 0, grounded: 0, calm: 0, hurt: 0,
+      hp: level.crateHp || CARGO_HP, shake: 0, grounded: 0, calm: 0, hurt: 0,
     },
     crumble: new Int32Array(level.crumbleTile.length),
     open: new Uint8Array(level.holdGroups),
