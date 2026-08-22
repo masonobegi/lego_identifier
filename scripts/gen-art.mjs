@@ -360,12 +360,16 @@ function render([mode, W, H]) {
         { x0: -8, x1: 316, y: 240, h: 22 },
         { x0: -8, x1: 176, y: 104, h: 19, mark: 'NO STEP' },
         { x0: -8, x1: 240, y: 348, h: 18 },
-        { x0: 430, x1: 648, y: 136, h: 20, mark: 'SWL 2.5t' },
+        { x0: 430, x1: 648, y: 152, h: 20, mark: 'SWL 2.5t' },
+        { x0: 540, x1: 648, y: 52, h: 17 },
         { x0: 556, x1: 648, y: 320, h: 18 },
       ],
-      numeral: { text: '12', cx: 92, cy: 186, h: 132 },
+      numeral: { text: '12', cx: 100, cy: 186, h: 110 },
       anchor: { px: 250, py: 188, s: 2.3, rot: -0.42 },
-      flyer: { px: 478, py: 248, s: 2.0, rot: -0.5 },
+      // Reaching for the ledge above him and not touching it: his fist stops
+      // five units under the girder's cap, because a hand drawn across the
+      // hazard band reads as a hand in front of it, not as a grip.
+      flyer: { px: 490, py: 268, s: 1.95, rot: -0.5 },
       sag: 40,
       crate: { w: 60, h: 50, rot: 0.16, drop: 0.1, t: 0.5 },
       ropeW: 3.0,
@@ -644,7 +648,7 @@ function render([mode, W, H]) {
   // is a photograph of some scaffolding.
   if (L.hoist) {
     const ho = L.hoist;
-    const hw = Math.max(2, ho.w * 0.03);
+    const hw = Math.max(1.6, ho.w * 0.022);
     ctx.lineCap = 'round';
     ctx.strokeStyle = P.ink;
     ctx.lineWidth = hw * 2.6;
@@ -1119,10 +1123,10 @@ function bhook(g, x, y, r) {
 /** Rope that is not under tension, coiled on the deck. */
 function bcoil(g, x, y, w) {
   g.strokeStyle = P.ink;
-  g.lineWidth = 1.6;
+  g.lineWidth = 1.3;
   for (let i = 0; i < 3; i++) {
     g.beginPath();
-    g.ellipse(x, y - i * 1.9, w * (1 - i * 0.16), w * 0.34, 0, 0, Math.PI * 2);
+    g.ellipse(x, y - i * 2.4, w * (1 - i * 0.12), w * 0.4, 0, 0, Math.PI * 2);
     g.stroke();
   }
 }
@@ -1263,7 +1267,7 @@ function bhauler(g, o) {
 function bnumeral(g, text, cx, cy, h) {
   const n = stencil(text, h, P.dust, h * 0.02, true);
   g.save();
-  g.globalAlpha = 0.34;
+  g.globalAlpha = 0.4;
   g.drawImage(n.canvas, cx - n.canvas.width / 2, cy - n.canvas.height / 2);
   g.restore();
 }
@@ -1297,7 +1301,8 @@ const PICTOS = {
     g.lineTo(47.5, 27);
     g.closePath();
     g.fill();
-    bcoil(g, 11, GND - 2, 6);
+    bcoil(g, 11, GND - 2, 7);
+    brope(g, 12, GND - 7, 17, GND - 10, 24, GND - 10, 1.8);
     bhauler(g, {
       x: 25, y: GND - 10, s: 0.95, look: 1, vest: VEST.orange, legs: STAND,
       hands: [{ h: [13, -14], e: [10, -7] }, { h: [-8, 1], e: [-8, -6] }],
@@ -1317,22 +1322,15 @@ const PICTOS = {
   // Two hands under it and not a board out of place. The crate is the only
   // thing in the frame because for one whole run it was the only thing anyone
   // was thinking about.
+  // Carried over his head with both hands, which is the one way of holding it
+  // that cannot end in a knee going through the lid. Two disembodied arms
+  // cupping it from below read as a table.
   FLAWLESS_CRATE: (g) => {
-    g.strokeStyle = P.ink;
-    g.lineWidth = 3;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(6, GND);
-    g.quadraticCurveTo(10, 38, 19, 35);
-    g.moveTo(58, GND);
-    g.quadraticCurveTo(54, 38, 45, 35);
-    g.stroke();
-    g.fillStyle = P.ink;
-    g.beginPath();
-    g.arc(19, 35, 2, 0, Math.PI * 2);
-    g.arc(45, 35, 2, 0, Math.PI * 2);
-    g.fill();
-    bcrate(g, 32, 24, 30, 23, 0);
+    bhauler(g, {
+      x: 32, y: GND - 10, s: 0.95, look: 1, vest: VEST.orange, legs: STAND,
+      hands: [{ h: [9, -23], e: [10, -16] }, { h: [-9, -23], e: [-10, -16] }],
+    });
+    bcrate(g, 32, 12, 27, 17, 0);
   },
 
   // Twenty five of them. The hook is still swinging and empty, which is how it
@@ -1356,22 +1354,24 @@ const PICTOS = {
     bplank(g, 33, 35, 12, 4, 0.95, false);
   },
 
-  // A hundred. He is not hurt, he is just lying there because it is quicker
-  // than admitting whose fault it was.
+  // Number one hundred, arriving head first. Laid out flat on the strip he is
+  // an orange block with spikes coming off it; upside down the figure is still
+  // a figure, and the hat leaving on its own says the rest.
   HUNDRED_DEATHS: (g) => {
     bhauler(g, {
-      x: 31, y: 47, s: 0.85, rot: -1.55, look: 1, hat: false, eyes: 'x', vest: VEST.orange,
-      legs: [{ h: [3, 13], e: [2, 7] }, { h: [-4, 12], e: [-3, 6] }],
-      hands: [{ h: [5, -9], e: [3, -11] }, { h: [-6, -6], e: [-3, -10] }],
+      x: 30, y: 32, s: 0.9, rot: 3.0, look: 1, hat: false, eyes: 'x', vest: VEST.orange,
+      legs: [{ h: [6, 11], e: [4, 6] }, { h: [-6, 12], e: [-4, 6] }],
+      hands: [{ h: [10, -13], e: [9, -6] }, { h: [-10, -12], e: [-9, -6] }],
     });
-    bhat(g, 51, GND - 3, 0.95, -0.35);
+    bhat(g, 52, GND - 4, 1.05, -0.4);
+    bdust(g, 21, GND - 1, -3, 4);
     g.strokeStyle = P.ink;
     g.lineWidth = 1.4;
     g.lineCap = 'round';
-    for (const a of [-2.2, -1.6, -1.0]) {
+    for (const a of [-2.5, -1.9, -1.3]) {
       g.beginPath();
-      g.moveTo(13 + Math.cos(a) * 7, 44 + Math.sin(a) * 7);
-      g.lineTo(13 + Math.cos(a) * 11, 44 + Math.sin(a) * 11);
+      g.moveTo(35 + Math.cos(a) * 9, GND - 3 + Math.sin(a) * 8);
+      g.lineTo(35 + Math.cos(a) * 13.5, GND - 3 + Math.sin(a) * 12.5);
       g.stroke();
     }
   },
@@ -1413,9 +1413,11 @@ const PICTOS = {
   // A ledge neither of them can reach, and the only ladder on site is a man.
   FIRST_BOOST: (g) => {
     bledge(g, -2, 6, 26, 5);
+    // Hands wider than the man standing on them, or the boost is a black mass
+    // where the two figures meet and nobody is lifting anybody.
     bhauler(g, {
       x: 32, y: GND - 7.5, s: 0.75, look: -1, vest: VEST.orange, legs: STAND,
-      hands: [{ h: [5, -24], e: [7, -17] }, { h: [-5, -24], e: [-7, -17] }],
+      hands: [{ h: [9, -23], e: [10, -16] }, { h: [-9, -23], e: [-10, -16] }],
     });
     bhauler(g, {
       x: 32, y: 21, s: 0.62, look: -1, vest: VEST.lime,
@@ -1428,7 +1430,7 @@ const PICTOS = {
   // and became site equipment.
   BOOST_100: (g) => {
     const legs = [{ h: [4, 10], e: [3, 5] }, { h: [-4, 10], e: [-3, 5] }];
-    const up = [{ h: [5, -23], e: [7, -16] }, { h: [-5, -23], e: [-7, -16] }];
+    const up = [{ h: [9, -22], e: [10, -15] }, { h: [-9, -22], e: [-10, -15] }];
     bhauler(g, { x: 15, y: GND - 7, s: 0.7, look: 1, vest: VEST.orange, legs, hands: up });
     bhauler(g, { x: 45, y: GND - 7, s: 0.7, look: -1, vest: VEST.lime, legs, hands: up });
     g.fillStyle = P.cargo;
@@ -1447,14 +1449,14 @@ const PICTOS = {
   ANCHOR_500: (g) => {
     bledge(g, -2, 15, 50, 7);
     g.strokeStyle = P.dust;
-    g.lineWidth = 0.9;
+    g.lineWidth = 1.3;
     g.beginPath();
-    g.arc(45, 22, 19, 0.55, 1.65);
+    g.arc(45, 22, 19, 0.5, 1.7);
     g.stroke();
     brope(g, 45, 22, 47, 30, 50, 39, 2.2);
     bhauler(g, {
       x: 22, y: GND - 10, s: 0.95, look: 1, vest: VEST.orange, legs: BRACED,
-      hands: [{ h: [6, -23], e: [8, -16] }, { h: [-6, -23], e: [-8, -16] }],
+      hands: [{ h: [9, -22], e: [10, -15] }, { h: [-9, -22], e: [-10, -15] }],
     });
     bdust(g, 12, GND - 1, -3, 4);
     bhauler(g, {
@@ -1469,10 +1471,10 @@ const PICTOS = {
     bnumeral(g, '10', 33, 32, 34);
     for (let i = 0; i < 6; i++) {
       const y = GND - 3 - i * 6;
-      bledge(g, i % 2 === 0 ? 2 : 30, y, 32, 3.4);
+      bledge(g, i % 2 === 0 ? 1 : 35, y, 28, 3.4);
     }
     bhauler(g, {
-      x: 44, y: 14, s: 0.5, look: -1, vest: VEST.orange, legs: STAND,
+      x: 47, y: 14, s: 0.5, look: -1, vest: VEST.orange, legs: STAND,
       hands: [{ h: [10, -14], e: [8, -8] }, { h: [-8, -2], e: [-8, -8] }],
     });
   },
@@ -1481,12 +1483,15 @@ const PICTOS = {
   // climber is a speck on the top one.
   GAUNTLET_20: (g) => {
     bnumeral(g, '20', 33, 32, 34);
-    for (let i = 0; i < 11; i++) {
-      const y = GND - 2 - i * 3.1;
-      bledge(g, i % 2 === 0 ? 4 : 32, y, 28, 1.8);
+    // Nine ledges at 2.4 deep rather than eleven at 1.8: a 1.8-unit bar with a
+    // yellow cap under a pixel thick comes out of the JPEG as beige mush and
+    // the whole stack turns into one ladder.
+    for (let i = 0; i < 9; i++) {
+      const y = GND - 2 - i * 3.9;
+      bledge(g, i % 2 === 0 ? 2 : 36, y, 26, 2.4);
     }
     bhauler(g, {
-      x: 46, y: 14, s: 0.42, look: -1, vest: VEST.lime, legs: STAND,
+      x: 15, y: 15.6, s: 0.42, look: 1, vest: VEST.lime, legs: STAND,
       hands: [{ h: [10, -14], e: [8, -8] }, { h: [-8, -2], e: [-8, -8] }],
     });
   },
@@ -1526,28 +1531,33 @@ const PICTOS = {
   // man who climbed it the smallest thing in the frame.
   ONE_KILOMETRE: (g) => {
     g.fillStyle = P.tileBody;
-    g.fillRect(0, 0, 27, GND);
+    g.fillRect(0, 0, 30, GND);
     g.fillStyle = 'rgba(27,23,20,0.10)';
-    for (let y = 5; y < GND; y += 8) g.fillRect(0, y, 27, 1.2);
-    g.fillStyle = P.ink;
-    g.fillRect(25.6, 0, 1.6, GND);
-    g.fillStyle = P.ink;
-    g.fillRect(46, 6, 1.4, GND - 6);
-    for (let i = 0; i < 11; i++) {
-      const y = GND - 2 - i * 4.3;
-      g.fillRect(i % 5 === 0 ? 39 : 42, y, i % 5 === 0 ? 7 : 4, 1.2);
+    for (let y = 4; y < GND; y += 9) g.fillRect(0, y, 30, 1.2);
+    g.fillStyle = P.tileDetail;
+    for (let i = 0; i < 12; i++) {
+      g.fillRect(hash(i * 3 + 1) * 26, hash(i * 5 + 2) * GND, 2 + hash(i) * 5, 1);
     }
-    g.fillStyle = P.red;
-    g.beginPath();
-    g.moveTo(46, 9);
-    g.lineTo(39, 12);
-    g.lineTo(46, 15);
-    g.closePath();
-    g.fill();
+    g.fillStyle = P.ink;
+    g.fillRect(28.4, 0, 1.6, GND);
+    g.fillRect(48, 8, 1.4, GND - 8);
+    for (let i = 0; i < 10; i++) {
+      const y = GND - 2 - i * 4.6;
+      g.fillRect(i % 5 === 0 ? 41 : 44, y, i % 5 === 0 ? 7 : 4, 1.2);
+    }
+    // The height it was all for, on a plate on the staff, in the same hand as
+    // the SWL on the girders.
+    g.fillStyle = P.chalk;
+    g.fillRect(36, 3, 24, 11);
+    g.strokeStyle = P.ink;
+    g.lineWidth = 1.1;
+    g.strokeRect(36, 3, 24, 11);
+    const plate = stencil('1km', 8.5, P.ink, 0.5, false);
+    g.drawImage(plate.canvas, 48 - plate.canvas.width / 2, 8.5 - plate.asc / 2 - plate.pad);
     bhauler(g, {
-      x: 20, y: GND - 5, s: 0.45, look: 1, vest: VEST.orange,
+      x: 20, y: GND - 6, s: 0.55, look: 1, vest: VEST.orange,
       legs: [{ h: [5, 10], e: [4, 5] }, { h: [-6, 8], e: [-5, 4] }],
-      hands: [{ h: [7, -18], e: [7, -12] }, { h: [-7, -14], e: [-8, -9] }],
+      hands: [{ h: [8, -19], e: [8, -13] }, { h: [-8, -15], e: [-9, -10] }],
     });
   },
 
@@ -1555,16 +1565,18 @@ const PICTOS = {
   // everything that has happened on it is the achievement.
   MARATHON: (g) => {
     bledge(g, -2, 32, 68, 7);
-    bcoil(g, 9, 30, 5);
+    bcoil(g, 10, 30, 6);
+    // The arm goes over the far shoulder and the fist comes out the other side
+    // of him: ink laid on ink stops at his outline and there is no arm at all.
     bhauler(g, {
       x: 28, y: 32, s: 0.75, look: 1, vest: VEST.orange, legs: DANGLE,
-      hands: [{ h: [13, -12], e: [8, -13] }, { h: [-8, -2], e: [-8, -7] }],
+      hands: [{ h: [21, -10], e: [14, -17] }, { h: [-8, -2], e: [-8, -7] }],
     });
     bhauler(g, {
       x: 39, y: 32, s: 0.75, look: -1, vest: VEST.lime, legs: DANGLE,
-      hands: [{ h: [-13, -12], e: [-8, -13] }, { h: [8, -2], e: [8, -7] }],
+      hands: [{ h: [-6, 4], e: [-7, -2] }, { h: [8, -2], e: [8, -7] }],
     });
-    brope(g, 55, 33, 59, 42, 57, GND, 2);
+    brope(g, 52, 33, 61, 41, 56, GND, 1.7);
   },
 
   // A hidden achievement shows as "???" until it is earned, so the locked badge

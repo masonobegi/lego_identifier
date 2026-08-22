@@ -25,7 +25,8 @@ The capsule art in `store/` is generated placeholder art: correctly sized, on-br
 free of any licensing, but not a substitute for an illustrator. See
 `docs/STEAM-LAUNCH.md`.
 
-The achievement icons in `store/achievements/` are generated from the achievement list
-itself, an achieved and a locked variant for each, at the 64x64 Steam renders them at.
-Adding an achievement and re-running `npm run art` is enough; there is no second list to
-keep in step.
+The achievement icons in `store/achievements/` are a drawing apiece, an achieved and a
+locked variant for each, at the 64x64 Steam renders them at. They are rendered against the
+achievement list itself, so a new achievement cannot be missed — but it comes out as a
+plate of its initials until a pictogram for it is added to `PICTOS` in
+`scripts/gen-art.mjs`, which is the point at which two badges start looking alike.
