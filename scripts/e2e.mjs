@@ -8,50 +8,16 @@
 import { chromium } from 'playwright';
 import { findChromium } from './chromium.mjs';
 import { spawn } from 'node:child_process';
-import { mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { requireFreshBuild } from './fresh.mjs';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const PORT = Number(process.env.E2E_PORT ?? 8901);
 const SHOTS = process.env.E2E_SHOTS ?? 'test-results';
 const HEADFUL = process.env.E2E_HEADFUL === '1';
 
-if (!existsSync('packages/client/dist/index.html')) {
-  console.error('Build the client first: npm run build');
-  process.exit(1);
-}
+requireFreshBuild(['core', 'server', 'client'], 'npm run build');
 
-/**
- * Refuse to test yesterday's build.
- *
- * This drives a bundle off disk and never builds one, so a source edit since
- * the last `npm run build` means the run proves nothing about the code in the
- * tree. It is not a quiet kind of wrong either: bumping PROTOCOL_VERSION and
- * running e2e failed with "Your game version does not match your friend's" and
- * a timeout waiting for a room code, which reads as a netcode bug and is a
- * stale directory.
- */
-const newest = (dir) => {
-  let latest = 0;
-  for (const entry of readdirSync(dir, { withFileTypes: true, recursive: true })) {
-    if (!entry.isFile()) continue;
-    const at = statSync(join(entry.parentPath ?? entry.path, entry.name)).mtimeMs;
-    if (at > latest) latest = at;
-  }
-  return latest;
-};
-// The newest output, not the oldest: an incremental tsc leaves untouched
-// declaration files alone, so the oldest thing in dist/ is as old as the day
-// it was first written and says nothing about when the build last ran.
-const built = Math.max(
-  newest('packages/client/dist'),
-  ...['core', 'server'].map((p) => newest(`packages/${p}/dist`)),
-);
-const edited = Math.max(...['core', 'server', 'client'].map((p) => newest(`packages/${p}/src`)));
-if (edited > built) {
-  console.error('The build is older than the sources it came from. Run: npm run build');
-  process.exit(1);
-}
 mkdirSync(SHOTS, { recursive: true });
 
 /**

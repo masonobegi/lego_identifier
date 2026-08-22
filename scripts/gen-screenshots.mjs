@@ -16,8 +16,13 @@ import { chromium } from 'playwright';
 import { findChromium } from './chromium.mjs';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { requireFreshBuild } from './fresh.mjs';
 
 const BUILD = 'dist/haulmates.html';
+
+// The store page is made of these. A stale one is a screenshot of a game that
+// no longer exists.
+requireFreshBuild(['web'], 'npm run build && npm run web');
 const DOCS = join('docs', 'screenshots');
 const STORE = join('steam', 'store', 'screenshots');
 

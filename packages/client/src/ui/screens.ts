@@ -484,8 +484,8 @@ function resultsScreen(app: App): HTMLElement {
     { when: () => done && r.cargoBreaks === 0, text: 'The crate survived. You did not, repeatedly.' },
     { when: () => done && r.bonds > r.betrayals * 2, text: 'Genuinely good teamwork. Suspicious.' },
     { when: () => done && totalDeaths > 40, text: 'A triumph of persistence over talent.' },
-    { when: () => done && r.boosts === 0, text: 'Delivered without either of you ever giving the other a leg up. Extraordinary.' },
-    { when: () => done, text: 'Delivered. Mostly.' },
+    { when: () => done && r.boosts === 0, text: 'And neither of you ever once gave the other a leg up. Extraordinary.' },
+    { when: () => done, text: 'Mostly in one piece, which is the job.' },
     { when: () => r.checkpoints === 0, text: 'You did not leave the yard.' },
     { when: () => r.betrayals > 20, text: 'You dragged each other off that tower like it was the point.' },
     { when: () => r.cargoBreaks > 3, text: `${r.cargoBreaks} crates. The client has been informed.` },
@@ -521,11 +521,11 @@ function resultsScreen(app: App): HTMLElement {
       { class: 'stats' },
       stat(formatTime(seconds), 'Total time', 'gold'),
       stat(String(totalDeaths), 'Deaths', totalDeaths > 20 ? 'bad' : ''),
-      stat(String(r.cargoBreaks), 'Crates destroyed', r.cargoBreaks > 0 ? 'bad' : 'good'),
-      stat(String(r.betrayals), 'Times you yanked each other off a ledge', r.betrayals > 10 ? 'bad' : ''),
-      stat(String(r.boosts), 'Times one of you stood on the other', 'good'),
+      stat(String(r.cargoBreaks), plural(r.cargoBreaks, 'Crate', 'Crates') + ' destroyed', r.cargoBreaks > 0 ? 'bad' : 'good'),
+      stat(String(r.betrayals), plural(r.betrayals, 'Time', 'Times') + ' you yanked each other off a ledge', r.betrayals > 10 ? 'bad' : ''),
+      stat(String(r.boosts), plural(r.boosts, 'Time', 'Times') + ' one of you stood on the other', 'good'),
       stat(String(r.bonds), 'Moments spent braced for your partner', 'good'),
-      stat(String(r.checkpoints), 'Checkpoints reached', ''),
+      stat(String(r.checkpoints), plural(r.checkpoints, 'Checkpoint', 'Checkpoints') + ' reached', ''),
     ),
     h(
       'div',
@@ -973,6 +973,11 @@ function achievementsScreen(app: App): HTMLElement {
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );
+}
+
+/** "1 TIMES ONE OF YOU STOOD ON THE OTHER" was on the funniest screen in the game. */
+function plural(n: number, one: string, many: string): string {
+  return n === 1 ? one : many;
 }
 
 /* ----------------------------------------------------------------- records */
