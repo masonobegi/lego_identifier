@@ -445,6 +445,26 @@ taking turns leaves the load hanging low where the spikes are.
 
 Nothing in the game says any of this out loud. It is taught by the rope.
 
+## How much game there is
+
+Counted from the built data rather than remembered, because the two drift:
+
+| | |
+| --- | --- |
+| Hand-authored chunks | 32, across four biomes |
+| The Long Haul | 1047 rows — a kilometre of tower — with 32 checkpoints |
+| Two-person gates on the campaign route | 7, and at least one in every seeded tower |
+| Blades and presses | 30 saws, 16 movers |
+| Achievements | 16, unlocking 9 hats |
+| The Gauntlet | any height from the same 32-chunk pool, on a shared seed |
+| The Daily Haul | one procedurally assembled tower per calendar day |
+
+The Gauntlet and the campaign draw on the same pool, so a chunk written for one
+lengthens both — which is the only reason the content budget is affordable at
+all. `npm run playtest` measures what that means in minutes: a sloppy pair
+climbs about 180 rows in three, so the campaign is a couple of evenings and the
+Gauntlet is as long as you set it.
+
 ## Level design rules
 
 These were not obvious, and getting them wrong produced a tower that looked completely

@@ -82,6 +82,16 @@ MIN_LAUNCH_COLUMNS = 4
 # game is meant to live in the load you are carrying, not in the ledges.
 MIN_OVERLAP = 3
 
+# ...and how much a *gate* needs, which is more.
+#
+# A boosted jump is nearly vertical, so the far side of a gate has to sit
+# squarely over the near side rather than clipping the corner of it — and the
+# brace needs a tile to stand on beside the climber, which the last column of a
+# ledge does not provide. Three columns of overlap passes the generator's own
+# arithmetic and then fails the replay: the pair has one launch column, the
+# brace is stood on air beside it, and nobody goes anywhere.
+GATE_OVERLAP = 6
+
 
 def launch_columns(lower, upper):
     """Columns of `lower` a player can stand in and still jump onto `upper`.
@@ -514,7 +524,7 @@ class C:
         best = None
         for c in range(lo, hi + 1):
             here = (up_r, c, c + width - 1)
-            if overlap(low, here) < MIN_OVERLAP:
+            if overlap(low, here) < GATE_OVERLAP:
                 continue
             if above is not None and not reachable(here, above):
                 continue
@@ -592,6 +602,30 @@ class C:
         assert climb_rows == 2 * V_STEP, (
             f'{self.id}: a {climb_rows} row gate is not what removing one '
             f'foothold makes')
+
+        # Nothing lethal in the gap or on the landing.
+        #
+        # A gate is the one step in the game with no way to hedge: the climber
+        # goes up nearly vertically off a braced partner, lands in a band six
+        # columns wide, and cannot steer out of it. A blade parked in that band
+        # is not a hazard, it is a wall with a rumour of a way through — and one
+        # was, at row 132 of a seeded tower, sitting exactly on the landing of a
+        # gate the fill had just proved. So a gate clears its own airspace.
+        lo_row, hi_row = up[0] - 2, low[0] + 1
+        keep = []
+        for e in self.ents:
+            ey = e['y'] + max(0, e.get('ay', 0))
+            ey0 = e['y'] - max(0, -e.get('ay', 0))
+            ex = e['x']
+            ex1 = ex + max(0, e.get('ax', 0)) + e.get('w', 1)
+            ex0 = ex - max(0, -e.get('ax', 0)) - 1
+            overlaps_rows = ey >= lo_row and ey0 <= hi_row
+            overlaps_cols = ex1 >= up[1] - 1 and ex0 <= up[2] + 1
+            if overlaps_rows and overlaps_cols:
+                self.skipped.append(f"{e['type']} cleared from the gate at row {up[0]}")
+                continue
+            keep.append(e)
+        self.ents = keep
 
         self.path = self.path[:index + 1] + self.path[index + 2:]
         self.gates.add(index + 1)
@@ -832,6 +866,31 @@ c.sweep(4, period=240)
 c.gate(3)
 chunks.append(c.check())
 
+c = C('yard_gantry', 0, 1, 33)
+c.climb(width=15, step=9, direction=-1, start=18)
+c.put(2, 19, '!')
+c.spurs([2, 5, 8, 11], side=1, length=6, gap=1, drop=1)
+c.deco(14, 4, 'xxxx').deco(23, 31, 'xxx')
+c.hazard(3, '^', side=1, length=3).underhang(6, length=3)
+c.sweep(5, period=250)
+chunks.append(c.check())
+
+c = C('yard_narrow', 0, 1, 33)
+c.climb(width=10, step=7, direction=1, start=26)
+c.put(2, 19, '!')
+c.col(2, 6, 27, '*').col(37, 6, 27, '*')
+c.wall_spikes(13, 1, 3).wall_spikes(20, -1, 3)
+c.hazard(2, '^', side=-1, length=2).hazard(7, '^', side=1, length=2)
+c.underhang(4, length=3)
+chunks.append(c.check())
+
+c = C('yard_shift', 0, 0, 33)
+c.climb(width=12, step=(8, 3), direction=-1)
+c.put(2, 19, '!')
+c.deco(9, 30, 'oooo').deco(19, 4, 'ooo')
+c.underhang(3, length=2).underhang(7, side=-1, length=2)
+chunks.append(c.check())
+
 # ================================================== BIOME 1 — THE FOUNDRY ====
 # Heat, moving metal, and machinery that pushes you toward the heat.
 c = C('foundry_lava', 1, 1, 33)
@@ -886,6 +945,35 @@ c.ledge(27, 33, 4, '#', '~')
 c.restyle([3, 6], 'C')
 c.hazard(8, '^', side=1, length=3).underhang(4, side=-1, length=3)
 c.sweep(2, period=205)
+chunks.append(c.check())
+
+c = C('foundry_ladle', 1, 2, 33)
+c.climb(width=15, step=(9, 5), direction=1, start=4)
+c.put(2, 19, '!')
+c.ledge(25, 2, 5, '#', '~').ledge(16, 33, 5, '#', '~')
+c.restyle([5], 'c')
+c.hazard(2, '^', side=1, length=3).underhang(7, side=-1, length=3)
+c.crusher(4, period=175)
+chunks.append(c.check())
+
+c = C('foundry_belt', 1, 3, 33)
+c.climb(width=13, step=(8, 4), direction=-1, start=22)
+c.put(2, 19, '!')
+c.restyle([2, 6], 'c')
+c.mover(x=6, y=10, w=5, h=1, ax=20, ay=0, period=210)
+c.mover(x=28, y=19, w=5, h=1, ax=-18, ay=0, period=230, phase=100)
+c.hazard(4, '^', side=-1, length=3).underhang(8, length=3)
+c.sweep(6, period=195)
+c.gate(4)
+chunks.append(c.check())
+
+c = C('foundry_pour', 1, 2, 33)
+c.climb(width=11, step=(7, 4), direction=1, start=9)
+c.put(2, 19, '!')
+c.ledge(12, 2, 4, '#', '~').ledge(21, 34, 4, '#', '~').ledge(29, 2, 4, '#', '~')
+c.wall_spikes(17, 1, 2)
+c.underhang(3, length=3).underhang(7, side=-1, length=2)
+c.sweep(5, period=185, phase=40)
 chunks.append(c.check())
 
 # ================================================== BIOME 2 — THE FREEZER ====
@@ -943,6 +1031,34 @@ c.underhang(5, length=3).underhang(9, side=-1, length=2)
 c.sweep(4, period=190)
 chunks.append(c.check())
 
+c = C('freeze_glass', 2, 3, 33)
+c.climb(width=15, step=(9, 5), direction=1, start=5)
+c.put(2, 19, '!')
+c.restyle([2, 4, 6, 8], 'i')
+c.col(3, 7, 26, 'W').col(36, 7, 26, 'W')
+c.hazard(3, '^', side=1, length=3).underhang(7, length=3)
+chunks.append(c.check())
+
+c = C('freeze_drift', 2, 2, 33)
+c.climb(width=12, step=(7, 4), direction=-1, start=23)
+c.put(2, 19, '!')
+c.restyle([3, 7], 'i')
+c.deco(11, 4, 'xxxx').deco(22, 30, 'xxxx')
+c.wall_spikes(15, -1, 3)
+c.underhang(5, length=3)
+c.sweep(2, period=200)
+c.gate(6)
+chunks.append(c.check())
+
+c = C('freeze_hang', 2, 3, 33)
+c.climb(width=10, step=6, direction=1, start=27)
+c.put(2, 19, '!')
+c.col(2, 5, 28, '*').col(37, 5, 28, '*')
+c.restyle([2, 5], 'i')
+c.hazard(3, '^', side=-1, length=2).hazard(7, '^', side=1, length=2)
+c.underhang(5, length=3)
+chunks.append(c.check())
+
 # ==================================================== BIOME 3 — THE SPIRE ====
 # Everything at once, at the top of the world, with the wind in your teeth.
 c = C('spire_gauntlet', 3, 3, 33)
@@ -985,6 +1101,38 @@ c.hazard(2, '^', side=1, length=3).hazard(5, '^', side=-1, length=3)
 c.hazard(8, '^', side=1, length=3).underhang(6, length=4)
 c.sweep(2, period=170).crusher(5, period=160, side=-1)
 c.gate(6)
+chunks.append(c.check())
+
+c = C('spire_mast', 3, 3, 33)
+c.climb(width=13, step=(8, 5), direction=-1, start=20)
+c.put(2, 19, '!')
+c.col(3, 6, 28, 'W').col(36, 6, 28, 'W')
+c.restyle([4], 'i')
+c.deco(14, 4, 'xxx').deco(24, 31, 'xxx')
+c.hazard(2, '^', side=1, length=3).underhang(6, length=4)
+c.sweep(4, period=165).crusher(8, period=155)
+chunks.append(c.check())
+
+c = C('spire_wire', 3, 3, 33)
+c.climb(width=16, step=(10, 6), direction=1, start=5)
+c.put(2, 19, '!')
+c.saw(x=19, y=9, r=1, ax=0, ay=8, period=140)
+c.saw(x=10, y=24, r=1, ax=16, ay=0, period=160, phase=50)
+c.wall_spikes(19, -1, 2).wall_spikes(26, 1, 2)
+c.underhang(4, length=4).underhang(8, side=-1, length=3)
+c.sweep(2, period=160)
+c.gate(5)
+chunks.append(c.check())
+
+c = C('spire_lastlift', 3, 3, 33)
+c.climb(width=11, step=(7, 3), direction=-1, start=24)
+c.put(2, 19, '!')
+c.col(2, 5, 28, '*').col(37, 5, 28, '*')
+c.mover(x=5, y=9, w=4, h=3, ax=0, ay=6, period=145, deadly=True)
+c.mover(x=30, y=20, w=4, h=3, ax=0, ay=6, period=150, phase=70, deadly=True)
+c.hazard(3, '^', side=1, length=3).hazard(7, '^', side=-1, length=3)
+c.underhang(5, length=3)
+c.sweep(9, period=170)
 chunks.append(c.check())
 
 c = C('spire_goal', 3, 0, 24, tags=['goal'])

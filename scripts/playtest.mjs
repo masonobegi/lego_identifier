@@ -497,7 +497,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
   const total = campaign.h;
   console.log(
-    `\nCLIMB — three minutes of the campaign, ${total} rows tall, 20 checkpoints; ` +
+    `\nCLIMB — three minutes of the campaign, ${total} rows tall, ` +
+      `${campaign.checkpoints.length} checkpoints; ` +
       `mean of ${SEEDS.length} runs\n`,
   );
   for (const row of climbTest(MODE_HAUL, SEEDS, 10)) {

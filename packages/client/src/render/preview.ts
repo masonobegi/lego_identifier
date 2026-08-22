@@ -1,11 +1,17 @@
-import { PLAYER_COLOURS } from './palette.js';
+import { PLAYER_BODY, PLAYER_COLOURS } from './palette.js';
 import { roundRect } from './actors.js';
 
 /**
- * A standalone character portrait for the lobby and cosmetics screens. It
- * deliberately re-implements the body rather than borrowing the in-game
- * drawing code, because the portrait wants a clean idle pose and a fixed
- * camera, not whatever the simulation is currently doing to the poor thing.
+ * A standalone character portrait for the lobby and cosmetics screens.
+ *
+ * It re-implements the body rather than borrowing the in-game drawing code,
+ * because the portrait wants a clean idle pose and a fixed camera rather than
+ * whatever the simulation is currently doing to the poor thing. That is a fair
+ * trade and it has a standing cost, which came due: the two drawings drifted,
+ * and the portrait ended up painting a bright orange *person* where the game
+ * draws a dark one in an orange vest. Anything changed in `drawPlayer`'s
+ * costume has to be changed here too, and the test that compares them is a
+ * person looking at the customise screen and then at the spawn.
  */
 export function drawCharacterPreview(
   canvas: HTMLCanvasElement,
@@ -40,7 +46,7 @@ export function drawCharacterPreview(
   ctx.ellipse(0, 1, 10, 3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = style.dark;
+  ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 4.4;
   ctx.lineCap = 'round';
   for (const side of [-1, 1]) {
@@ -50,15 +56,28 @@ export function drawCharacterPreview(
     ctx.stroke();
   }
 
-  ctx.fillStyle = style.main;
+  // A dark body wearing a hi-vis vest, not a coloured body.
+  //
+  // This is the whole costume gag in the game and the portrait was not in on
+  // it: it painted the whole torso and the whole head in the player's colour,
+  // so the character on the customise screen was a bright orange person and the
+  // one who then walked out of the spawn was a near-black one in an orange
+  // vest. Different character, same screen, one click apart — and the picture
+  // is the only reason anybody presses a colour swatch at all.
+  ctx.fillStyle = PLAYER_BODY;
   roundRect(ctx, -9, -25, 18, 17, 5);
   ctx.fill();
-  ctx.fillStyle = style.light;
-  ctx.fillRect(-8, -20, 16, 2.4);
+  ctx.fillStyle = style.main;
+  ctx.fillRect(-8, -23.5, 16, 13);
   ctx.fillStyle = style.dark;
-  ctx.fillRect(-8, -13, 16, 3);
+  ctx.fillRect(-8, -13, 16, 2.5);
+  // The two retroreflective bands, always white, always the brightest thing on
+  // the body. At a distance they are what you actually track in the game.
+  ctx.fillStyle = style.light;
+  ctx.fillRect(-8, -21.6, 16, 2.2);
+  ctx.fillRect(-8, -16.6, 16, 2.2);
 
-  ctx.strokeStyle = style.light;
+  ctx.strokeStyle = PLAYER_BODY;
   ctx.lineWidth = 3.4;
   for (const side of [-1, 1]) {
     ctx.beginPath();
@@ -68,13 +87,15 @@ export function drawCharacterPreview(
   }
 
   const headY = -34;
-  ctx.fillStyle = style.main;
+  ctx.fillStyle = PLAYER_BODY;
   ctx.beginPath();
   ctx.arc(0, headY, 8.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  // A light rim rather than a dark one: on a near-black head, shading down is
+  // invisible and shading up is what gives it a form. Same as in the game.
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
   ctx.beginPath();
-  ctx.arc(0, headY + 2.4, 8.6, 0.25, Math.PI - 0.25);
+  ctx.arc(0, headY - 2.2, 8.6, Math.PI + 0.25, -0.25);
   ctx.fill();
 
   if (hat !== 5) {

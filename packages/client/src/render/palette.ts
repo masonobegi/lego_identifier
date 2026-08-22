@@ -209,6 +209,7 @@ export const HATS: Hat[] = [
   { id: 5, name: 'PAPER BAG', unlock: 'Die 100 times' },
   { id: 6, name: 'CROWN', unlock: 'Finish a Gauntlet of 20 floors' },
   { id: 7, name: 'HALO', unlock: 'Anchor for your partner 500 times' },
+  { id: 8, name: 'STEPLADDER', unlock: 'Give your partner a leg up' },
 ];
 
 export const CARGO_COLOURS = {

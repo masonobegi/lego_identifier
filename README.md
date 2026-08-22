@@ -44,7 +44,8 @@ together, and the build fails if a pair cannot replay every gate in the real sim
 > the thing that changed is a single line in the level generator. See *Level design rules*.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
-nobody is around, a hand-authored campaign, an endless seeded tower, and a daily haul —
+nobody is around, a hand-authored campaign of thirty-two floors and a kilometre of tower,
+an endless seeded one built from the same pool, and a daily haul —
 one procedurally assembled tower per calendar day, the same one for everybody, gone at
 midnight. Built to ship on Steam.
 
