@@ -262,7 +262,7 @@ HAULMATES_SERVER=wss://<your-app>.fly.dev npm run dist:win
 ```
 
 That second line is the one people forget. `scripts/package-desktop.mjs` writes it into
-`packages/desktop/server.json`, which the shipped app reads on launch; the packaging step
+`packages/desktop/build-config.json`, which the shipped app reads on launch; the packaging step
 prints a loud warning if you build a release without it. `HAULMATES_SERVER` in the
 player's own environment still overrides it, so a self-hoster can redirect an installed
 copy.
