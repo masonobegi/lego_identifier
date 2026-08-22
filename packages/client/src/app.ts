@@ -92,6 +92,12 @@ const HINTS: { id: string; text: string; when: (w: World, tick: number, atGate: 
   },
 ];
 
+/** The run's worst moment, or nothing if it never had one worth naming. */
+function worstOf(world: World | null | undefined): { kind: number; tick: number; value: number } | null {
+  if (!world || world.worstKind === 0) return null;
+  return { kind: world.worstKind, tick: world.worstTick, value: world.worstValue };
+}
+
 export class App {
   readonly canvas: HTMLCanvasElement;
   readonly overlay: HTMLElement;
@@ -127,6 +133,15 @@ export class App {
   net: NetClient | null = null;
   local: LocalMatch | null = null;
   lastResult: MatchResult | null = null;
+  /**
+   * The worst thing that happened in the run just finished.
+   *
+   * Read off the world rather than sent with the result: it is part of the
+   * rollback snapshot, so both peers already agree about it and there is
+   * nothing to put on the wire. Captured when the run ends because the session
+   * is disposed on the way to the results card and the world goes with it.
+   */
+  lastWorst: { kind: number; tick: number; value: number } | null = null;
   finishedRun = false;
 
   attract: LocalMatch;
@@ -773,6 +788,7 @@ export class App {
     this.errorMessage = '';
     this.finishedRun = false;
     this.lastResult = null;
+    this.lastWorst = null;
     this.connectingLabel =
       intent === INTENT_JOIN ? `Looking for haul ${code}…` : intent === INTENT_QUICKPLAY ? 'Finding someone to rope yourself to…' : 'Opening a haul…';
     this.show('connecting');
@@ -809,6 +825,7 @@ export class App {
     };
     client.onResult = (result) => {
       this.lastResult = result;
+      this.lastWorst = worstOf(client.world);
       this.finishedRun = true;
       this.targetTicks = client.mode === MODE_HAUL
         ? this.profile.bestCampaignTicks
@@ -912,6 +929,7 @@ export class App {
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
+    this.lastWorst = null;
     this.net?.rematch();
     this.show('lobby');
   }
@@ -980,6 +998,7 @@ export class App {
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
+    this.lastWorst = null;
     this.local = new LocalMatch(mode, seed, floors);
     if (this.botPartner) this.local.setBot(1, new Bot(this.local.ctx.level));
     this.renderer.reset(this.local.world);
@@ -1008,6 +1027,7 @@ export class App {
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
+    this.lastWorst = null;
     const reseed = !daily && this.local.ctx.mode === MODE_GAUNTLET;
     this.local.restart(reseed ? (Math.random() * 0x7fffffff) | 0 : undefined);
     if (daily) this.beginDailyAttempt();
@@ -1034,6 +1054,7 @@ export class App {
 
   private finishLocalRun(): void {
     const world = this.local!.world;
+    this.lastWorst = worstOf(world);
     this.finishedRun = true;
     this.profile.finishes++;
     this.lastResult = {

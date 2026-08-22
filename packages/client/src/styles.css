@@ -532,3 +532,8 @@ kbd {
   .screen { animation: none; }
   .spinner { animation-duration: 2400ms; }
 }
+
+/* The run's worst moment. Set apart from the encouraging lines above it, in the
+   red the game already uses for damage, because it is the one line on the card
+   that is not on your side. */
+.screen .sub.worst { color: #b8341c; font-weight: 700; }

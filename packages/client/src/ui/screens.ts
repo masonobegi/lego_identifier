@@ -8,6 +8,8 @@ import {
   dailyLabel,
   isValidRoomCode,
   normaliseRoomCode,
+  WORST_BETRAYAL,
+  WORST_CRATE,
 } from '@haulmates/core';
 import { h, toast } from '../dom.js';
 import { ACTIONS, ACTION_LABEL, keyName, type Action } from '../input.js';
@@ -604,6 +606,7 @@ function resultsScreen(app: App): HTMLElement {
     h('div', { class: 'verdict' }, verdict),
     against ? h('p', { class: 'sub' }, against) : null,
     crewLine(app),
+    worstLine(app),
     h(
       'div',
       { class: 'stats' },
@@ -1082,6 +1085,29 @@ function achievementsScreen(app: App): HTMLElement {
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );
+}
+
+/**
+ * The single worst thing that happened, named, with the clock against it.
+ *
+ * Everything else on this card is a count, and a count summarises an evening
+ * rather than telling a story about one. What a pair actually repeat to each
+ * other afterwards is a moment — the drop, the yank, the fall — so the run
+ * keeps the most expensive one it saw and this says it out loud. Measured over
+ * three six-minute runs of the campaign it produced "yanked off a ledge at
+ * 5:20, 31 metres", which is a sentence somebody would read out.
+ */
+function worstLine(app: App): HTMLElement | null {
+  const w = app.lastWorst;
+  if (!w || w.value < 4) return null;
+  const metres = Math.round(w.value);
+  const said =
+    w.kind === WORST_CRATE
+      ? `the crate went down ${metres} metres`
+      : w.kind === WORST_BETRAYAL
+        ? `one of you pulled the other ${metres} metres off a ledge`
+        : `somebody fell ${metres} metres`;
+  return h('p', { class: 'sub worst' }, `Worst moment: ${formatTime(w.tick / 60)} — ${said}.`);
 }
 
 /**
