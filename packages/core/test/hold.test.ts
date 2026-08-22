@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CARGO_H,
+  IN_JUMP,
+  IN_GRIP,
   IN_LEFT,
   IN_RIGHT,
   PLAYER_H,
@@ -225,16 +227,64 @@ describe('the hold', () => {
     expect(reach(Math.ceil(ROPE_MAX / TILE) + 4), 'a plate well past a rope length').toBe(false);
   });
 
-  it('does not close on somebody standing inside it', () => {
+  it('shoves you out rather than closing on you', () => {
     const { level, plate, door, floor } = room(6);
     const ctx = { level, seed: 1, mode: 0 };
     const world = createWorld(ctx);
     place(world, door, plate, floor - 1);
     // Slot 0 is inside the shutter. Slot 1 steps off the plate; the door must
-    // not solidify around them.
-    const before = world.players[0].x;
+    // not solidify around them, and must not politely wait either.
     walk(level, world, 1, 90, IN_LEFT);
-    expect(Math.abs(world.players[0].x - before), 'a closing shutter shoved somebody').toBeLessThan(TILE);
-    expect(world.players[0].dead).toBe(0);
+    expect(world.players[0].dead, 'crushed by a closing shutter').toBe(0);
+    const col = world.players[0].x / TILE;
+    expect(Math.round(col) === door, 'left standing inside a closed shutter').toBe(false);
+  });
+
+  /**
+   * The exploit that decided how a closing shutter behaves.
+   *
+   * Holding the door open for anyone inside it — the obvious way to guarantee
+   * nobody is ever crushed — hands the whole verb away. One hauler stands on
+   * the plate, runs for the door towing their motionless partner on the rope,
+   * and the partner's own body in the doorway props it open long enough to be
+   * dragged clean through. The crate does the same job by itself, because it
+   * hangs off the middle of the rope and ends up in the doorway unaided.
+   *
+   * Three thousand random input scripts, one live player and one pressing
+   * nothing. Getting *yourself* through is expected — that is the first half of
+   * the intended move. Getting your inert partner through is the thing that
+   * must not be possible, because it is the difference between a room that
+   * needs two people and a room that needs one person and a body.
+   */
+  it('will not let one player drag a motionless partner through', () => {
+    const { level, plate, door, floor } = twoPlate(6);
+    const ctx = { level, seed: 1, mode: 0 };
+    let seed = 12345;
+    const rnd = (): number => {
+      seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    let self = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const world = createWorld(ctx);
+      place(world, plate, plate + 1, floor - 1);
+      let mask = 0;
+      for (let t = 0; t < 600; t++) {
+        if (t % (2 + Math.floor(rnd() * 18)) === 0) {
+          const r = rnd();
+          mask = r < 0.4 ? IN_RIGHT : r < 0.7 ? IN_LEFT : 0;
+          if (rnd() < 0.5) mask |= IN_JUMP;
+          if (rnd() < 0.3) mask |= IN_GRIP;
+        }
+        step(ctx, world, [mask, 0]);
+        world.events.length = 0;
+        if (world.players[0].x / TILE > door + 1) self = true;
+        expect(
+          world.players[1].x / TILE,
+          'a motionless partner was dragged through a shutter',
+        ).toBeLessThan(door + 1);
+      }
+    }
+    expect(self, 'one player should still be able to get themselves through').toBe(true);
   });
 });

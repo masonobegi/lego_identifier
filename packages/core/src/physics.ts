@@ -67,34 +67,85 @@ function overTiles(level: Level, l: number, t: number, r: number, b: number, fn:
  * Called at the top of the tick, before anything moves, so every peer computes
  * it from the same positions and nothing has to be sent or snapshotted.
  *
- * Two ways a shutter is open. Somebody is holding its plate — a hauler stood on
- * it, or the crate parked on it, which is the answer to a pair who have fumbled
- * a room and would otherwise be stuck outside it. Or somebody is inside the
- * shutter itself, in which case it stays open whatever the plate says: a door
- * that closes on the person walking through it is not a puzzle, it is a
- * player embedded in a wall with no way out.
+ * A shutter is open while its plate is held — by a hauler stood on it, or by
+ * the crate resting on it.
+ *
+ * What happens to somebody standing in a shutter as it closes decides whether
+ * the verb works at all. The first version simply held the door open for them,
+ * on the grounds that a door which shuts on the person walking through it is
+ * not a puzzle but a player embedded in a wall. That gave the whole thing away:
+ * one hauler stood on the plate, ran for the door towing their motionless
+ * partner behind them on the rope, and the partner's own body in the doorway
+ * kept it open long enough to be dragged clean through. A search of three
+ * thousand random input scripts found it in the first few. The crate did the
+ * same job just as well, because it hangs off the middle of the rope and ends
+ * up in the doorway on its own.
+ *
+ * So a closing shutter shoves you out of it instead, to whichever side you were
+ * nearer. Only if there is nowhere to shove you does it stay open — which keeps
+ * the no-crushing guarantee without handing over a free crossing.
  */
 export function updateHolds(level: Level, world: World): void {
   if (level.holdGroups === 0) return;
   world.open.fill(0);
-  const mark = (i: number, want: number): void => {
-    const g = level.holdGroup[i];
-    if (g >= 0 && level.tiles[i] === want) world.open[g] = 1;
-  };
-  const box = (x: number, y: number, hw: number, hh: number, want: number): void => {
-    overTiles(level, x - hw, y - hh, x + hw, y + hh, (i) => mark(i, want));
+  const onPlate = (x: number, y: number, hw: number, hh: number): void => {
+    overTiles(level, x - hw, y - hh, x + hw, y + hh, (i) => {
+      const g = level.holdGroup[i];
+      if (g >= 0 && level.tiles[i] === T_PLATE) world.open[g] = 1;
+    });
   };
   for (const p of world.players) {
     if (p.dead) continue;
-    // Standing on a plate: the feet, a hair below them.
-    box(p.x, p.y + PLAYER_H / 2 + 2, PLAYER_HALF_W, 2, T_PLATE);
-    box(p.x, p.y, PLAYER_HALF_W, PLAYER_H / 2, T_SHUTTER);
+    onPlate(p.x, p.y + PLAYER_H / 2 + 2, PLAYER_HALF_W, 2);
   }
   const c = world.cargo;
-  if (c.hp > 0) {
-    box(c.x, c.y + CARGO_H / 2 + 2, CARGO_W / 2, 2, T_PLATE);
-    box(c.x, c.y, CARGO_W / 2, CARGO_H / 2, T_SHUTTER);
+  if (c.hp > 0) onPlate(c.x, c.y + CARGO_H / 2 + 2, CARGO_W / 2, 2);
+
+  for (const p of world.players) {
+    if (p.dead) continue;
+    if (!ejectFromShutter(level, world, p, PLAYER_HALF_W, PLAYER_H / 2)) continue;
   }
+  if (c.hp > 0) ejectFromShutter(level, world, c, CARGO_W / 2, CARGO_H / 2);
+}
+
+/**
+ * Shove a body out of a shutter that is trying to close, or give up and hold
+ * the shutter open for it.
+ *
+ * Returns true when the body was inside one at all. The side is whichever edge
+ * of the shutter's own column the body is nearer, so you leave the way you came
+ * unless you were already more than half way through.
+ */
+function ejectFromShutter(
+  level: Level,
+  world: World,
+  body: { x: number; y: number },
+  hw: number,
+  hh: number,
+): boolean {
+  let group = -1;
+  let column = 0;
+  overTiles(level, body.x - hw, body.y - hh, body.x + hw, body.y + hh, (i) => {
+    if (level.tiles[i] !== T_SHUTTER) return;
+    const g = level.holdGroup[i];
+    if (g < 0 || world.open[g] === 1 || group >= 0) return;
+    group = g;
+    column = i % level.w;
+  });
+  if (group < 0) return false;
+
+  const centre = column * TILE + TILE / 2;
+  const near = body.x < centre ? -1 : 1;
+  for (const side of [near, -near]) {
+    const to = side < 0 ? column * TILE - hw - 1 : (column + 1) * TILE + hw + 1;
+    if (!rectHitsTiles(level, world, to - hw, body.y - hh, to + hw, body.y + hh)) {
+      body.x = to;
+      return true;
+    }
+  }
+  // Nowhere to go: the door waits rather than closing on somebody.
+  world.open[group] = 1;
+  return true;
 }
 
 /** Any full-solid tile overlapping the given AABB? */
