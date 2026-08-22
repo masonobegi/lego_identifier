@@ -165,7 +165,7 @@ function stencil(text, size, colour, tracking, bridges) {
   return { canvas: off, pad, asc, capW: total };
 }
 
-function render([mode, W, H]) {
+function render([mode, W, H, name]) {
   const canvas = document.getElementById('c');
   canvas.width = W;
   canvas.height = H;
@@ -530,9 +530,15 @@ function render([mode, W, H]) {
     ctx.fillRect(-cw / 2 + cw * 0.05, -ch / 2 + ch * 0.13, cw - cw * 0.1, band);
     ctx.fillRect(-cw / 2 + cw * 0.05, ch / 2 - ch * 0.26, cw - cw * 0.1, band);
     if (D > 1) {
+      // Scaled to fit, not clipped to fit. Clamping the width alone squashed
+      // nothing and cropped instead, so the key art shipped a crate stencilled
+      // FRAGILB — the E cut in half by the crate's own edge, on the object the
+      // whole picture is about.
       const f = stencil('FRAGILE', ch * 0.21, P.red, undefined, false);
-      const fw = Math.min(f.canvas.width, cw * 0.86);
-      ctx.drawImage(f.canvas, -fw / 2, -ch * 0.12, fw, f.canvas.height);
+      const fit = Math.min(1, (cw * 0.8) / f.canvas.width);
+      const fw = f.canvas.width * fit;
+      const fh = f.canvas.height * fit;
+      ctx.drawImage(f.canvas, -fw / 2, -ch * 0.12, fw, fh);
     }
     ctx.restore();
   })();
@@ -680,9 +686,39 @@ function render([mode, W, H]) {
     look: -1, mouth: 'o', vest: VEST.lime,
   });
 
-  } // end of the scene; the wordmark below is drawn for every asset
+  /* ------------------------------------------------------------- carabiner */
+  // The rope is tied to this one's harness rather than held in his fists, which
+  // is what frees his arms to flail and is how the two are actually roped in
+  // the game. But the haulers are drawn over the rope, so the last inch of it
+  // went under the vest panel and simply stopped: the rope appeared to
+  // terminate inside his chest and his raised hand was empty. On a piece of key
+  // art whose entire subject is two people tied together, the tie was invisible.
+  (function carabiner() {
+    const r = Math.max(3, L.ropeW * 2.2);
+    ctx.save();
+    ctx.translate(B[0], B[1]);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = P.ink;
+    ctx.lineWidth = L.ropeW * 2.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = P.chalk;
+    ctx.lineWidth = L.ropeW * 0.95;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  })();
+
+  } // end of the scene
   /* -------------------------------------------------------------- wordmark */
-  (function wordmark() {
+  // Not on the Library Hero. Valve composites the separately supplied Library
+  // Logo over the hero at a position the user can move, so a hero with the
+  // logotype already baked into it ships the wordmark twice, overlapping, and
+  // the store page reads as a mistake before anyone has read a word of it.
+  // Every other asset carries it.
+  if (name !== 'library-hero') (function wordmark() {
     const text = 'HAULMATES';
     const probe = document.createElement('canvas').getContext('2d');
     probe.font = font(100);
@@ -862,8 +898,8 @@ function achievementBadge(mark, order, achieved, size) {
 // Steam's layout names map onto the three authored designs, except 'logo',
 // which is the wordmark alone on transparency and has to reach the renderer
 // under that name so it can skip the scene.
-window.renderAsset = (w, h, layout) =>
-  render([layout === 'tall' || layout === 'thumb' || layout === 'logo' ? layout : 'wide', w, h]);
+window.renderAsset = (w, h, layout, name) =>
+  render([layout === 'tall' || layout === 'thumb' || layout === 'logo' ? layout : 'wide', w, h, name]);
 window.renderIcon = (size) => icon(size);
 window.renderAchievement = (mark, order, achieved, size) => achievementBadge(mark, order, achieved, size);
 </script></body></html>`;
@@ -925,7 +961,7 @@ await page.setContent(PAGE, { waitUntil: 'load' });
 
 for (const [name, w, h, layout] of STEAM_ASSETS) {
   await page.setViewportSize({ width: Math.min(w, 3840), height: Math.min(h, 2160) });
-  await page.evaluate(([w2, h2, l]) => window.renderAsset(w2, h2, l), [w, h, layout]);
+  await page.evaluate(([w2, h2, l, n]) => window.renderAsset(w2, h2, l, n), [w, h, layout, name.replace(/-\d+x\d+$/, '')]);
   const buffer = await page.locator('#c').screenshot({ omitBackground: layout === 'logo' });
   const file = join(STORE_DIR, `${name}.png`);
   writeFileSync(file, buffer);

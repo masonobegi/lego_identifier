@@ -479,18 +479,26 @@ function resultsScreen(app: App): HTMLElement {
   // have to get past `app.finishedRun`, and a run that ended early gets told
   // what actually happened to it.
   const done = app.finishedRun;
+  // Ordered most specific first, and the two catch-alls are last on purpose.
+  //
+  // `{ when: () => done }` used to sit sixth of twelve, which made it a catch-all
+  // in the middle of the ladder: every line below it was unreachable by anyone
+  // who finished a run, so the six sharpest observations in the game — the
+  // twenty betrayals, the four dead crates, the near miss at the top — could
+  // only ever be read by somebody who had given up. The screen that is supposed
+  // to be the reward for finishing told the people who finished the blandest
+  // line it has.
   const verdicts = [
     { when: () => done && r.cargoBreaks === 0 && totalDeaths === 0, text: 'Flawless. Nobody will believe you.' },
-    { when: () => done && r.cargoBreaks === 0, text: 'The crate survived. You did not, repeatedly.' },
-    { when: () => done && r.bonds > r.betrayals * 2, text: 'Genuinely good teamwork. Suspicious.' },
-    { when: () => done && totalDeaths > 40, text: 'A triumph of persistence over talent.' },
     { when: () => done && r.boosts === 0, text: 'And neither of you ever once gave the other a leg up. Extraordinary.' },
-    { when: () => done, text: 'Mostly in one piece, which is the job.' },
-    { when: () => r.checkpoints === 0, text: 'You did not leave the yard.' },
-    { when: () => r.betrayals > 20, text: 'You dragged each other off that tower like it was the point.' },
     { when: () => r.cargoBreaks > 3, text: `${r.cargoBreaks} crates. The client has been informed.` },
-    { when: () => totalDeaths > 40, text: 'The tower is still there. So, remarkably, are you.' },
-    { when: () => r.checkpoints >= 16, text: 'So close you could read the sign.' },
+    { when: () => r.betrayals > 20, text: 'You dragged each other off that tower like it was the point.' },
+    { when: () => totalDeaths > 40, text: done ? 'A triumph of persistence over talent.' : 'The tower is still there. So, remarkably, are you.' },
+    { when: () => done && r.bonds > r.betrayals * 2, text: 'Genuinely good teamwork. Suspicious.' },
+    { when: () => done && r.cargoBreaks === 0, text: 'The crate survived. You did not, repeatedly.' },
+    { when: () => !done && r.checkpoints === 0, text: 'You did not leave the yard.' },
+    { when: () => !done && r.checkpoints >= 16, text: 'So close you could read the sign.' },
+    { when: () => done, text: 'Mostly in one piece, which is the job.' },
     { when: () => true, text: `${r.checkpoints} checkpoints. The crate is somebody else's problem now.` },
   ];
   const verdict = verdicts.find((v) => v.when())!.text;

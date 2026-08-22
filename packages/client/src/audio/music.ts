@@ -81,6 +81,17 @@ export class Music {
   private running = false;
   private bar = 0;
   private rngState = 0x2f6e2b1;
+  /**
+   * The one bar's worth of drum decisions, re-rolled every bar.
+   *
+   * The kit used to be a fixed grid — kick on 0, 6 and 10, snare on 4 and 12,
+   * hat on every odd step — with no randomness in it anywhere, so a hundred
+   * bars rendered a hundred identical drum bars while the settings screen told
+   * the player the music was "generated live, never the same twice". It is a
+   * loop the player hears for the entire length of a session, which is the
+   * worst possible thing to make bit-identical.
+   */
+  private figure = { ghost: -1, push: false, open: -1, fill: false, skip: -1 };
 
   constructor(private engine: AudioEngine) {}
 
@@ -100,6 +111,11 @@ export class Music {
     this.targetBiome = biome;
     this.step = 0;
     this.bar = 0;
+    // Seeded per session. Nothing downstream of the music is simulated, so this
+    // costs no determinism, and a fixed seed meant two launches produced the
+    // same bars in the same order for as long as either of them ran.
+    this.rngState = (Math.floor(Math.random() * 0x7fffffff) | 1) >>> 0;
+    this.rollFigure();
     this.nextNoteAt = this.engine.now + 0.1;
     this.timer = window.setInterval(() => this.pump(), LOOKAHEAD_MS);
   }
@@ -118,6 +134,21 @@ export class Music {
   /** 0 = wandering the lobby, 1 = everything is on fire. */
   setIntensity(value: number): void {
     this.intensity = Math.max(0, Math.min(1, value));
+  }
+
+  /**
+   * Pick this bar's variations. All of them are inside the pocket — a ghost
+   * kick on an off-beat, the backbeat pushed an eighth early, one open hat, an
+   * occasional dropped hat, and a fill on the eighth bar — so the groove is
+   * recognisably the same groove and no two bars are the same bar.
+   */
+  private rollFigure(): void {
+    const r = (): number => this.rng();
+    this.figure.ghost = r() < 0.45 ? [3, 7, 11, 14][Math.floor(r() * 4)] : -1;
+    this.figure.push = r() < 0.28;
+    this.figure.open = r() < 0.55 ? [5, 9, 13][Math.floor(r() * 3)] : -1;
+    this.figure.skip = r() < 0.4 ? [1, 5, 9][Math.floor(r() * 3)] : -1;
+    this.figure.fill = this.bar % 8 === 7 && r() < 0.75;
   }
 
   private rng(): number {
@@ -144,6 +175,7 @@ export class Music {
       this.step++;
       if (this.step % 16 === 0) {
         this.bar++;
+        this.rollFigure();
         if (this.targetBiome !== this.biome) this.biome = this.targetBiome;
       }
     }
@@ -159,23 +191,25 @@ export class Music {
     const level = 0.35 + this.intensity * 0.65;
 
     /* kick */
-    if (step === 0 || step === 6 || (step === 10 && this.intensity > 0.5)) {
+    if (step === 0 || step === 6 || (step === 10 && this.intensity > 0.5) || step === this.figure.ghost) {
       e.tone({ freq: 150, to: 42, dur: 0.16, type: 'sine', gain: 0.4 * b.drive * level, at, bus });
       e.noise({ freq: 200, to: 60, dur: 0.05, q: 0.7, gain: 0.12 * level, at, bus, type: 'lowpass' });
     }
 
     /* snare / clap */
-    if (step === 4 || step === 12) {
+    const back = this.figure.push ? 11 : 12;
+    if (step === 4 || step === back || (this.figure.fill && step > 12 && step % 2 === 0)) {
       e.noise({ freq: 1900, to: 900, q: 0.8, dur: 0.13, gain: 0.16 * level, at, bus });
     }
 
     /* hats */
-    if (step % 2 === 1 && (this.intensity > 0.25 || step % 4 === 3)) {
+    if (step % 2 === 1 && step !== this.figure.skip && (this.intensity > 0.25 || step % 4 === 3)) {
+      const open = step === this.figure.open;
       e.noise({
         freq: 8000 * b.brightness,
-        q: 2.5,
-        dur: 0.035,
-        gain: (step % 4 === 3 ? 0.075 : 0.045) * level,
+        q: open ? 1.6 : 2.5,
+        dur: open ? 0.14 : 0.035,
+        gain: (open ? 0.085 : step % 4 === 3 ? 0.075 : 0.045) * level,
         at,
         bus,
       });

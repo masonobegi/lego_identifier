@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AudioEngine } from '../src/audio/synth.js';
+import { Music } from '../src/audio/music.js';
 
 /**
  * Enough of the Web Audio API to build the graph and none of it to hear the
@@ -178,5 +179,54 @@ describe('the mix', () => {
     for (const path of paths) {
       expect(path).toContain(e.sfxBus as unknown as FakeNode);
     }
+  });
+});
+
+/**
+ * The settings screen says the music is "generated live, never the same twice".
+ *
+ * It was not. The kit was a fixed grid — kick on 0, 6 and 10, snare on 4 and
+ * 12, hat on every odd step, no randomness in any of it — so a hundred bars
+ * were a hundred identical drum bars, and a fixed rng seed meant two launches
+ * produced the same sequence note for note. This is a loop a player hears for
+ * a whole session, which is the worst thing in the game to make bit-identical,
+ * and the claim was on a menu they could read while listening to it.
+ */
+describe('the music', () => {
+  /** The drum hits of `bars` consecutive bars, as one string per bar. */
+  function drumBars(bars: number): string[] {
+    const e = engine();
+    const m = new Music(e);
+    (globalThis as { window?: { setInterval?: unknown; clearInterval?: unknown } }).window!.setInterval =
+      (): number => 0;
+    (globalThis as { window?: { clearInterval?: unknown } }).window!.clearInterval = (): void => {};
+    m.start(0);
+    const inner = m as unknown as { emit(at: number, d: number): void; step: number; bar: number; rollFigure(): void };
+    const out: string[] = [];
+    for (let bar = 0; bar < bars; bar++) {
+      let line = '';
+      for (let i = 0; i < 16; i++) {
+        const before = ctx.created.length;
+        inner.emit(0, 0.1);
+        line += String(Math.min(9, ctx.created.length - before));
+        inner.step++;
+      }
+      inner.bar++;
+      inner.rollFigure();
+      out.push(line);
+    }
+    return out;
+  }
+
+  it('does not play the same bar over and over', () => {
+    const bars = drumBars(64);
+    const unique = new Set(bars);
+    expect(unique.size, `only ${unique.size} distinct bars in 64`).toBeGreaterThan(8);
+  });
+
+  it('starts somewhere different every launch', () => {
+    const a = drumBars(16).join('|');
+    const b = drumBars(16).join('|');
+    expect(a).not.toBe(b);
   });
 });

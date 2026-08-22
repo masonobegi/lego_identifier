@@ -485,7 +485,11 @@ export class App {
   }
 
   private announceAchievement(def: AchievementDef): void {
-    toast(`🏆 ${def.name}`);
+    // No trophy glyph. It renders as a full-colour system emoji inside a
+    // cream-and-ink toast, in a game whose entire art direction is flat ink on
+    // paper — the one thing on screen not drawn in the game's own hand, and it
+    // is visible in the shipped Freezer screenshot.
+    toast(`EARNED — ${def.name}`);
     this.sfx.fanfare();
     save('achievements', this.achievements.earned);
   }
