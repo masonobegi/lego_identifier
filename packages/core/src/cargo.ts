@@ -28,6 +28,7 @@ import { hazardAt } from './hazards.js';
 import { pushEvent } from './events.js';
 import { ROPE_MID, anchorX, anchorY } from './rope.js';
 import { EV_CARGO_BREAK, EV_CARGO_HIT, EV_CARGO_LAND, type World } from './types.js';
+import { WORST_CRATE, recordWorst } from './events.js';
 
 const HW = CARGO_W / 2;
 const HH = CARGO_H / 2;
@@ -46,6 +47,9 @@ function damage(world: World, amount: number, x: number, y: number): void {
   if (world.cargo.hp <= 0) {
     world.cargo.hp = 0;
     world.cargoBreaks++;
+    // Ranked by how far it came down, since a crate that falls the height of
+    // the Foundry is a different story from one nudged into a spike.
+    recordWorst(world, WORST_CRATE, (y - world.cargo.fellFrom) / TILE);
     pushEvent(world, EV_CARGO_BREAK, x, y, 0, 0);
   }
 }
@@ -96,6 +100,7 @@ export function updateCargo(level: Level, world: World): void {
     if (collider.hitY === 1) {
       if (!c.grounded) pushEvent(world, EV_CARGO_LAND, c.x, c.y + HH, impactY, 0);
       c.grounded = 1;
+      c.fellFrom = c.y;
     }
     if (impactY > CARGO_IMPACT_MIN) damage(world, (impactY - CARGO_IMPACT_MIN) * CARGO_IMPACT_SCALE, c.x, c.y);
     c.py = c.y + vy * CARGO_BOUNCE;

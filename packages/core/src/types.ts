@@ -55,6 +55,14 @@ export interface CargoState {
    * and you have time to haul the thing clear.
    */
   hurt: number;
+  /**
+   * The height the crate was last resting at, so a drop can be measured.
+   *
+   * A crate destroyed on a spike it was nudged into and a crate that came down
+   * the height of the Foundry are the same entry in the counter and very
+   * different evenings. This is what tells them apart.
+   */
+  fellFrom: number;
 }
 
 /** Presentation-only events emitted by a tick. Rendered, never simulated. */
@@ -115,6 +123,21 @@ export interface World {
    */
   boosts: number;
   cargoBreaks: number;
+  /**
+   * The single most expensive thing that happened, for the results card to
+   * name: when it was, what it was, and how bad.
+   *
+   * The card's stat tiles are counts, and a count is a summary of an evening
+   * rather than a story about one. What people actually repeat to each other
+   * afterwards is a moment — the drop, the yank, the fall — so the run keeps
+   * the worst one it saw and the card can say it out loud with a timestamp
+   * against it. `worstKind` is 0 for nothing, 1 for a crate destroyed, 2 for
+   * pulling your partner off a ledge, 3 for a fall; `worstValue` is the metres
+   * involved, which is what makes one of them worse than another.
+   */
+  worstTick: number;
+  worstKind: number;
+  worstValue: number;
   events: SimEvent[];
 }
 

@@ -22,11 +22,12 @@ import {
   ROPE_YANK_SPEED,
   IN_REEL,
   BETRAYAL_DEBOUNCE,
-} from './constants.js';
+
+  TILE,} from './constants.js';
 import type { Level } from './level.js';
 import { collider, moveCollider, rectHitsTiles, pointSolid } from './physics.js';
 import { EV_REEL, EV_ROPE_YANK, type World } from './types.js';
-import { pushEvent } from './events.js';
+import { WORST_BETRAYAL, pushEvent, recordWorst } from './events.js';
 
 const SEG_MAX = ROPE_MAX / (ROPE_NODES - 1);
 const ROPE_G_STEP = ROPE_GRAVITY * DT * DT;
@@ -411,6 +412,10 @@ export function clampRopeLength(world: World, level: Level): void {
       if ((a.grounded === 1) !== (b.grounded === 1) && world.yankHold === 0) {
         world.betrayals++;
         world.yankHold = BETRAYAL_DEBOUNCE;
+        // Scored by how hard the rope was pulling, in tiles' worth of yank, so
+        // the worst one of an evening is the one that actually launched
+        // somebody rather than the one that scuffed them off a lip.
+        recordWorst(world, WORST_BETRAYAL, paying / TILE);
       }
     }
   }

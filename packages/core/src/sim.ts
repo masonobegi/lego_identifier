@@ -11,7 +11,8 @@ import {
   RESTART_HOLD,
   GOAL_CARGO_REACH,
   TILE,
-} from './constants.js';
+
+  GRAVITY,} from './constants.js';
 import { hazardAt } from './hazards.js';
 import { T_CHECKPOINT, T_GOAL, T_SHUTTER, type Level, tileAt } from './level.js';
 import { MAX_RISE } from './route.js';
@@ -20,7 +21,7 @@ import { applyRopeLoad, updateCargo } from './cargo.js';
 import { shutterOpen, updateHolds } from './physics.js';
 import { resolveBoosts, updatePlayer } from './player.js';
 import { placeAtSpawn } from './state.js';
-import { pushEvent } from './events.js';
+import { WORST_FALL, pushEvent, recordWorst } from './events.js';
 import {
   EV_CHECKPOINT,
   EV_CRUMBLE,
@@ -101,6 +102,12 @@ function killPlayer(world: World, index: number, x: number, y: number): void {
   p.gripping = 0;
   p.respawn = RESPAWN_TICKS;
   p.deaths++;
+  // A fall is worth the height it came from, read off the speed it arrived at
+  // rather than by remembering where it started — the same arithmetic the fall
+  // itself did, run backwards. Anything that kills you without a drop behind it,
+  // like walking into a saw on the flat, scores nothing here and should: it is
+  // the drop people describe to each other afterwards.
+  recordWorst(world, WORST_FALL, (p.vy * p.vy) / (2 * GRAVITY * TILE));
   p.vy = -140;
   pushEvent(world, EV_DEATH, x, y, index, 0);
 }

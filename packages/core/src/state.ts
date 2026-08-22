@@ -17,12 +17,13 @@ export const PLAYER_KEYS = [
 ] as const satisfies readonly (keyof PlayerState)[];
 
 export const CARGO_KEYS = [
-  'x', 'y', 'px', 'py', 'rot', 'rotV', 'hp', 'shake', 'grounded', 'calm', 'hurt',
+  'x', 'y', 'px', 'py', 'rot', 'rotV', 'hp', 'shake', 'grounded', 'calm', 'hurt', 'fellFrom',
 ] as const satisfies readonly (keyof CargoState)[];
 
 export const WORLD_KEYS = [
   'tick', 'rng', 'checkpoint', 'spawnX', 'spawnY', 'best', 'finished',
   'finishTick', 'restartTimer', 'bonds', 'betrayals', 'yankHold', 'boosts', 'cargoBreaks',
+  'worstTick', 'worstKind', 'worstValue',
 ] as const satisfies readonly (keyof World)[];
 
 type PlayerKey = (typeof PLAYER_KEYS)[number];
@@ -137,7 +138,7 @@ export function createWorld(ctx: SimContext): World {
     ropePY: new Float64Array(ROPE_NODES),
     cargo: {
       x: 0, y: 0, px: 0, py: 0, rot: 0, rotV: 0,
-      hp: level.crateHp || CARGO_HP, shake: 0, grounded: 0, calm: 0, hurt: 0,
+      hp: level.crateHp || CARGO_HP, shake: 0, grounded: 0, calm: 0, hurt: 0, fellFrom: 0,
     },
     crumble: new Int32Array(level.crumbleTile.length),
     open: new Uint8Array(level.holdGroups),
@@ -153,6 +154,9 @@ export function createWorld(ctx: SimContext): World {
     bonds: 0,
     betrayals: 0,
     cargoBreaks: 0,
+    worstTick: 0,
+    worstKind: 0,
+    worstValue: 0,
     events: [],
   };
   placeAtSpawn(level, world, level.spawnX, level.spawnY);
@@ -192,6 +196,9 @@ export function cloneWorld(src: World): World {
     bonds: src.bonds,
     betrayals: src.betrayals,
     cargoBreaks: src.cargoBreaks,
+    worstTick: src.worstTick,
+    worstKind: src.worstKind,
+    worstValue: src.worstValue,
     events: [],
   };
   return out;
