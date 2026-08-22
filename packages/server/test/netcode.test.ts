@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DAILY_FLOORS,
   IN_GRIP,
   IN_JUMP,
   IN_LEFT,
@@ -7,9 +8,22 @@ import {
   IN_RIGHT,
   MODE_GAUNTLET,
   Rng,
+  buildTower,
+  dailyDay,
+  dailySeed,
   hashWorld,
 } from '@haulmates/core';
+import { Lobby } from '../src/lobby.js';
+import type { Conn } from '../src/room.js';
 import { createHarness } from './harness.js';
+
+/** A day well away from a boundary, so the test never straddles one. */
+const DAY = dailyDay(Date.UTC(2026, 7, 21, 12, 0, 0));
+
+/** A socket that goes nowhere: enough to occupy a slot in a room. */
+function idleConn(id: number): Conn {
+  return { id, ip: '127.0.0.1', send: () => {}, close: () => {} };
+}
 
 /** Busy, varied input so the two peers genuinely disagree about the future. */
 function chaos(tick: number, player: number): number {
@@ -196,5 +210,58 @@ describe('server room management', () => {
     h.lobby.sweep(Date.now());
     h.lobby.sweep(Date.now() + 10 * 60_000);
     expect(h.lobby.rooms.has(room.code)).toBe(false);
+  });
+});
+
+/**
+ * Which tower a room is on.
+ *
+ * The daily is the only tower two people can be sure they are both looking at,
+ * and it is worth nothing unless a room can be opened on it and stay on it.
+ */
+describe('agreeing on a tower', () => {
+  it('opens a room on the tower the lobby named, and gives it to whoever joins', () => {
+    const h = createHarness({ mode: MODE_GAUNTLET, seed: dailySeed(DAY), towerLength: DAILY_FLOORS });
+    const expected = buildTower(dailySeed(DAY), DAILY_FLOORS);
+    expect(h.room().seed).toBe(dailySeed(DAY));
+    expect(h.room().level.id).toBe(expected.id);
+    for (const client of h.clients) expect(client.ctx!.level.id).toBe(expected.id);
+  });
+
+  it('rolls its own tower when nobody named one', () => {
+    const h = createHarness({ mode: MODE_GAUNTLET, seed: 0, towerLength: 6 });
+    expect(h.room().seed).not.toBe(0);
+    expect(h.room().fixedSeed).toBe(false);
+    expect(h.clients[0].ctx!.level.id).toBe(h.clients[1].ctx!.level.id);
+  });
+
+  it('gives a rematch a tower neither of them has climbed, and both of them the same one', () => {
+    const h = createHarness({ mode: MODE_GAUNTLET, seed: 0, towerLength: 6 });
+    const before = h.room().level.id;
+    h.clients[0].rematch();
+    h.run(400, () => 0);
+    expect(h.room().level.id).not.toBe(before);
+    for (const client of h.clients) expect(client.ctx!.level.id).toBe(h.room().level.id);
+  });
+
+  it('keeps today’s tower across a rematch, because that is what the room is for', () => {
+    const h = createHarness({ mode: MODE_GAUNTLET, seed: dailySeed(DAY), towerLength: DAILY_FLOORS });
+    const before = h.room().level.id;
+    h.clients[0].rematch();
+    h.run(400, () => 0);
+    expect(h.room().level.id).toBe(before);
+    for (const client of h.clients) expect(client.ctx!.level.id).toBe(before);
+  });
+
+  it('never quick-matches somebody onto a tower they did not ask for', () => {
+    const lobby = new Lobby();
+    const seed = dailySeed(DAY);
+    const daily = lobby.create(MODE_GAUNTLET, seed, DAILY_FLOORS, true)!;
+    const rolled = lobby.create(MODE_GAUNTLET, 0, 6, true)!;
+    daily.join(idleConn(1), 'ALPHA', 0, 0);
+    rolled.join(idleConn(2), 'BRAVO', 0, 0);
+    expect(lobby.findQuickplay(MODE_GAUNTLET, seed)).toBe(daily);
+    expect(lobby.findQuickplay(MODE_GAUNTLET, 0)).toBe(rolled);
+    expect(lobby.findQuickplay(MODE_GAUNTLET, seed + 1)).toBeUndefined();
   });
 });

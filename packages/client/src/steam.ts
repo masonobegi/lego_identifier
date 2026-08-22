@@ -2,9 +2,14 @@
  * Steamworks bridge.
  *
  * The renderer never talks to Steam directly — the Electron preload exposes a
- * narrow, promise-free surface on `window.haulmates`. Every call here is a
- * no-op when the game is running in a browser, so the same build works on the
- * web, in a playtest link, and inside the Steam client.
+ * narrow surface on `window.haulmates`. Every call here is a no-op when the
+ * game is running in a browser, so the same build works on the web, in a
+ * playtest link, and inside the Steam client.
+ *
+ * The surface is synchronous except where Steam itself is not: opening the
+ * invite dialog needs a lobby to exist first, and the answer to "did that
+ * work" is the only thing standing between the player and a toast that lies
+ * to them.
  */
 
 export interface BridgeInfo {
@@ -25,7 +30,7 @@ export interface SteamBridge {
   setStat?(name: string, value: number): void;
   setRichPresence?(key: string, value: string): void;
   /** Ask Steam to show the friend invite dialog for the current lobby. */
-  inviteFriend?(roomCode: string): void;
+  inviteFriend?(roomCode: string): Promise<boolean> | boolean;
   /** Registers the handler the shell calls when a friend clicks Join on Steam. */
   setJoinHandler?(handler: (roomCode: string) => void): void;
   openUrl?(url: string): void;
@@ -41,6 +46,14 @@ function bridge(): SteamBridge | undefined {
   return typeof window === 'undefined' ? undefined : (window.haulmates as SteamBridge | undefined);
 }
 
+/**
+ * True only once the shell has had a real answer out of Steam.
+ *
+ * This is what puts the STEAM badge on the title screen, so it has to mean
+ * "achievements and invites will work", not "this build was compiled with the
+ * Steam bits in it". A badge that lights up on optimism hides the one failure
+ * — Steam present but not talking to us — that it exists to make visible.
+ */
 export function steamAvailable(): boolean {
   return bridge()?.info?.().steam === true;
 }
@@ -75,15 +88,21 @@ export function setRichPresence(status: string, roomCode: string): void {
     b.setRichPresence('connect', `+haulmates_join ${roomCode}`);
     b.setRichPresence('steam_player_group', roomCode);
   } else {
+    // Both keys, or the friends list keeps offering a joinable haul and keeps
+    // the pair grouped under a room that has already been torn down.
     b.setRichPresence('connect', '');
+    b.setRichPresence('steam_player_group', '');
   }
 }
 
-export function inviteFriend(roomCode: string): boolean {
+export async function inviteFriend(roomCode: string): Promise<boolean> {
   const b = bridge();
   if (!b?.inviteFriend) return false;
-  b.inviteFriend(roomCode);
-  return true;
+  try {
+    return (await b.inviteFriend(roomCode)) === true;
+  } catch {
+    return false;
+  }
 }
 
 export function onSteamJoinRequest(handler: (roomCode: string) => void): void {

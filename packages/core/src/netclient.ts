@@ -15,6 +15,7 @@ import {
   S_PEER,
   S_PEER_LEFT,
   S_PONG,
+  S_REMATCH,
   S_RESULT,
   S_SNAPSHOT,
   S_START,
@@ -318,6 +319,17 @@ export class NetClient {
         };
         this.setPhase('ended');
         this.onResult?.(this.result);
+        return;
+      }
+      case S_REMATCH: {
+        // The room has been reset onto a tower named by the server. Reassemble
+        // from the seed rather than waiting for the snapshot: a snapshot is a
+        // world, and a world read onto the wrong level is two peers standing
+        // in different buildings agreeing about their coordinates.
+        this.seed = r.i32();
+        this.result = null;
+        this.buildMatch(0);
+        this.setPhase('lobby');
         return;
       }
       case S_ERROR: {

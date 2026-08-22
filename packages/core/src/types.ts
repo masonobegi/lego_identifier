@@ -135,6 +135,14 @@ export const EV_CARGO_LAND = 16;
 export const EV_REEL = 17;
 /** A hauler launched off a braced partner. The only co-op verb that gains height. */
 export const EV_BOOST = 18;
+/**
+ * A brace whose hands gave out, as opposed to one who chose to let go.
+ *
+ * Separate from EV_GRIP because it is the opposite piece of news: the anchor
+ * under a rescue has just stopped existing, and the player holding the button
+ * did nothing to cause it and gets no other signal that it happened.
+ */
+export const EV_GRIP_FAIL = 19;
 
 export const MODE_HAUL = 0;
 export const MODE_GAUNTLET = 1;

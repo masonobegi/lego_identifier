@@ -90,6 +90,33 @@ const PAD_BUTTONS: Record<Action, number[]> = {
 
 const AXIS_DEADZONE = 0.4;
 
+/** What a menu needs from a controller, as opposed to what a hauler needs. */
+export type MenuAction = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'cancel';
+
+/**
+ * Menu navigation on the keyboard is mostly the browser's job — Tab moves
+ * focus, Enter and Space press the focused button — so only the arrows are
+ * listed here. Adding Enter would fire the focused control twice.
+ */
+const MENU_KEYS: Record<MenuAction, string[]> = {
+  up: ['ArrowUp'],
+  down: ['ArrowDown'],
+  left: ['ArrowLeft'],
+  right: ['ArrowRight'],
+  confirm: [],
+  cancel: [],
+};
+
+/** Standard-gamepad d-pad and face buttons, in the layout every pad agrees on. */
+const MENU_PAD: Record<MenuAction, number[]> = {
+  up: [12],
+  down: [13],
+  left: [14],
+  right: [15],
+  confirm: [0],
+  cancel: [1],
+};
+
 export interface InputConfig {
   p1: Bindings;
   p2: Bindings;
@@ -136,6 +163,18 @@ export class InputManager {
   capture: ((code: string) => void) | null = null;
   lastInputWasPad = false;
 
+  /**
+   * Whether the keys the game plays with are taken away from the page.
+   *
+   * Space, Tab and the arrows scroll the document and work the focus ring, so
+   * during a match they are cancelled. In a menu that same cancelling is the
+   * difference between a game you can operate from the sofa and one you can
+   * only operate with a mouse: every control in the overlay is a real button,
+   * and Tab reaching it and Space pressing it are what the browser gives us
+   * for free. The App turns this off whenever a screen is open.
+   */
+  swallowKeys = true;
+
   constructor() {
     this.config = load<InputConfig>('bindings', { p1: cloneBindings(DEFAULT_P1), p2: cloneBindings(DEFAULT_P2) });
     for (const a of ACTIONS) {
@@ -157,9 +196,7 @@ export class InputManager {
       if (e.repeat) return;
       this.down.add(e.code);
       this.lastInputWasPad = false;
-      // Space and the arrows scroll the page and activate focused buttons;
-      // during play that would fight the game, so they are swallowed.
-      if (SWALLOW.has(e.code) && !isTextEntry(e.target)) e.preventDefault();
+      if (this.swallowKeys && SWALLOW.has(e.code) && !isTextEntry(e.target)) e.preventDefault();
     });
     target.addEventListener('keyup', (e) => {
       this.down.delete(e.code);
@@ -256,6 +293,48 @@ export class InputManager {
     return mask;
   }
 
+  /**
+   * One frame's worth of menu presses, from either pad and from the keyboard.
+   *
+   * Every action is read on every call, and the caller decides which of them
+   * mean anything on the screen it is showing. Reading them all is the point:
+   * the edge is remembered per button, so A held down to jump through the last
+   * half-second of a match is already spent by the time the pause menu appears
+   * and does not press Resume the instant it opens.
+   */
+  menuEdges(): Record<MenuAction, boolean> {
+    const out = { up: false, down: false, left: false, right: false, confirm: false, cancel: false };
+    for (const action of Object.keys(out) as MenuAction[]) {
+      for (const code of MENU_KEYS[action]) if (this.pressed(code)) out[action] = true;
+      for (const slot of [0, 1]) {
+        const pad = this.padFor(slot);
+        if (!pad) continue;
+        let held = false;
+        for (const index of MENU_PAD[action]) {
+          const button = pad.buttons[index];
+          if (button && (button.pressed || button.value > 0.5)) held = true;
+        }
+        // A stick is not a button, so it gets the same treatment a d-pad does:
+        // one press per push past the deadzone, not one per frame held there.
+        const x = pad.axes[0] ?? 0;
+        const y = pad.axes[1] ?? 0;
+        if (action === 'up' && y < -AXIS_DEADZONE) held = true;
+        if (action === 'down' && y > AXIS_DEADZONE) held = true;
+        if (action === 'left' && x < -AXIS_DEADZONE) held = true;
+        if (action === 'right' && x > AXIS_DEADZONE) held = true;
+        const key = `pad${slot}:menu:${action}`;
+        if (!held) {
+          this.consumed.delete(key);
+        } else if (!this.consumed.has(key)) {
+          this.consumed.add(key);
+          this.lastInputWasPad = true;
+          out[action] = true;
+        }
+      }
+    }
+    return out;
+  }
+
   /** Pause is deliberately not rebindable: every game uses Escape and Start. */
   pausePressed(): boolean {
     if (this.pressed('Escape')) return true;
@@ -341,7 +420,9 @@ const SWALLOW = new Set([
   'ShiftLeft', 'ShiftRight', 'ControlRight',
 ]);
 
-function isTextEntry(target: EventTarget | null): boolean {
+/** True for anything the player is typing into, where a key is a letter and
+ *  not a command. */
+export function isTextEntry(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
 }

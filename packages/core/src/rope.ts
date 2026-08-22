@@ -224,7 +224,11 @@ export function applyRopeForces(world: World, level: Level, inputs: number[]): v
     }
     p.grip = Math.max(0, p.grip - REEL_DRAIN * DT);
     p.gripCooldown = GRIP_REGEN_DELAY;
-    if (world.tick % 9 === 0) pushEvent(world, EV_REEL, p.x, p.y, i, 0);
+    // Every ninth tick, carrying how fast the rope is actually running: a
+    // rhythm rather than a one-shot, because hauling is a continuous verb, and
+    // with the speed in the event the presentation can tell a haul that is
+    // barely moving from one that is flying.
+    if (world.tick % 9 === 0) pushEvent(world, EV_REEL, p.x, p.y, i, along);
   }
 }
 

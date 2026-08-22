@@ -8,8 +8,8 @@
       "displayName": "Rope Learner",
       "description": "Reach your first checkpoint.",
       "hidden": false,
-      "iconAchieved": "achievements/first_steps.jpg",
-      "iconUnachieved": "achievements/first_steps_locked.jpg"
+      "iconAchieved": "store/achievements/first_steps.jpg",
+      "iconUnachieved": "store/achievements/first_steps_locked.jpg"
     },
     {
       "order": 2,
@@ -17,8 +17,8 @@
       "displayName": "Delivered",
       "description": "Finish The Long Haul with a friend.",
       "hidden": false,
-      "iconAchieved": "achievements/first_haul.jpg",
-      "iconUnachieved": "achievements/first_haul_locked.jpg"
+      "iconAchieved": "store/achievements/first_haul.jpg",
+      "iconUnachieved": "store/achievements/first_haul_locked.jpg"
     },
     {
       "order": 3,
@@ -26,8 +26,8 @@
       "displayName": "Handle With Care",
       "description": "Finish a run without ever breaking the crate.",
       "hidden": false,
-      "iconAchieved": "achievements/flawless_crate.jpg",
-      "iconUnachieved": "achievements/flawless_crate_locked.jpg"
+      "iconAchieved": "store/achievements/flawless_crate.jpg",
+      "iconUnachieved": "store/achievements/flawless_crate_locked.jpg"
     },
     {
       "order": 4,
@@ -35,8 +35,8 @@
       "displayName": "Butterfingers",
       "description": "Break twenty five crates. Across your whole life.",
       "hidden": false,
-      "iconAchieved": "achievements/butterfingers.jpg",
-      "iconUnachieved": "achievements/butterfingers_locked.jpg"
+      "iconAchieved": "store/achievements/butterfingers.jpg",
+      "iconUnachieved": "store/achievements/butterfingers_locked.jpg"
     },
     {
       "order": 5,
@@ -44,8 +44,8 @@
       "displayName": "Statistically Inevitable",
       "description": "Die one hundred times.",
       "hidden": false,
-      "iconAchieved": "achievements/hundred_deaths.jpg",
-      "iconUnachieved": "achievements/hundred_deaths_locked.jpg"
+      "iconAchieved": "store/achievements/hundred_deaths.jpg",
+      "iconUnachieved": "store/achievements/hundred_deaths_locked.jpg"
     },
     {
       "order": 6,
@@ -53,8 +53,8 @@
       "displayName": "It Was An Accident",
       "description": "Yank your partner off solid ground for the first time.",
       "hidden": false,
-      "iconAchieved": "achievements/betrayal.jpg",
-      "iconUnachieved": "achievements/betrayal_locked.jpg"
+      "iconAchieved": "store/achievements/betrayal.jpg",
+      "iconUnachieved": "store/achievements/betrayal_locked.jpg"
     },
     {
       "order": 7,
@@ -62,8 +62,8 @@
       "displayName": "It Keeps Happening",
       "description": "Yank your partner off solid ground one hundred times.",
       "hidden": false,
-      "iconAchieved": "achievements/betrayal_100.jpg",
-      "iconUnachieved": "achievements/betrayal_100_locked.jpg"
+      "iconAchieved": "store/achievements/betrayal_100.jpg",
+      "iconUnachieved": "store/achievements/betrayal_100_locked.jpg"
     },
     {
       "order": 8,
@@ -71,8 +71,8 @@
       "displayName": "Leg Up",
       "description": "Send your partner somewhere neither of you could reach alone.",
       "hidden": false,
-      "iconAchieved": "achievements/first_boost.jpg",
-      "iconUnachieved": "achievements/first_boost_locked.jpg"
+      "iconAchieved": "store/achievements/first_boost.jpg",
+      "iconUnachieved": "store/achievements/first_boost_locked.jpg"
     },
     {
       "order": 9,
@@ -80,8 +80,8 @@
       "displayName": "Human Scaffolding",
       "description": "Take or give a hundred boosts.",
       "hidden": false,
-      "iconAchieved": "achievements/boost_100.jpg",
-      "iconUnachieved": "achievements/boost_100_locked.jpg"
+      "iconAchieved": "store/achievements/boost_100.jpg",
+      "iconUnachieved": "store/achievements/boost_100_locked.jpg"
     },
     {
       "order": 10,
@@ -89,8 +89,8 @@
       "displayName": "Load Bearing Friend",
       "description": "Spend five hundred moments braced while your partner swings.",
       "hidden": false,
-      "iconAchieved": "achievements/anchor_500.jpg",
-      "iconUnachieved": "achievements/anchor_500_locked.jpg"
+      "iconAchieved": "store/achievements/anchor_500.jpg",
+      "iconUnachieved": "store/achievements/anchor_500_locked.jpg"
     },
     {
       "order": 11,
@@ -98,8 +98,8 @@
       "displayName": "Ten Floors Up",
       "description": "Clear a Gauntlet of ten floors.",
       "hidden": false,
-      "iconAchieved": "achievements/gauntlet_10.jpg",
-      "iconUnachieved": "achievements/gauntlet_10_locked.jpg"
+      "iconAchieved": "store/achievements/gauntlet_10.jpg",
+      "iconUnachieved": "store/achievements/gauntlet_10_locked.jpg"
     },
     {
       "order": 12,
@@ -107,8 +107,8 @@
       "displayName": "Twenty Floors Up",
       "description": "Clear a Gauntlet of twenty floors.",
       "hidden": false,
-      "iconAchieved": "achievements/gauntlet_20.jpg",
-      "iconUnachieved": "achievements/gauntlet_20_locked.jpg"
+      "iconAchieved": "store/achievements/gauntlet_20.jpg",
+      "iconUnachieved": "store/achievements/gauntlet_20_locked.jpg"
     },
     {
       "order": 13,
@@ -116,8 +116,8 @@
       "displayName": "Express Delivery",
       "description": "Finish The Long Haul in under twelve minutes.",
       "hidden": true,
-      "iconAchieved": "achievements/speedrun.jpg",
-      "iconUnachieved": "achievements/speedrun_locked.jpg"
+      "iconAchieved": "store/achievements/speedrun.jpg",
+      "iconUnachieved": "store/achievements/speedrun_locked.jpg"
     },
     {
       "order": 14,
@@ -125,8 +125,8 @@
       "displayName": "Suspiciously Competent",
       "description": "Finish a run without either of you dying.",
       "hidden": true,
-      "iconAchieved": "achievements/no_deaths.jpg",
-      "iconUnachieved": "achievements/no_deaths_locked.jpg"
+      "iconAchieved": "store/achievements/no_deaths.jpg",
+      "iconUnachieved": "store/achievements/no_deaths_locked.jpg"
     },
     {
       "order": 15,
@@ -134,8 +134,8 @@
       "displayName": "A Kilometre Of Regret",
       "description": "Climb one thousand metres in total.",
       "hidden": false,
-      "iconAchieved": "achievements/one_kilometre.jpg",
-      "iconUnachieved": "achievements/one_kilometre_locked.jpg"
+      "iconAchieved": "store/achievements/one_kilometre.jpg",
+      "iconUnachieved": "store/achievements/one_kilometre_locked.jpg"
     },
     {
       "order": 16,
@@ -143,8 +143,8 @@
       "displayName": "Still Friends",
       "description": "Play twenty five runs.",
       "hidden": false,
-      "iconAchieved": "achievements/marathon.jpg",
-      "iconUnachieved": "achievements/marathon_locked.jpg"
+      "iconAchieved": "store/achievements/marathon.jpg",
+      "iconUnachieved": "store/achievements/marathon_locked.jpg"
     }
   ],
   "stats": [

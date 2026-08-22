@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   Bot,
+  EV_GRIP,
+  EV_GRIP_FAIL,
+  EV_REEL,
   GRIP_MAX,
   LocalMatch,
   MODE_GAUNTLET,
   IN_RIGHT,
   PLAYER_H,
+  PLAYER_HALF_W,
   ROPE_MAX,
   ROPE_NODES,
   TILE,
@@ -23,6 +27,7 @@ import {
   IN_REEL,
   cloneWorld,
   IN_LEFT,
+  REEL_MAX_SPEED,
 } from '@haulmates/core';
 
 /* ------------------------------------------------------------------ setup */
@@ -278,6 +283,36 @@ describe('climbing out of a pit', () => {
       expect(escapedAt, 'and it should not take all day').toBeLessThan(400);
     });
   }
+
+  /**
+   * Reeling is one of the four verbs and it made no sound, which left the
+   * longest manoeuvre in the game — a partner hauling themselves out of a pit
+   * over several seconds — with nothing to say it was working. The event
+   * carries the speed the rope is actually coming in at, because a haul that
+   * is barely moving and a haul that is flying are the two things the player
+   * most needs told apart.
+   */
+  it('reports the winch running, and how fast', () => {
+    const level = pitLevel(7);
+    const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+    const { world } = dropOneIn(ctx);
+
+    let reels = 0;
+    let fastest = 0;
+    for (let t = 0; t < 300; t++) {
+      world.events.length = 0;
+      step(ctx, world, [IN_GRIP, IN_REEL | IN_LEFT]);
+      for (const e of world.events) {
+        if (e.kind !== EV_REEL) continue;
+        reels++;
+        expect(e.a, 'the hauler doing the hauling').toBe(1);
+        fastest = Math.max(fastest, Math.abs(e.b));
+      }
+    }
+    expect(reels, 'a rescue this long should keep saying so').toBeGreaterThan(10);
+    expect(fastest, 'and should say how fast it is going').toBeGreaterThan(20);
+    expect(fastest, 'within the speed the winch can reach').toBeLessThanOrEqual(REEL_MAX_SPEED * 1.5);
+  });
 })
 
 describe('the rope holds its own length', () => {
@@ -327,5 +362,61 @@ describe('the rope holds its own length', () => {
       }
       expect(worst / ROPE_MAX, `mode ${mode} seed ${seed}: worst rope length`).toBeLessThan(1.6);
     }
+  });
+});
+
+
+/**
+ * A brace that gives out is the moment a rescue fails, and it used to happen
+ * in complete silence: the stamina ring simply stopped being drawn. It is
+ * presentation, so it is an event — `pushEvent` only, never state, so a
+ * rollback that drops it cannot desync anything.
+ */
+describe('the hands going', () => {
+  /** One hauler clinging to a wall by their fingertips with an empty bar. */
+  function clinging(grip: number): { ctx: SimContext; world: World } {
+    const rows = blank(24);
+    paint(rows, 20, 2, '#'.repeat(36));
+    paint(rows, 2, 19, 'F');
+    paint(rows, 19, 8, 'S');
+    const level = build(rows);
+    const ctx: SimContext = { level, seed: 1, mode: MODE_HAUL };
+    const world = createWorld(ctx);
+    const floor = 20 * TILE - PLAYER_H / 2 - 1;
+    // Shoulder against the left wall, feet in mid-air: the one anchor that
+    // costs full stamina, so the bar empties in a handful of ticks.
+    placePair(world, 2 * TILE + PLAYER_HALF_W + 1, 10 * TILE, 10 * TILE, floor);
+    world.players[0].grounded = 0;
+    world.players[0].grip = grip;
+    return { ctx, world };
+  }
+
+  it('is announced once, when the bar runs out', () => {
+    const { ctx, world } = clinging(4);
+    let failures = 0;
+    // Short of GRIP_REGEN_DELAY after the fall, so what is being counted is
+    // one brace ending rather than the player grabbing on again.
+    for (let t = 0; t < 30; t++) {
+      world.events.length = 0;
+      step(ctx, world, [IN_GRIP, 0]);
+      failures += world.events.filter((e) => e.kind === EV_GRIP_FAIL).length;
+    }
+    expect(world.players[0].gripping, 'the brace should be gone').toBe(0);
+    expect(failures, 'and said so exactly once').toBe(1);
+  });
+
+  it('stays quiet when a hauler lets go on purpose', () => {
+    const { ctx, world } = clinging(GRIP_MAX);
+    let failures = 0;
+    let grabs = 0;
+    for (let t = 0; t < 30; t++) {
+      world.events.length = 0;
+      step(ctx, world, [t < 15 ? IN_GRIP : 0, 0]);
+      failures += world.events.filter((e) => e.kind === EV_GRIP_FAIL).length;
+      grabs += world.events.filter((e) => e.kind === EV_GRIP).length;
+    }
+    expect(grabs, 'they did grab on').toBe(1);
+    expect(world.players[0].gripping, 'and did let go').toBe(0);
+    expect(failures, 'nobody failed at anything').toBe(0);
   });
 });

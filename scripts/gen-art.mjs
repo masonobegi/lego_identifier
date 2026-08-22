@@ -9,9 +9,19 @@
 import { chromium } from 'playwright';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+// The achievement icons are named after the API names Steamworks is configured
+// with, so they are read from the same list the game evaluates and the config
+// generator writes. A second, hand-kept list here is how a store ends up with
+// an icon for an achievement that no longer exists and none for the one added
+// last week. Requires `npm run build` first, same as npm run steam:config.
+import { ACHIEVEMENT_DEFS } from '../packages/core/dist/index.js';
 
 const STORE_DIR = join('steam', 'store');
+const ACHIEVEMENT_DIR = join(STORE_DIR, 'achievements');
 const ICON_DIR = join('packages', 'desktop', 'build');
+
+/** Steam renders achievement icons at exactly this, in the overlay and the profile. */
+const ACHIEVEMENT_ICON = 64;
 
 /** name, width, height, layout */
 const STEAM_ASSETS = [
@@ -30,6 +40,20 @@ const STEAM_ASSETS = [
 ];
 
 const ICON_SIZES = [32, 64, 128, 256, 512, 1024];
+
+/**
+ * The lettering on an achievement badge: the initials of its display name, or
+ * the first two letters when the name is a single word.
+ *
+ * Derived rather than authored, so adding an achievement cannot leave one
+ * badge blank. Two badges can still land on the same initials — Ten and Twenty
+ * Floors Up do — which is what the index numeral in the corner is for.
+ */
+function achievementMark(name) {
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return words.slice(0, 3).map((w) => w[0]).join('').toUpperCase();
+}
 
 function findChromium() {
   if (process.env.PLAYWRIGHT_CHROMIUM) return process.env.PLAYWRIGHT_CHROMIUM;
@@ -54,6 +78,93 @@ const COL = {
   p2: { main: '#4fd6e0', dark: '#1f8f9c', light: '#a5f0f6' },
 };
 
+/* ------------------------------------------------------------- palette */
+const P = {
+  paper: '#F4EFE2',
+  haze: '#E4DCC8',
+  far: '#DED5C1',
+  mid: '#CEC3AB',
+  near: '#B9AC90',
+  livery: ['#1C6E9E', '#A63B1E', '#5C7A3A', '#C9C2B2'],
+  tileBody: '#C6BCA6',
+  tileTop: '#F0EADA',
+  tileDetail: '#AFA48C',
+  ink: '#1B1714',
+  hazA: '#F2B01C',
+  hazB: '#1B1714',
+  chalk: '#FFFDF6',
+  dust: '#8E8067',
+  red: '#D6301C',
+  cargo: '#E8DCC0',
+  cargoDark: '#B49B6E',
+  shadow: 'rgba(46,38,28,0.20)',
+};
+const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+const font = (px) => \`900 \${px}px \${FONT}\`;
+
+/* ------------------------------------------------------------- helpers */
+function hash(i) {
+  let h = (i * 374761393) | 0;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function chevron(ctx, size) {
+  const t = document.createElement('canvas');
+  t.width = size;
+  t.height = size;
+  const c = t.getContext('2d');
+  c.fillStyle = P.hazA;
+  c.fillRect(0, 0, size, size);
+  c.fillStyle = P.hazB;
+  c.beginPath();
+  c.moveTo(0, size); c.lineTo(size / 2, size); c.lineTo(size, size / 2); c.lineTo(size, 0);
+  c.closePath(); c.fill();
+  c.beginPath();
+  c.moveTo(0, size / 2); c.lineTo(size / 2, 0); c.lineTo(0, 0);
+  c.closePath(); c.fill();
+  return ctx.createPattern(t, 'repeat');
+}
+
+/**
+ * A stencil mark on its own canvas, with the bridges punched through as real
+ * holes (destination-out) rather than painted over. Painting them would put
+ * sky-coloured bars onto the tower, and the holes are what stop a glyph
+ * reading as ordinary text.
+ */
+function stencil(text, size, colour, tracking, bridges) {
+  const tr = tracking === undefined ? size * 0.06 : tracking;
+  const off = document.createElement('canvas');
+  const probe = off.getContext('2d');
+  probe.font = font(size);
+  const chars = text.split('');
+  const ws = chars.map((ch) => probe.measureText(ch).width);
+  const total = ws.reduce((a, b) => a + b, 0) + tr * (chars.length - 1);
+  const m = probe.measureText(text);
+  const asc = m.actualBoundingBoxAscent || size * 0.72;
+  const dsc = m.actualBoundingBoxDescent || 0;
+  const pad = Math.ceil(size * 0.2) + 2;
+  off.width = Math.ceil(total) + pad * 2;
+  off.height = Math.ceil(asc + dsc) + pad * 2;
+  const c = off.getContext('2d');
+  c.font = font(size);
+  c.textBaseline = 'alphabetic';
+  c.fillStyle = colour;
+  let x = pad;
+  for (let i = 0; i < chars.length; i++) {
+    c.fillText(chars[i], x, pad + asc);
+    x += ws[i] + tr;
+  }
+  if (bridges !== false && asc > 22) {
+    c.globalCompositeOperation = 'destination-out';
+    const bw = Math.max(1.4, asc * 0.048);
+    c.fillRect(0, pad + asc * 0.34, off.width, bw);
+    c.fillRect(0, pad + asc * 0.665, off.width, bw);
+    c.globalCompositeOperation = 'source-over';
+  }
+  return { canvas: off, pad, asc, capW: total };
+}
+
 function render([mode, W, H]) {
   const canvas = document.getElementById('c');
   canvas.width = W;
@@ -62,30 +173,6 @@ function render([mode, W, H]) {
   // Steam's library logo is the wordmark alone on transparency, laid over the
   // hero image the client already has. Everything below is skipped for it.
   const logoOnly = mode === 'logo';
-
-  /* ------------------------------------------------------------- palette */
-  const P = {
-    paper: '#F4EFE2',
-    haze: '#E4DCC8',
-    far: '#DED5C1',
-    mid: '#CEC3AB',
-    near: '#B9AC90',
-    livery: ['#1C6E9E', '#A63B1E', '#5C7A3A', '#C9C2B2'],
-    tileBody: '#C6BCA6',
-    tileTop: '#F0EADA',
-    tileDetail: '#AFA48C',
-    ink: '#1B1714',
-    hazA: '#F2B01C',
-    hazB: '#1B1714',
-    chalk: '#FFFDF6',
-    dust: '#8E8067',
-    red: '#D6301C',
-    cargo: '#E8DCC0',
-    cargoDark: '#B49B6E',
-    shadow: 'rgba(46,38,28,0.20)',
-  };
-  const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
-  const font = (px) => \`900 \${px}px \${FONT}\`;
 
   /* ---------------------------------------------------------------- poses */
   // Local figure units: torso 27 tall, shoulders at -23, an arm reaches ~26.
@@ -233,30 +320,8 @@ function render([mode, W, H]) {
   }
 
   /* ------------------------------------------------------------- helpers */
-  function hash(i) {
-    let h = (i * 374761393) | 0;
-    h = (h ^ (h >>> 13)) * 1274126177;
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  }
-
-  function chevron(size) {
-    const t = document.createElement('canvas');
-    t.width = size;
-    t.height = size;
-    const c = t.getContext('2d');
-    c.fillStyle = P.hazA;
-    c.fillRect(0, 0, size, size);
-    c.fillStyle = P.hazB;
-    c.beginPath();
-    c.moveTo(0, size); c.lineTo(size / 2, size); c.lineTo(size, size / 2); c.lineTo(size, 0);
-    c.closePath(); c.fill();
-    c.beginPath();
-    c.moveTo(0, size / 2); c.lineTo(size / 2, 0); c.lineTo(0, 0);
-    c.closePath(); c.fill();
-    return ctx.createPattern(t, 'repeat');
-  }
   const CH_SIZE = Math.max(6, Math.round(H / 24));
-  const CHEV = chevron(CH_SIZE);
+  const CHEV = chevron(ctx, CH_SIZE);
 
   /** Chevron band, boxed top and bottom by a hard ink rule so it cannot dissolve. */
   function chevronBand(x, y, w, h, phase) {
@@ -269,45 +334,6 @@ function render([mode, W, H]) {
     ctx.fillRect(x, y, w, rule);
     ctx.fillRect(x, y + h - rule, w, rule);
     ctx.restore();
-  }
-
-  /**
-   * A stencil mark on its own canvas, with the bridges punched through as real
-   * holes (destination-out) rather than painted over. Painting them would put
-   * sky-coloured bars onto the tower, and the holes are what stop a glyph
-   * reading as ordinary text.
-   */
-  function stencil(text, size, colour, tracking, bridges) {
-    const tr = tracking === undefined ? size * 0.06 : tracking;
-    const off = document.createElement('canvas');
-    const probe = off.getContext('2d');
-    probe.font = font(size);
-    const chars = text.split('');
-    const ws = chars.map((ch) => probe.measureText(ch).width);
-    const total = ws.reduce((a, b) => a + b, 0) + tr * (chars.length - 1);
-    const m = probe.measureText(text);
-    const asc = m.actualBoundingBoxAscent || size * 0.72;
-    const dsc = m.actualBoundingBoxDescent || 0;
-    const pad = Math.ceil(size * 0.2) + 2;
-    off.width = Math.ceil(total) + pad * 2;
-    off.height = Math.ceil(asc + dsc) + pad * 2;
-    const c = off.getContext('2d');
-    c.font = font(size);
-    c.textBaseline = 'alphabetic';
-    c.fillStyle = colour;
-    let x = pad;
-    for (let i = 0; i < chars.length; i++) {
-      c.fillText(chars[i], x, pad + asc);
-      x += ws[i] + tr;
-    }
-    if (bridges !== false && asc > 22) {
-      c.globalCompositeOperation = 'destination-out';
-      const bw = Math.max(1.4, asc * 0.048);
-      c.fillRect(0, pad + asc * 0.34, off.width, bw);
-      c.fillRect(0, pad + asc * 0.665, off.width, bw);
-      c.globalCompositeOperation = 'source-over';
-    }
-    return { canvas: off, pad, asc, capW: total };
   }
 
   function drawMark(text, size, colour, x, y, alpha, bridges) {
@@ -756,12 +782,90 @@ function icon(size) {
   g.stroke();
 }
 
+/**
+ * An achievement badge, at the 64x64 Steam shows in the overlay and on the
+ * profile.
+ *
+ * It is the same yard as the capsules — paper ground, one hazard strip, a hard
+ * ink frame and a stencil mark — because that is the size at which a player
+ * decides whether these belong to the same game as the store page. There is no
+ * room for the haulers: two figures and a rope at 64 pixels is a smudge, so the
+ * badge is signage instead, which is what the rest of the art direction is made
+ * of anyway.
+ *
+ * The locked variant is the achieved one drawn again and then drained: a
+ * saturation blend against flat grey, then a wash of paper over the top. Doing
+ * it as a post-pass rather than a second palette means a locked icon can never
+ * disagree with its achieved twin about anything but colour.
+ */
+function achievementBadge(mark, order, achieved, size) {
+  const canvas = document.getElementById('c');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const u = size / 64;
+
+  ctx.fillStyle = P.paper;
+  ctx.fillRect(0, 0, size, size);
+
+  // A corner flash in one of the three painted yard liveries, picked off the
+  // badge's own
+  // number. Sixteen plates that differ only in their lettering are a wall of
+  // beige in the overlay grid; the colour is what makes one findable.
+  const painted = P.livery.slice(0, 3);
+  const flash = painted[Math.floor(hash(order * 9 + 5) * painted.length) % painted.length];
+  ctx.fillStyle = flash;
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(size, 21 * u);
+  ctx.lineTo(size - 21 * u, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // The same hazard strip the girders wear, boxed by an ink rule.
+  const bandH = 11 * u;
+  ctx.fillStyle = chevron(ctx, Math.max(5, Math.round(8 * u)));
+  ctx.fillRect(0, size - bandH, size, bandH);
+  ctx.fillStyle = P.ink;
+  ctx.fillRect(0, size - bandH, size, Math.max(1.2, 1.6 * u));
+
+  // The mark, fitted rather than assumed: three initials have to survive at the
+  // same plate size as one.
+  const maxW = size - 14 * u;
+  let markSize = 32 * u;
+  let m = stencil(mark, markSize, P.ink, markSize * 0.04);
+  if (m.capW > maxW) {
+    markSize *= maxW / m.capW;
+    m = stencil(mark, markSize, P.ink, markSize * 0.04);
+  }
+  const bodyH = size - bandH;
+  ctx.drawImage(m.canvas, (size - m.canvas.width) / 2, (bodyH - m.asc) / 2 - m.pad + 2 * u);
+
+  // The index, so the two Gauntlet floors badges are not the same picture.
+  const n = stencil(String(order), 11 * u, P.dust, 0, false);
+  ctx.drawImage(n.canvas, 4 * u - n.pad, 4 * u - n.pad);
+
+  ctx.strokeStyle = P.ink;
+  ctx.lineWidth = Math.max(1.4, 2 * u);
+  ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, size - ctx.lineWidth, size - ctx.lineWidth);
+
+  if (!achieved) {
+    ctx.globalCompositeOperation = 'saturation';
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(244,239,226,0.35)';
+    ctx.fillRect(0, 0, size, size);
+  }
+}
+
 // Steam's layout names map onto the three authored designs, except 'logo',
 // which is the wordmark alone on transparency and has to reach the renderer
 // under that name so it can skip the scene.
 window.renderAsset = (w, h, layout) =>
   render([layout === 'tall' || layout === 'thumb' || layout === 'logo' ? layout : 'wide', w, h]);
 window.renderIcon = (size) => icon(size);
+window.renderAchievement = (mark, order, achieved, size) => achievementBadge(mark, order, achieved, size);
 </script></body></html>`;
 
 /* --------------------------------------------------------- icon containers */
@@ -812,6 +916,7 @@ function buildIcns(images) {
 /* ------------------------------------------------------------------- main */
 
 mkdirSync(STORE_DIR, { recursive: true });
+mkdirSync(ACHIEVEMENT_DIR, { recursive: true });
 mkdirSync(ICON_DIR, { recursive: true });
 
 const browser = await chromium.launch({ headless: true, executablePath: findChromium(), args: ['--force-device-scale-factor=1'] });
@@ -838,6 +943,26 @@ for (const size of ICON_SIZES) {
   if (size === 32) writeFileSync(join(STORE_DIR, 'client-icon-32.png'), buffer);
   console.log(`  icon ${size}x${size}`);
 }
+
+// Achieved and locked, for every achievement Steam is configured with. JPEG
+// because that is the extension steam/achievements.json points the uploader at,
+// and the badges are flat colour with no transparency to lose.
+await page.setViewportSize({ width: ACHIEVEMENT_ICON, height: ACHIEVEMENT_ICON });
+for (const [index, def] of ACHIEVEMENT_DEFS.entries()) {
+  const mark = achievementMark(def.name);
+  for (const achieved of [true, false]) {
+    // A hidden achievement shows as "???" until it is earned, so its locked
+    // badge should not spell out the answer either.
+    const face = achieved || !def.hidden ? mark : '?';
+    await page.evaluate(
+      ([m, order, on, size]) => window.renderAchievement(m, order, on, size),
+      [face, index + 1, achieved, ACHIEVEMENT_ICON],
+    );
+    const buffer = await page.locator('#c').screenshot({ type: 'jpeg', quality: 94 });
+    writeFileSync(join(ACHIEVEMENT_DIR, `${def.id.toLowerCase()}${achieved ? '' : '_locked'}.jpg`), buffer);
+  }
+}
+console.log(`  ${ACHIEVEMENT_DEFS.length * 2} achievement icons in ${ACHIEVEMENT_DIR}/`);
 
 writeFileSync(join(ICON_DIR, 'icon.ico'), buildIco(iconImages.filter((i) => i.size <= 256)));
 writeFileSync(join(ICON_DIR, 'icon.icns'), buildIcns(iconImages.filter((i) => i.size >= 128)));

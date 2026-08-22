@@ -2,11 +2,13 @@ import {
   CODE_ALPHABET,
   CODE_LENGTH,
   DT,
+  MODE_GAUNTLET,
   MODE_HAUL,
   S_DESYNC,
   S_INPUTS,
   S_PEER,
   S_PEER_LEFT,
+  S_REMATCH,
   S_RESULT,
   S_SNAPSHOT,
   S_START,
@@ -53,10 +55,16 @@ const RING = 4096;
 export class Room {
   readonly code: string;
   readonly mode: number;
-  readonly seed: number;
   readonly towerLength: number;
-  readonly level: Level;
-  readonly ctx: SimContext;
+  /**
+   * The tower was asked for by the lobby rather than rolled by the server —
+   * today's daily. Such a room keeps its seed across a rematch, because the
+   * tower is the reason the two of them are in it.
+   */
+  readonly fixedSeed: boolean;
+  seed: number;
+  level: Level;
+  ctx: SimContext;
   world: World;
   state: RoomState = 'lobby';
   slots: (Slot | null)[] = [null, null];
@@ -73,11 +81,12 @@ export class Room {
   emptySince = 0;
   lastActivity = Date.now();
 
-  constructor(code: string, mode: number, seed: number, towerLength: number) {
+  constructor(code: string, mode: number, seed: number, towerLength: number, fixedSeed = false) {
     this.code = code;
     this.mode = mode;
     this.seed = seed;
     this.towerLength = towerLength;
+    this.fixedSeed = fixedSeed;
     this.level = levelForMatch(mode, seed, towerLength);
     this.ctx = { level: this.level, seed, mode };
     this.world = createWorld(this.ctx);
@@ -211,10 +220,22 @@ export class Room {
     log.info(`room ${this.code}: ${resuming ? 'resumed' : 'started'} at tick ${this.world.tick}`);
   }
 
-  /** Restart the match at tick 0 with a fresh world (a rematch). */
-  rematch(seedOverride?: number): void {
-    const seed = seedOverride ?? this.seed;
-    this.world = createWorld({ ...this.ctx, seed });
+  /**
+   * Restart the match at tick 0 with a fresh world (a rematch).
+   *
+   * A Gauntlet is a seed, so going again means going again on a different
+   * tower — and that only happens if the level is reassembled, which is why
+   * the room rebuilds rather than dropping a new seed into the old level. The
+   * peers cannot infer any of this, so they are told the new seed and rebuild
+   * from it before the snapshot that follows lands on them.
+   */
+  rematch(): void {
+    if (this.mode === MODE_GAUNTLET && !this.fixedSeed) {
+      this.seed = (Math.random() * 0x7fffffff) | 0;
+      this.level = levelForMatch(this.mode, this.seed, this.towerLength);
+      this.ctx = { level: this.level, seed: this.seed, mode: this.mode };
+    }
+    this.world = createWorld(this.ctx);
     this.inputs.fill(0);
     this.known.fill(0);
     this.lastInput.fill(0);
@@ -222,6 +243,7 @@ export class Room {
     this.pendingFrames.length = 0;
     this.state = 'lobby';
     for (const slot of this.slots) if (slot) slot.ready = false;
+    this.broadcast(new Writer(8).u8(S_REMATCH).i32(this.seed).finish());
     this.broadcastPeers();
   }
 

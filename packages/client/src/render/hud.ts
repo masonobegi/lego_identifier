@@ -24,6 +24,13 @@ export interface HudState {
   /** Net diagnostics; omitted for couch co-op. */
   net?: { rtt: number; rollbacks: number; worstRollback: number; tick: number; lead: number; desyncs: number };
   showNetgraph: boolean;
+  /**
+   * True when one player can force the checkpoint reset alone, because the
+   * second hauler is the Autohauler and echoes the vote rather than casting
+   * one. The instruction on the bar has to say what this configuration will
+   * actually accept.
+   */
+  soloRestart: boolean;
   hint: string;
   hintStrength: number;
 }
@@ -185,8 +192,12 @@ function drawCargoCall(ctx: CanvasRenderingContext2D, vw: number, vh: number, s:
   if (!pairAtGoal(s.world, s.level) || cargoAtGoal(s.world, s.level)) return;
 
   const rows = Math.max(0, Math.round((s.world.cargo.y - s.level.goalY) / TILE));
+  // A destroyed crate has already sent the simulation back to the checkpoint by
+  // the time this is drawn, so the line reports what is happening rather than
+  // asking for a restart. Copy that instructs the player to start something
+  // that is under way while they read it is worse than no copy at all.
   const dead = s.world.cargo.hp <= 0;
-  const text = dead ? 'THE CRATE IS GONE — RESTART AT THE CHECKPOINT' : 'BRING THE CRATE UP';
+  const text = dead ? 'THE CRATE IS GONE — BACK TO THE CHECKPOINT' : 'BRING THE CRATE UP';
   const under = dead ? '' : rows > 0 ? `still ${rows} row${rows === 1 ? '' : 's'} below` : 'almost there';
 
   const y = vh / 2 - 96;
@@ -217,7 +228,13 @@ function drawRestartVote(ctx: CanvasRenderingContext2D, vw: number, vh: number, 
   ctx.font = `900 13px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffd166';
-  ctx.fillText(held > 0 ? 'RESTARTING AT CHECKPOINT…' : 'BOTH OF YOU MUST HOLD RESTART', vw / 2, y - 8);
+  const label =
+    held > 0
+      ? 'RESTARTING AT CHECKPOINT…'
+      : s.soloRestart
+        ? 'HOLD TO RESTART AT CHECKPOINT'
+        : 'BOTH OF YOU MUST HOLD RESTART';
+  ctx.fillText(label, vw / 2, y - 8);
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.fillRect(x, y, barW, 12);

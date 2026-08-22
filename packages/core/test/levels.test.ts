@@ -7,6 +7,7 @@ import {
   MAX_RISE,
   isDeadlyTile,
   isSolidTile,
+  levelFloors,
   tileAt,
   type ChunkDef,
   type Level,
@@ -125,6 +126,16 @@ describe('assembled towers', () => {
         expect(level.chunkIds[i]).not.toBe(level.chunkIds[i - 1]);
       }
     }
+  });
+
+  it('counts its floors off the stack, not off the height that was asked for', () => {
+    // The Gauntlet achievements are a claim about a tower somebody climbed.
+    // The requested height is a request: clamped here, overruled by whoever
+    // hosts, and still sitting on the menu slider long after the run it
+    // described ended.
+    for (const floors of [3, 10, 20]) expect(levelFloors(buildTower(31337, floors))).toBe(floors);
+    expect(levelFloors(buildTower(31337, 400))).toBe(60);
+    expect(levelFloors(buildCampaign())).toBe(CHUNKS.length - 2);
   });
 
   it('never places a hazard where the spawn is', () => {

@@ -35,6 +35,7 @@ export type ScreenId =
   | 'customise'
   | 'couch'
   | 'achievements'
+  | 'records'
   | 'error';
 
 const previewCanvases = new Set<{ canvas: HTMLCanvasElement; colour: () => number; hat: () => number }>();
@@ -123,6 +124,8 @@ export function buildScreen(app: App, id: ScreenId): HTMLElement | null {
       return couchScreen(app);
     case 'achievements':
       return achievementsScreen(app);
+    case 'records':
+      return recordsScreen(app);
     case 'error':
       return errorScreen(app);
     default:
@@ -159,6 +162,7 @@ function titleScreen(app: App): HTMLElement {
       button(app, 'How to play', '', () => app.show('controls')),
       button(app, 'Customise', '', () => app.show('customise')),
       button(app, 'Achievements', `${app.achievements.earned.length} / ${ACHIEVEMENTS.length}`, () => app.show('achievements')),
+      button(app, 'The ledger', '', () => app.show('records')),
       button(app, 'Settings', '', () => app.show('settings')),
       desktopAvailable() ? button(app, 'Quit', '', () => quitGame()) : null,
     ),
@@ -245,6 +249,10 @@ function onlineScreen(app: App): HTMLElement {
       button(app, 'Host a haul', 'Get a code and send it to your friend', () => app.connect(INTENT_CREATE), {
         primary: true,
       }),
+      // The daily is the one tower in the game two people can be certain they
+      // are both looking at, which is the only reason anybody compares a run.
+      // Leaving it playable alone only made it a score nobody could contest.
+      button(app, "Host today's haul", `${dailyLabel(app.today)} — the tower everybody has today`, () => app.hostDaily()),
       button(app, 'Join with a code', 'Your friend already has one open', () => app.show('join'), ),
       button(app, 'Quick match', 'Rope yourself to a stranger', () => app.connect(INTENT_QUICKPLAY), ),
       desktopAvailable()
@@ -356,8 +364,17 @@ function lobbyScreen(app: App): HTMLElement {
   return h(
     'div',
     { class: 'screen' },
-    h('h2', { class: 'title' }, app.lobbyMode === MODE_GAUNTLET ? 'The Gauntlet' : 'The Long Haul'),
-    h('p', { class: 'sub' }, 'Both of you press ready. Nobody starts alone.'),
+    h('h2', { class: 'title' }, app.dailyRun ? "Today's haul" : app.lobbyMode === MODE_GAUNTLET ? 'The Gauntlet' : 'The Long Haul'),
+    // Whoever joined by code did not choose any of this, so the room has to
+    // say what it is — a daily is only worth playing if both of you know it is
+    // the daily.
+    h(
+      'p',
+      { class: 'sub' },
+      app.dailyRun
+        ? `${dailyLabel(app.today)}. The same tower as everybody else, until midnight.`
+        : 'Both of you press ready. Nobody starts alone.',
+    ),
     h(
       'div',
       { class: 'codebox' },
@@ -383,7 +400,9 @@ function lobbyScreen(app: App): HTMLElement {
             {
               class: 'btn',
               onclick: () => {
-                if (inviteFriend(code)) toast('Steam invite opened');
+                void inviteFriend(code).then((opened) =>
+                  toast(opened ? 'Steam invite opened' : 'Steam would not open the invite'),
+                );
                 app.sfx.ui('confirm');
               },
             },
@@ -426,6 +445,11 @@ function pauseScreen(app: App): HTMLElement {
       'div',
       { class: 'menu' },
       button(app, 'Resume', '', () => app.resume(), { primary: true }),
+      // Only offline. One peer cannot wind the shared world back on its own,
+      // and the pair have the held vote for it.
+      !online
+        ? button(app, 'Restart at checkpoint', 'Where you got stuck stays stuck otherwise', () => app.restartAtCheckpoint())
+        : null,
       button(app, 'How to play', '', () => app.show('controls'), ),
       button(app, 'Settings', '', () => app.show('settings'), ),
       button(app, online ? 'Leave the haul' : 'Back to menu', '', () => app.leave(), ),
@@ -511,10 +535,34 @@ function resultsScreen(app: App): HTMLElement {
       button(app, '← Back to menu', '', () => app.leave(), { key: 'ESC' }),
       app.dailyRun ? button(app, 'Copy the docket', '', () => copyDocket(app, r), ) : null,
       h('div', { class: 'spacer' }),
-      app.net ? button(app, 'Rematch', 'Same friend, fresh regrets', () => app.rematch(), { primary: true }) : null,
-      !app.net ? button(app, 'Play again', '', () => app.restartLocal(), { primary: true }) : null,
+      app.net ? button(app, 'Rematch', rematchHint(app), () => app.rematch(), { primary: true }) : null,
+      !app.net ? replayButton(app) : null,
     ),
   );
+}
+
+/**
+ * What pressing the big button again actually gets you.
+ *
+ * "Play again" meant one thing on every mode and was a lie on two of them: the
+ * Gauntlet's whole content is that the tower is different every time, and the
+ * daily's whole content is that it is not. A label that does not say which of
+ * those is about to happen leaves the player to find out by climbing it.
+ */
+function replayButton(app: App): HTMLElement {
+  if (app.dailyRun) {
+    return button(app, 'Go again', 'Today’s tower, until midnight', () => app.restartLocal(), { primary: true });
+  }
+  if (app.local?.ctx.mode === MODE_GAUNTLET) {
+    return button(app, 'A new tower', 'Another Gauntlet, assembled from scratch', () => app.restartLocal(), { primary: true });
+  }
+  return button(app, 'Climb it again', 'From the yard, with the crate intact', () => app.restartLocal(), { primary: true });
+}
+
+/** A rematch keeps the room, so it keeps whatever tower the room is on. */
+function rematchHint(app: App): string {
+  if (app.dailyRun) return 'Today’s tower again, same friend';
+  return app.lobbyMode === MODE_GAUNTLET ? 'Same friend, a tower neither of you has seen' : 'Same friend, fresh regrets';
 }
 
 /**
@@ -614,7 +662,7 @@ function settingsScreen(app: App): HTMLElement {
       slider(app, 'Music', 'Generated live, never the same twice', () => s.music, (v) => (s.music = v)),
       slider(app, 'Screen shake', 'Set to zero if it makes you queasy', () => s.shake, (v) => (s.shake = v)),
       toggle(app, 'High contrast', 'Flat, maximally readable colours', () => s.highContrast, (v) => (s.highContrast = v)),
-      toggle(app, 'Reduce flashing', 'Removes full-screen flashes on impacts', () => s.reducedFlash, (v) => (s.reducedFlash = v)),
+      toggle(app, 'Reduce flashing', 'Removes impact flashes and holds blinking warnings steady', () => s.reducedFlash, (v) => (s.reducedFlash = v)),
       toggle(app, 'Motion trails', 'Afterimages when you are moving very fast', () => s.showGhostTrail, (v) => (s.showGhostTrail = v)),
       toggle(app, 'Show connection stats', 'Ping, rollbacks and resyncs on the HUD', () => s.showNetgraph, (v) => (s.showNetgraph = v)),
       h(
@@ -718,8 +766,14 @@ function controlsScreen(app: App): HTMLElement {
       verb('Move & jump', ['A', 'D', 'SPACE'], 'Standard platforming. Coyote time and jump buffering are generous, because the rope is not.'),
       verb('Grip', ['L-SHIFT'], 'Hold to lock yourself in place on the ground or a wall. You become an anchor: your partner can now swing, be reeled in, or be flung. Grip drains except on yellow rebar.'),
       verb('Reel', ['F'], 'Drag yourself along the rope toward your partner. The fastest way up is usually someone else.'),
+      // Listed above the jokes and below the two keys it is made of, because
+      // it is not a key: it is the one move in the tower that has no button,
+      // and the one without which the tower does not go anywhere. A player who
+      // reads this screen and leaves still not knowing it exists will spend
+      // four minutes at the first gate deciding the game is broken.
+      verb('Leg up', ['SHIFT', '+', 'SPACE'], 'The only way past a two-person lift. One of you braces on the ground; the other stands against them and jumps, and goes half again as high. It costs the brace a chunk of grip, so it is not free and it is not spammable.'),
       verb('Emote', ['T'], 'Apologise. Or do not.'),
-      verb('Restart', ['R'], 'Both of you must hold it to reset to the last checkpoint.'),
+      verb('Restart', ['R'], 'Hold to go back to the last checkpoint. With a friend on the other end of the rope, both of you have to hold it; the Autohauler holds it with you.'),
       verb('Pause', ['ESC'], 'Online play keeps running while you are in the menu.'),
     ),
     h('div', { class: 'notice', style: { marginTop: '18px' } }, 'Gamepads work out of the box: stick to move, A to jump, right trigger to grip, left trigger to reel.'),
@@ -916,6 +970,91 @@ function achievementsScreen(app: App): HTMLElement {
           h('div', { class: 'ctl' }, h('div', { class: `tag ${earned.has(a.id) ? 'ready' : ''}` }, earned.has(a.id) ? 'Earned' : 'Locked')),
         ),
       ),
+    ),
+    h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
+  );
+}
+
+/* ----------------------------------------------------------------- records */
+
+/** One block of the docket: a heading and its ruled lines. */
+function ledger(heading: string, rows: [what: string, value: string, tone?: string][]): HTMLElement {
+  return h(
+    'div',
+    { class: 'ledger' },
+    h('div', { class: 'head' }, heading),
+    ...rows.map(([what, value, tone]) =>
+      h('div', { class: `line ${tone ?? ''}` }, h('span', { class: 'what' }, what), h('span', { class: 'n' }, value)),
+    ),
+  );
+}
+
+/**
+ * Everything you have carried up that tower, and everything you dropped.
+ *
+ * Eleven lifetime counters were being written to disk from the first run and
+ * not one of them was ever shown to anybody — including two personal bests the
+ * results card races you against. Coming back on day three is the whole reason
+ * a game like this has a profile at all, and the numbers that would earn it
+ * were sitting in local storage.
+ *
+ * Laid out as a delivery docket rather than a stat sheet because that is the
+ * voice the rest of the game speaks in, and because a docket has an opinion
+ * about its own columns: what arrived, what it cost, what the pair of you did
+ * for each other on the way.
+ */
+function recordsScreen(app: App): HTMLElement {
+  const p = app.profile;
+  const d = p.daily;
+  const lost = Math.max(0, p.runs - p.finishes);
+  // A streak is only alive if it was fed today or yesterday; anything older is
+  // a streak that has already been broken and is waiting to be told.
+  const streak = d.day === app.today || d.day === app.today - 1 ? d.streak : 0;
+  const today =
+    d.day !== app.today
+      ? 'Not attempted'
+      : d.bestTicks > 0
+        ? formatTime(d.bestTicks / 60)
+        : `${d.bestCheckpoints} checkpoints in ${d.attempts} ${d.attempts === 1 ? 'try' : 'tries'}`;
+
+  const notes = [
+    { when: () => p.runs === 0, text: 'Nothing on the books yet. The first crate is the hard one.' },
+    { when: () => p.finishes === 0, text: 'Nothing delivered yet. The tower is not going anywhere.' },
+    { when: () => p.cargoBreaks > p.finishes, text: 'More crates lost than delivered. The client has stopped ringing.' },
+    { when: () => p.betrayals > p.bonds, text: 'More ledges yanked out from under each other than moments spent holding still for one another. The rope is not the problem.' },
+    { when: () => p.boosts === 0, text: 'Not once has either of you stood on the other. There is a whole move down there going unused.' },
+    { when: () => true, text: 'Signed off. Next crate.' },
+  ];
+
+  return h(
+    'div',
+    { class: 'screen' },
+    h('h2', { class: 'title' }, 'The ledger'),
+    h('p', { class: 'sub' }, notes.find((n) => n.when())!.text),
+    h(
+      'div',
+      { class: 'scroll' },
+      ledger('Deliveries', [
+        ['Jobs taken', String(p.runs)],
+        ['Crates delivered', String(p.finishes), p.finishes > 0 ? 'good' : ''],
+        ['Abandoned on the way up', String(lost), lost > 0 ? 'bad' : ''],
+        ['Height climbed, all told', `${Math.round(p.metres)} m`],
+      ]),
+      ledger('Best on record', [
+        ['Fastest Long Haul', p.bestCampaignTicks > 0 ? formatTime(p.bestCampaignTicks / 60) : 'Not yet delivered', 'gold'],
+        ['Tallest Gauntlet finished', p.bestGauntletHeight > 0 ? `${p.bestGauntletHeight} floors` : 'Not yet delivered', 'gold'],
+        [dailyLabel(app.today), today],
+        ['Days running', streak > 0 ? `${streak}` : '—'],
+      ]),
+      ledger('Damages', [
+        ['Falls', String(p.deaths)],
+        ['Crates destroyed', String(p.cargoBreaks), p.cargoBreaks > 0 ? 'bad' : ''],
+        ['Times you pulled your partner off a ledge', String(p.betrayals), p.betrayals > 0 ? 'bad' : ''],
+      ]),
+      ledger('Goodwill', [
+        ['Times one of you stood on the other', String(p.boosts), 'good'],
+        ['Moments spent braced for your partner', String(p.bonds), 'good'],
+      ]),
     ),
     h('div', { class: 'row', style: { marginTop: '18px' } }, backButton(app, 'title')),
   );

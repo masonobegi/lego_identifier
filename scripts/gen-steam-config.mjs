@@ -6,7 +6,7 @@
  * same source the game reads removes the whole class of "the achievement never
  * fires in the release build" bug.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ACHIEVEMENT_DEFS, STAT_DEFS } from '../packages/core/dist/index.js';
 
@@ -30,8 +30,10 @@ writeFileSync(
         displayName: a.name,
         description: a.description,
         hidden: Boolean(a.hidden),
-        iconAchieved: `achievements/${a.id.toLowerCase()}.jpg`,
-        iconUnachieved: `achievements/${a.id.toLowerCase()}_locked.jpg`,
+        // Relative to this file: scripts/gen-art.mjs renders both variants
+        // from the same list into steam/store/achievements/.
+        iconAchieved: `store/achievements/${a.id.toLowerCase()}.jpg`,
+        iconUnachieved: `store/achievements/${a.id.toLowerCase()}_locked.jpg`,
       })),
       stats: STAT_DEFS.map((s, index) => ({
         order: index + 1,
@@ -106,14 +108,40 @@ writeFileSync(
       richPresenceTokens: {
         '#Status_Generic': '%status%',
       },
-      note2: 'The game writes a "connect" rich-presence key of the form "+haulmates_join CODE"; Steam passes it to the client as launch arguments when a friend clicks Join Game.',
+      /**
+       * Steam Cloud has to be switched on with a quota before the API will
+       * accept a byte, and the game writes its saves through the API rather
+       * than Auto-Cloud, so there are no paths to configure here — only the
+       * limits. Five save files of a few kilobytes each; the quota is
+       * deliberately far above that so a future one cannot silently bounce.
+       */
+      cloud: {
+        note: 'Steamworks > Application > Cloud. Enable Steam Cloud, then set these.',
+        quotaBytes: 1048576,
+        maxFiles: 32,
+      },
+      note2:
+        'The game writes a "connect" rich-presence key of the form "+haulmates_join CODE"; Steam passes it to the client as launch arguments when a friend clicks Join Game. ' +
+        'Accepting an overlay invite instead launches it with "+connect_lobby <id>" and the room code is read off that lobby.',
     },
     null,
     2,
   ) + '\n',
 );
 
+// An achievement uploaded without its icon is a hard stop on the store page
+// going live, and it is not the sort of thing anybody notices until the
+// Steamworks upload rejects it.
+const missingIcons = ACHIEVEMENT_DEFS.flatMap((a) => [
+  `store/achievements/${a.id.toLowerCase()}.jpg`,
+  `store/achievements/${a.id.toLowerCase()}_locked.jpg`,
+]).filter((rel) => !existsSync(join(OUT, rel)));
+
 console.log(`Wrote Steamworks configuration to ${OUT}/`);
 console.log(`  ${ACHIEVEMENT_DEFS.length} achievements, ${STAT_DEFS.length} stats`);
 console.log(`  app ${APP_ID}, depots ${WIN_DEPOT} / ${LINUX_DEPOT} / ${MAC_DEPOT}`);
 console.log('  Set HAULMATES_APP_ID once Steam issues your real App ID and re-run.');
+if (missingIcons.length > 0) {
+  console.warn(`\nWARNING: ${missingIcons.length} achievement icons are missing, starting with ${OUT}/${missingIcons[0]}.`);
+  console.warn('  Run npm run art to render them.');
+}

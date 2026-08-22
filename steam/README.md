@@ -9,6 +9,7 @@ re-run the generator, or your changes will vanish on the next build.
 | `app_build.vdf`, `depot_*.vdf` | the same generator | `npm run steam:config` |
 | `launch-options.json` | the same generator | `npm run steam:config` |
 | `store/*.png` | `scripts/gen-art.mjs` | `npm run art` |
+| `store/achievements/*.jpg` | `packages/core/src/achievements.ts`, via the same generator | `npm run art` |
 
 The App ID defaults to `480` (Steam's public test app) so that everything is runnable
 before you own one. Set the real one and regenerate:
@@ -23,3 +24,8 @@ are ignored by git — copy the output of `npm run dist:*` into `content/<platfo
 The capsule art in `store/` is generated placeholder art: correctly sized, on-brand and
 free of any licensing, but not a substitute for an illustrator. See
 `docs/STEAM-LAUNCH.md`.
+
+The achievement icons in `store/achievements/` are generated from the achievement list
+itself, an achieved and a locked variant for each, at the 64x64 Steam renders them at.
+Adding an achievement and re-running `npm run art` is enough; there is no second list to
+keep in step.

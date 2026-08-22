@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   BOOST_COST,
+  BRACE_REGEN_SHARE,
+  DT,
   GRIP_MAX,
+  GRIP_REGEN,
   IN_GRIP,
   IN_JUMP,
   LocalMatch,
@@ -180,6 +183,109 @@ describe('the leg up', () => {
     const spent = before - world.players[1].grip;
     expect(spent).toBeGreaterThan(BOOST_COST * 0.85);
     expect(spent).toBeLessThanOrEqual(BOOST_COST);
+  });
+
+  /**
+   * The same pair, the same ledge, the two of you swapped over.
+   *
+   * `step` updates slot 0 before slot 1, so a boost that asked about its
+   * partner mid-tick got last tick's answer in one seat and this tick's in the
+   * other. It was worth roughly a pixel of height, which is nothing until it
+   * is the pixel between catching the lip of a gate and not, and the player it
+   * happens to has no way to know their seat is the reason.
+   */
+  it('lifts you the same however the two of you are seated', () => {
+    const peak = (climber: number): number => {
+      const { level, floor } = shelf(9);
+      const ctx = { level, seed: 1, mode: 0 };
+      const world = createWorld(ctx);
+      const cols = [24, 23];
+      place(world, cols[climber], floor - 1, cols[1 - climber]);
+      const mate = 1 - climber;
+      const brace = [0, 0];
+      brace[mate] = IN_GRIP;
+      for (let t = 0; t < 8; t++) {
+        step(ctx, world, brace);
+        world.events.length = 0;
+      }
+      const start = world.players[climber].y;
+      let high = start;
+      for (let t = 0; t < 60; t++) {
+        const in0 = [...brace];
+        if (t < 26) in0[climber] |= IN_JUMP;
+        step(ctx, world, in0);
+        world.events.length = 0;
+        high = Math.min(high, world.players[climber].y);
+      }
+      return start - high;
+    };
+    const a = peak(0);
+    const b = peak(1);
+    expect(a, 'a boost happened at all').toBeGreaterThan(TILE * 5);
+    // Not bit-identical: slot 0 still moves before slot 1, so the rope solver
+    // sees a marginally different pair of endpoints and the two runs land a
+    // few thousandths of a pixel apart. What must not differ is the decision,
+    // and a decision that went the other way is worth a hundred pixels.
+    expect(Math.abs(a - b), `${a} vs ${b}`).toBeLessThan(0.05);
+  });
+
+  /**
+   * The seat used to decide the answer whenever the brace was on a threshold.
+   *
+   * A grounded brace regenerates grip, so a bar sitting a hair under the cost
+   * of a boost is over it again one tick later. Slot 0 asked before its
+   * partner had moved and was refused; slot 1 asked after and was lifted. Two
+   * players doing the identical thing at the identical moment, one of them
+   * denied the only move in the game that gains height, for a reason neither
+   * of them could see.
+   */
+  it('refuses a brace who cannot afford it, in either seat', () => {
+    const tick = GRIP_REGEN * BRACE_REGEN_SHARE * DT;
+    const boosted = (climber: number): boolean => {
+      const { level, floor } = shelf(6);
+      const ctx = { level, seed: 1, mode: 0 };
+      const world = createWorld(ctx);
+      const cols = [24, 23];
+      place(world, cols[climber], floor - 1, cols[1 - climber]);
+      const brace = [0, 0];
+      brace[1 - climber] = IN_GRIP;
+      for (let t = 0; t < 8; t++) {
+        step(ctx, world, brace);
+        world.events.length = 0;
+      }
+      // Straddling: short of the cost now, past it after one tick of regen.
+      world.players[1 - climber].grip = BOOST_COST - tick / 2;
+      const jump = [...brace];
+      jump[climber] |= IN_JUMP;
+      step(ctx, world, jump);
+      return world.boosts > 0;
+    };
+    expect(boosted(0), 'climber in slot 0').toBe(false);
+    expect(boosted(1), 'climber in slot 1').toBe(false);
+  });
+
+  /**
+   * Nobody is a platform on the tick they shove off themselves.
+   *
+   * Deciding both boosts from the same pre-tick world makes a mutual boost
+   * expressible for the first time: two people braced on one ledge, both
+   * jumping on the same frame, each launching off the other. That clears a
+   * gate in a single move and skips the haul the gate exists to ask for.
+   */
+  it('gives nobody a leg up when both of you jump at once', () => {
+    const { level, floor } = shelf(6);
+    const ctx = { level, seed: 1, mode: 0 };
+    const world = createWorld(ctx);
+    place(world, 24, floor - 1, 23);
+    for (let t = 0; t < 8; t++) {
+      step(ctx, world, [IN_GRIP, IN_GRIP]);
+      world.events.length = 0;
+    }
+    for (let t = 0; t < 6; t++) {
+      step(ctx, world, [IN_GRIP | IN_JUMP, IN_GRIP | IN_JUMP]);
+      world.events.length = 0;
+    }
+    expect(world.boosts).toBe(0);
   });
 });
 

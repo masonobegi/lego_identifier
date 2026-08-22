@@ -270,14 +270,14 @@ export class Renderer {
     this.drawGateMarks(ctx, level, palette, view);
     this.drawTiles(ctx, level, world, view, options);
     this.drawOutOfBounds(ctx, level, view, palette);
-    drawDynamicTiles(ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1);
-    drawMovers(ctx, level, world.tick, alpha);
-    drawSaws(ctx, level, world.tick, alpha, this.time);
+    drawDynamicTiles(ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1, options);
+    drawMovers(ctx, level, world.tick, alpha, palette);
+    drawSaws(ctx, level, world.tick, alpha, this.time, palette);
 
     if (options.showGhostTrail) this.drawTrails(ctx, input);
 
     drawRope(ctx, world, prev, alpha, this.time);
-    drawCargo(ctx, world, prev, alpha, this.time);
+    drawCargo(ctx, world, prev, alpha, this.time, options.reducedFlash);
     for (let i = 0; i < 2; i++) {
       const colour = PLAYER_COLOURS[input.colours[i] % PLAYER_COLOURS.length];
       drawPlayer(ctx, world, prev, i, alpha, colour, input.hats[i], this.time);
@@ -542,11 +542,11 @@ export class Renderer {
     const view = this.camera.bounds(this.width, this.height, 96);
     this.drawTiles(this.ctx, level, world, view, options);
     this.drawOutOfBounds(this.ctx, level, view, palette);
-    drawDynamicTiles(this.ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1);
-    drawMovers(this.ctx, level, world.tick, 0);
-    drawSaws(this.ctx, level, world.tick, 0, this.time);
+    drawDynamicTiles(this.ctx, level, world, this.time, view.x0, view.y0, view.x1, view.y1, options);
+    drawMovers(this.ctx, level, world.tick, 0, palette);
+    drawSaws(this.ctx, level, world.tick, 0, this.time, palette);
     drawRope(this.ctx, world, prev, 0, this.time);
-    drawCargo(this.ctx, world, prev, 0, this.time);
+    drawCargo(this.ctx, world, prev, 0, this.time, options.reducedFlash);
     for (let i = 0; i < 2; i++) {
       drawPlayer(this.ctx, world, prev, i, 0, PLAYER_COLOURS[i], i === 0 ? 1 : 0, this.time);
     }

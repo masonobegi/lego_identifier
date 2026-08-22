@@ -7,10 +7,24 @@ export function buildCampaign(): Level {
   return assembleLevel('campaign', 'THE LONG HAUL', CHUNKS);
 }
 
+/**
+ * The identity of a seeded tower.
+ *
+ * A seed and a height name exactly one tower, so this doubles as the answer to
+ * "is the level on screen the one I think it is" — which is how a run knows it
+ * is still today's daily after a restart. It is derived from the clamped
+ * height rather than the requested one so that two towers with the same id can
+ * never be different towers; the renderer caches baked tile strips under it.
+ */
+export function towerId(seed: number, floors: number): string {
+  return `tower-${seed >>> 0}-${floors}`;
+}
+
 /** A seeded endless tower drawn from the same chunk library. */
 export function buildTower(seed: number, length: number): Level {
-  const chunks: ChunkDef[] = generateTower(seed, CHUNKS, Math.max(1, Math.min(60, length)));
-  return assembleLevel(`tower-${seed >>> 0}-${length}`, 'THE GAUNTLET', chunks);
+  const floors = Math.max(1, Math.min(60, length));
+  const chunks: ChunkDef[] = generateTower(seed, CHUNKS, floors);
+  return assembleLevel(towerId(seed, floors), 'THE GAUNTLET', chunks);
 }
 
 export const DEFAULT_TOWER_LENGTH = 10;

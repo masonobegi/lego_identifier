@@ -69,7 +69,42 @@ function savePath(): string {
 }
 
 function saveFile(key: string): string {
-  return join(savePath(), `${key.replace(/[^a-z0-9_-]/gi, '_')}.json`);
+  return join(savePath(), saveName(key));
+}
+
+function saveName(key: string): string {
+  return `${key.replace(/[^a-z0-9_-]/gi, '_')}.json`;
+}
+
+/**
+ * Read a save, preferring Steam Cloud.
+ *
+ * Steam syncs the cloud copy down before the process starts, so when it holds
+ * the key it is the newest thing anywhere and the local file is a mirror one
+ * machine behind. The local file is still what answers on a machine with no
+ * Steam, with cloud saves switched off in the player's Steam settings, or on
+ * the first launch after cloud was enabled — the one case where the mirror is
+ * ahead of an empty cloud.
+ */
+function readSave(key: string): string | null {
+  const cloud = steam.cloudRead(saveName(key));
+  if (cloud !== null && cloud !== '') return cloud;
+  try {
+    return readFileSync(saveFile(key), 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** Write both copies. The local file is what a standalone launch reads back. */
+function writeSave(key: string, value: string): boolean {
+  steam.cloudWrite(saveName(key), value);
+  try {
+    writeFileSync(saveFile(key), value, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /* ---------------------------------------------------------------- window */
@@ -185,6 +220,11 @@ function runSelfTest(target: BrowserWindow): void {
 
 /* -------------------------------------------------------------- lifecycle */
 
+// Before anything asks Electron for a window: the overlay is switched on with
+// command-line switches, and Chromium has stopped reading those by the time
+// the app is ready.
+steam.prepareOverlay();
+
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
   app.quit();
@@ -193,6 +233,7 @@ if (!singleInstance) {
     // A friend clicked "Join game" while we were already running.
     const code = steam.parseJoinArgument(argv);
     if (code) deliverJoin(code);
+    else takeLobbyArgument(argv);
     if (window) {
       if (window.isMinimized()) window.restore();
       window.focus();
@@ -201,16 +242,19 @@ if (!singleInstance) {
 
   app.whenReady().then(() => {
     registerRendererProtocol();
+    // The binding pumps Steam's callbacks on its own 30 Hz timer from the
+    // moment init returns, so the overlay, invites and achievement toasts need
+    // no pump of ours.
     const status = steam.init(STEAM_APP_ID);
     if (status.available) {
       console.log(`Steam ready for ${status.playerName} (${status.steamId})`);
-      // Steamworks needs its callbacks pumped for the overlay and invites.
-      setInterval(() => steam.runCallbacks(), 40);
+      if (status.reason) console.log(`Steam warning: ${status.reason}`);
     } else {
       console.log(`Steam unavailable (${status.reason}) — running standalone`);
     }
     steam.onJoinRequest(deliverJoin);
     pendingJoinCode = steam.parseJoinArgument(process.argv);
+    if (!pendingJoinCode) takeLobbyArgument(process.argv);
     createWindow();
   });
 
@@ -245,6 +289,16 @@ function registerRendererProtocol(): void {
   });
 }
 
+/**
+ * Accepting a Steam invite launches us with a lobby id rather than a room
+ * code, and the code has to be fetched off the lobby. That round trip lands
+ * after the window exists, so it arrives by the same event a warm join does.
+ */
+function takeLobbyArgument(argv: string[]): void {
+  const id = steam.parseLobbyArgument(argv);
+  if (id !== null) steam.joinLobbyById(id);
+}
+
 function deliverJoin(code: string): void {
   pendingJoinCode = code;
   window?.webContents.send('haulmates:join', code);
@@ -275,11 +329,9 @@ ipcMain.on('haulmates:bootstrap-sync', (event) => {
   pendingJoinCode = '';
   const saves: Record<string, string> = {};
   for (const key of SAVE_KEYS) {
-    try {
-      saves[key] = readFileSync(saveFile(key), 'utf8');
-    } catch {
-      /* first launch, or a save we have never written */
-    }
+    const raw = readSave(key);
+    // Absent means first launch, or a save we have never written.
+    if (raw !== null) saves[key] = raw;
   }
   event.returnValue = {
     steam: status.available,
@@ -296,29 +348,18 @@ ipcMain.on('haulmates:achievement', (_event, id: string) => steam.unlockAchievem
 ipcMain.on('haulmates:clear-achievement', (_event, id: string) => steam.clearAchievement(String(id)));
 ipcMain.on('haulmates:stat', (_event, name: string, value: number) => steam.setStat(String(name), Number(value) || 0));
 ipcMain.on('haulmates:presence', (_event, key: string, value: string) => steam.setRichPresence(String(key), String(value)));
-ipcMain.on('haulmates:invite', (_event, code: string) => steam.inviteFriend(String(code)));
+// An invoke, not a send: the game tells the player whether the overlay opened,
+// and it can only do that if the answer comes back.
+ipcMain.handle('haulmates:invite', (_event, code: string) => steam.inviteFriend(String(code)));
 ipcMain.on('haulmates:open-url', (_event, url: string) => {
   if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
 });
 ipcMain.on('haulmates:quit', () => app.quit());
 ipcMain.on('haulmates:fullscreen', () => window?.setFullScreen(!window.isFullScreen()));
 
-ipcMain.handle('haulmates:read-save', (_event, key: string) => {
-  try {
-    return readFileSync(saveFile(key), 'utf8');
-  } catch {
-    return null;
-  }
-});
+ipcMain.handle('haulmates:read-save', (_event, key: string) => readSave(key));
 
-ipcMain.handle('haulmates:write-save', (_event, key: string, value: string) => {
-  try {
-    writeFileSync(saveFile(key), String(value), 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
-});
+ipcMain.handle('haulmates:write-save', (_event, key: string, value: string) => writeSave(key, String(value)));
 
 /**
  * Host a match from this machine. Useful on a LAN, at a LAN party, or when the

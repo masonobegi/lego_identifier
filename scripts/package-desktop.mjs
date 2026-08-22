@@ -4,9 +4,9 @@
  * Builds every workspace, copies the web renderer into the Electron shell, and
  * (unless --skip-installer) runs electron-builder for the requested platform.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const args = process.argv.slice(2);
 const platform = args.find((a) => ['--win', '--linux', '--mac'].includes(a)) ?? '--linux';
@@ -19,6 +19,103 @@ function run(command, commandArgs, options = {}) {
     console.error(`\nFailed: ${command} ${commandArgs.join(' ')}`);
     process.exit(result.status ?? 1);
   }
+}
+
+/* ------------------------------------------------------------ macOS signing */
+
+/**
+ * Whether this build has a Developer ID to sign with.
+ *
+ * `CSC_LINK` is a certificate electron-builder imports, `CSC_NAME` an identity
+ * already in the keychain; either is enough. With neither, the mac path is
+ * asked for an unsigned bundle explicitly rather than left to guess from
+ * whatever happens to be in the local keychain, which is how a build machine
+ * silently signs with somebody's personal certificate.
+ */
+function macSigningIdentity() {
+  return (process.env.CSC_NAME ?? process.env.CSC_LINK ?? '').trim();
+}
+
+/**
+ * Credentials for `notarytool`, in either of the two forms Apple accepts.
+ *
+ * An App Store Connect API key is the one to use in CI — it does not expire
+ * with a person's password and it is not tied to their 2FA. The Apple ID form
+ * is here because it is what somebody signing a build on their own laptop
+ * already has.
+ */
+function notaryCredentials() {
+  const env = process.env;
+  if (env.APPLE_API_KEY && env.APPLE_API_KEY_ID && env.APPLE_API_ISSUER) {
+    return ['--key', env.APPLE_API_KEY, '--key-id', env.APPLE_API_KEY_ID, '--issuer', env.APPLE_API_ISSUER];
+  }
+  if (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID) {
+    return ['--apple-id', env.APPLE_ID, '--password', env.APPLE_APP_SPECIFIC_PASSWORD, '--team-id', env.APPLE_TEAM_ID];
+  }
+  return null;
+}
+
+function macBundle() {
+  const releases = join('packages', 'desktop', 'release');
+  if (!existsSync(releases)) return '';
+  // electron-builder names the folder after the architecture it built, so a
+  // universal build lands in mac-universal and an arch-specific one does not.
+  for (const entry of readdirSync(releases)) {
+    const bundle = join(releases, entry, 'HAULMATES.app');
+    if (existsSync(bundle)) return bundle;
+  }
+  return '';
+}
+
+/**
+ * Notarize and staple, which is the part electron-builder will not do for a
+ * `dir` target — it notarizes installers, and Steam ships the bundle itself.
+ *
+ * Skipping any of this is a warning rather than an error: a developer building
+ * on their own machine to try something needs the bundle, and only a build
+ * that goes to a customer needs Apple's signature on it. What is not allowed
+ * is being quiet about which one just came out.
+ */
+function signAndNotarizeMac() {
+  const bundle = macBundle();
+  if (!bundle) {
+    console.warn('\nWARNING: no HAULMATES.app in packages/desktop/release — nothing to notarize.');
+    return;
+  }
+  if (!macSigningIdentity()) {
+    console.warn(`\nWARNING: ${bundle} is UNSIGNED and NOT NOTARIZED.`);
+    console.warn('  Current macOS refuses to launch it: a customer gets "the app is damaged".');
+    console.warn('  Set CSC_LINK (a .p12, base64 or a path) and CSC_KEY_PASSWORD, or CSC_NAME,');
+    console.warn('  plus APPLE_API_KEY/APPLE_API_KEY_ID/APPLE_API_ISSUER for notarization.');
+    return;
+  }
+  if (process.platform !== 'darwin') {
+    console.warn(`\nWARNING: ${bundle} was signed off a Mac and cannot be notarized here.`);
+    console.warn('  notarytool and stapler ship with Xcode. Re-run this on macOS before uploading.');
+    return;
+  }
+  const credentials = notaryCredentials();
+  if (!credentials) {
+    console.warn(`\nWARNING: ${bundle} is signed but NOT NOTARIZED — Gatekeeper still blocks it.`);
+    console.warn('  Set APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER (or APPLE_ID,');
+    console.warn('  APPLE_APP_SPECIFIC_PASSWORD and APPLE_TEAM_ID) and build again.');
+    return;
+  }
+
+  // notarytool takes an archive, never a bundle directory, and ditto is the
+  // only zip that preserves the symlinks and extended attributes inside a
+  // .app. A zip made any other way is rejected as an invalid bundle.
+  const archive = join(dirname(bundle), 'HAULMATES-notarize.zip');
+  rmSync(archive, { force: true });
+  run('ditto', ['-c', '-k', '--keepParent', bundle, archive]);
+  run('xcrun', ['notarytool', 'submit', archive, ...credentials, '--wait']);
+  // Stapling writes the ticket into the bundle so it launches on a machine
+  // that cannot reach Apple — which, for a game, is most of them at least once.
+  run('xcrun', ['stapler', 'staple', bundle]);
+  rmSync(archive, { force: true });
+  const assess = spawnSync('spctl', ['--assess', '--type', 'execute', '--verbose=2', bundle], { encoding: 'utf8' });
+  console.log(`Gatekeeper: ${(assess.stderr || assess.stdout || '').trim() || 'no answer from spctl'}`);
+  console.log(`Signed, notarized and stapled: ${bundle}`);
 }
 
 run('npm', ['run', 'build']);
@@ -121,16 +218,20 @@ console.log(`Using electron ${electronVersion}`);
 // Call the binary directly rather than through npx: in a workspace the root
 // bin directory is not always on the resolved path.
 const builder = join('node_modules', '.bin', process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder');
-run(
-  builder,
-  [
-    platform,
-    // The config is discovered inside the project directory; passing a path
-    // here would be resolved relative to it and double up the prefix.
-    '--project',
-    join('packages', 'desktop'),
-    `--config.electronVersion=${electronVersion}`,
-  ],
-  { env: { ...process.env, ELECTRON_BUILDER_CACHE: join(process.cwd(), '.cache', 'electron-builder') } },
-);
+const builderArgs = [
+  platform,
+  // The config is discovered inside the project directory; passing a path
+  // here would be resolved relative to it and double up the prefix.
+  '--project',
+  join('packages', 'desktop'),
+  `--config.electronVersion=${electronVersion}`,
+];
+// Say "do not sign" out loud when there is nothing to sign with. Left to
+// itself electron-builder picks whatever Developer ID it finds in the local
+// keychain, so a build on somebody's laptop goes out under their name.
+if (platform === '--mac' && !macSigningIdentity()) builderArgs.push('--config.mac.identity=null');
+run(builder, builderArgs, {
+  env: { ...process.env, ELECTRON_BUILDER_CACHE: join(process.cwd(), '.cache', 'electron-builder') },
+});
 console.log('\nBuild complete. See packages/desktop/release/');
+if (platform === '--mac') signAndNotarizeMac();

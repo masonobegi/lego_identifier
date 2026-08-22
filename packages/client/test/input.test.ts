@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ACTIONS, DEFAULT_P1, DEFAULT_P2, type Action, type Bindings } from '../src/input.js';
+import { ACTIONS, DEFAULT_P1, DEFAULT_P2, InputManager, type Action, type Bindings } from '../src/input.js';
 
 /**
  * Both players' input masks are read from one set of held keys, so a key bound
@@ -50,5 +50,66 @@ describe('keyboard bindings', () => {
     for (const arrow of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
       expect(p2.has(arrow), `${arrow} should belong to player two`).toBe(true);
     }
+  });
+});
+
+/**
+ * A tiny stand-in for `window`: enough of an event target to drive the key
+ * handlers, and no DOM at all, because the thing under test here is which keys
+ * the game takes away from the page rather than what the page does with them.
+ */
+function fakeWindow(): { fire: (type: string, event: unknown) => void } & Pick<Window, 'addEventListener'> {
+  const handlers = new Map<string, (event: unknown) => void>();
+  return {
+    addEventListener: ((type: string, fn: (event: unknown) => void) => handlers.set(type, fn)) as Window['addEventListener'],
+    fire: (type, event) => handlers.get(type)?.(event),
+  };
+}
+
+function keyEvent(code: string): { code: string; repeat: boolean; target: null; preventDefault: () => void; prevented: number } {
+  const e = {
+    code,
+    repeat: false,
+    target: null,
+    prevented: 0,
+    preventDefault(): void {
+      e.prevented++;
+    },
+  };
+  return e;
+}
+
+describe('the keys a menu needs back', () => {
+  it('only swallows Tab and Space while the haulers are the thing on screen', () => {
+    const input = new InputManager();
+    const win = fakeWindow();
+    input.attach(win as unknown as Window);
+
+    const inPlay = keyEvent('Tab');
+    win.fire('keydown', inPlay);
+    expect(inPlay.prevented, 'Tab during a match belongs to the game').toBe(1);
+
+    // Every menu control is a real button, so Tab reaching it and Space
+    // pressing it are what makes the game playable without a mouse. Swallowed
+    // everywhere, they made the whole interface pointer-only.
+    input.swallowKeys = false;
+    for (const code of ['Tab', 'Space']) {
+      const inMenu = keyEvent(code);
+      win.fire('keydown', inMenu);
+      expect(inMenu.prevented, `${code} in a menu belongs to the browser`).toBe(0);
+    }
+  });
+
+  it('reports one menu press per press, not one per frame held', () => {
+    const input = new InputManager();
+    const win = fakeWindow();
+    input.attach(win as unknown as Window);
+
+    win.fire('keydown', keyEvent('ArrowDown'));
+    expect(input.menuEdges().down).toBe(true);
+    expect(input.menuEdges().down, 'held is not pressed again').toBe(false);
+    win.fire('keyup', keyEvent('ArrowDown'));
+    win.fire('keydown', keyEvent('ArrowDown'));
+    expect(input.menuEdges().down).toBe(true);
   });
 });

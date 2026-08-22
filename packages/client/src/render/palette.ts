@@ -37,6 +37,19 @@ export interface BiomePalette {
   /** Hazard chevron halves. */
   hazA: string;
   hazB: string;
+  /**
+   * Everything that can kill you: lava, saw teeth, crusher stripes, the wash
+   * over a ledge that is about to give.
+   *
+   * Deliberately not the chevron colour. Chevrons mark every standable edge in
+   * the tower, so they are furniture — a hue that says "lethal" has to be one
+   * the player has never seen on a surface they were invited to walk on. It is
+   * also the one colour High Contrast is allowed to keep saturated, which only
+   * works if nothing harmless is wearing it.
+   */
+  hazard: string;
+  /** The shaded half of a lethal thing: molten depth, a saw hub, a crusher plate. */
+  hazardDark: string;
   /** Rope core, and the colour the rope grinds into the paint. */
   chalk: string;
   /** Painted stencil colour on the tower face. */
@@ -80,6 +93,8 @@ export const BIOMES: BiomePalette[] = [
     ink: '#1B1714',
     hazA: '#F2B01C',
     hazB: '#1B1714',
+    hazard: '#E2431A',
+    hazardDark: '#8E1E06',
     chalk: '#FFFDF6',
     stencil: '#1B1714',
     paintAlpha: 0.42,
@@ -109,6 +124,8 @@ export const BIOMES: BiomePalette[] = [
     ink: '#1B1714',
     hazA: '#F35A14',
     hazB: '#1B1714',
+    hazard: '#FF6A12',
+    hazardDark: '#8C1E04',
     chalk: '#FFE9B0',
     stencil: '#1B1714',
     paintAlpha: 0.38,
@@ -138,6 +155,10 @@ export const BIOMES: BiomePalette[] = [
     // Hazard marking inverts to blue-on-white up here.
     hazA: '#2F6FA8',
     hazB: '#EDF3F4',
+    // Warm, in a biome with nothing else warm in it. Lethal has to keep
+    // reading as lethal where the hazard tape has gone blue.
+    hazard: '#D6301C',
+    hazardDark: '#7C1409',
     chalk: '#FFFFFF',
     stencil: '#1F2B33',
     paintAlpha: 0.22,
@@ -166,6 +187,8 @@ export const BIOMES: BiomePalette[] = [
     ink: '#0A1A2E',
     hazA: '#E8267F',
     hazB: '#0A1A2E',
+    hazard: '#FF4A3D',
+    hazardDark: '#8E1206',
     chalk: '#0A1A2E',
     stencil: '#0A1A2E',
     paintAlpha: 0.34,
@@ -249,6 +272,12 @@ export function applyHighContrast(p: BiomePalette): BiomePalette {
     ink: '#000000',
     hazA: '#000000',
     hazB: '#000000',
+    // The only saturated colour left in the frame, boxed in ink wherever it
+    // is drawn. Flattening the hazards to black too would have made a saw
+    // and a wall the same two values, and the wall is the one you are meant
+    // to touch.
+    hazard: '#FF2D00',
+    hazardDark: '#7A1500',
     chalk: '#FFFFFF',
     stencil: '#000000',
     paintAlpha: 0,

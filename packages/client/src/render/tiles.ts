@@ -21,7 +21,7 @@ import {
   type Level,
   type World,
 } from '@haulmates/core';
-import { biomeFor, tileHash, type BiomePalette } from './palette.js';
+import { applyHighContrast, biomeFor, tileHash, type BiomePalette } from './palette.js';
 import { LOAD_MARKS, chevronPattern, fillChevron, stencilMark } from './stencil.js';
 
 /** Rows of tiles baked into one cached canvas. */
@@ -32,6 +32,22 @@ const CACHE_SIZE = 10;
 /** Tiles whose appearance changes at runtime are never baked. */
 function isDynamic(t: number): boolean {
   return t === T_CRUMBLE || t === T_CHECKPOINT || t === T_GOAL || t === T_WIND;
+}
+
+/**
+ * The palette a row of the tower is painted in.
+ *
+ * High Contrast has to be applied here rather than only at the call sites that
+ * happen to hold a palette already. The baked blocks and the animated tiles
+ * drawn over them are the two layers that between them make up every surface
+ * and every hazard in the frame, and both used the raw biome — so switching
+ * the setting on left the lava, the crumble warning and the concrete exactly
+ * the colours they had been, and the one control a low-vision player would
+ * reach for changed the sky and nothing else.
+ */
+function skinFor(level: Level, ty: number, highContrast: boolean): BiomePalette {
+  const p = biomeFor(level.biome[Math.max(0, Math.min(level.h - 1, ty))]);
+  return highContrast ? applyHighContrast(p) : p;
 }
 
 function shade(hex: string, amount: number): string {
@@ -140,7 +156,7 @@ export class TileCache {
     const sweep = (pass: TilePass): void => {
       for (let ry = 0; ry < rows; ry++) {
         const ty = rowStart + ry;
-        const palette = biomeFor(level.biome[ty]);
+        const palette = skinFor(level, ty, highContrast);
         for (let tx = 0; tx < level.w; tx++) {
           const t = level.tiles[ty * level.w + tx];
           if (t === T_EMPTY || isDynamic(t)) continue;
@@ -151,15 +167,14 @@ export class TileCache {
 
     sweep('field');
     if (!highContrast) {
-      const palette = biomeFor(level.biome[Math.min(level.h - 1, rowStart)]);
-      paintLoadMarks(ctx, level, rowStart, rows, palette);
+      paintLoadMarks(ctx, level, rowStart, rows, skinFor(level, rowStart, false));
     }
     sweep('reads');
 
     // Replay everything the rope has ground into this block. On top of the
     // reads pass rather than under it, because a scuff is chalk sitting on the
     // paint — but at a low enough alpha that it can never hide an edge.
-    const skin = biomeFor(level.biome[Math.min(level.h - 1, rowStart)]);
+    const skin = skinFor(level, rowStart, highContrast);
     this.scuffPaint = skin.chalk;
     this.scuffAlpha = highContrast ? 0 : skin.scuffAlpha;
     const ring = this.scuffs.get(index);
@@ -434,10 +449,15 @@ function drawStaticTile(
       return;
     }
     case T_LAVA: {
+      // One hue, lightened at the crest and dropped into shadow at depth, so a
+      // pool is painted the same colour as every other lethal thing around it.
+      // A fixed molten orange makes lava a private signal: in the Freezer it
+      // is the only warm thing on screen and shares nothing with the saw two
+      // ledges up, so there is nothing for the eye to generalise.
       const grad = ctx.createLinearGradient(x, y, x, y + TILE);
-      grad.addColorStop(0, '#ffcf5c');
-      grad.addColorStop(0.25, '#ff7a1f');
-      grad.addColorStop(1, '#b8260b');
+      grad.addColorStop(0, shade(p.hazard, 52));
+      grad.addColorStop(0.25, p.hazard);
+      grad.addColorStop(1, p.hazardDark);
       ctx.fillStyle = grad;
       ctx.fillRect(x, y, TILE, TILE);
       return;
@@ -561,6 +581,7 @@ export function drawDynamicTiles(
   y0: number,
   x1: number,
   y1: number,
+  options: { highContrast: boolean; reducedFlash: boolean },
 ): void {
   const tx0 = Math.max(0, Math.floor(x0 / TILE));
   const tx1 = Math.min(level.w - 1, Math.floor(x1 / TILE));
@@ -568,6 +589,7 @@ export function drawDynamicTiles(
   const ty1 = Math.min(level.h - 1, Math.floor(y1 / TILE));
 
   for (let ty = ty0; ty <= ty1; ty++) {
+    const p = skinFor(level, ty, options.highContrast);
     for (let tx = tx0; tx <= tx1; tx++) {
       const t = level.tiles[ty * level.w + tx];
       const x = tx * TILE;
@@ -602,8 +624,17 @@ export function drawDynamicTiles(
           ctx.lineTo(9, TILE - 4);
           ctx.stroke();
           if (state > 0) {
-            ctx.globalAlpha = 0.35 + 0.35 * Math.sin(time * 40);
-            ctx.fillStyle = '#ff6b4d';
+            // A tile counting down to giving way, in the same colour as the
+            // things that kill you, because in a moment it is one.
+            //
+            // The pulse is 6.4 Hz, the middle of the 3-30 Hz band that
+            // provokes photosensitive seizures, and a crumbling ledge is never
+            // a single tile — a run of eight of them fills the frame and
+            // strobes in unison. Reduce flashing pins it above the average of
+            // the cycle instead: with no movement left to catch the eye, the
+            // wash has to carry the warning on its value alone.
+            ctx.globalAlpha = options.reducedFlash ? 0.52 : 0.35 + 0.35 * Math.sin(time * 40);
+            ctx.fillStyle = p.hazard;
             ctx.fillRect(0, 0, TILE, TILE);
             ctx.globalAlpha = 1;
           }
@@ -651,11 +682,14 @@ export function drawDynamicTiles(
         case T_LAVA: {
           const openAbove = ty === 0 || level.tiles[(ty - 1) * level.w + tx] !== T_LAVA;
           if (!openAbove) break;
-          ctx.fillStyle = '#ffd98a';
+          // The kill line, in the biome's one emissive hue: the surface is
+          // where the hazard actually starts and it has to be findable from
+          // above, where you are falling toward it.
+          ctx.fillStyle = p.hot;
           const bob = Math.sin(time * 3 + tx * 0.7) * 1.6;
           ctx.fillRect(x, y + bob, TILE, 3);
           ctx.globalAlpha = 0.22;
-          ctx.fillStyle = '#ff8a3c';
+          ctx.fillStyle = p.hazard;
           ctx.fillRect(x - 6, y - 30, TILE + 12, 34);
           ctx.globalAlpha = 1;
           break;

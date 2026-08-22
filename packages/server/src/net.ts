@@ -153,9 +153,7 @@ export class Gateway {
         return;
       }
       case C_REMATCH:
-        if (session.room) {
-          session.room.rematch(session.room.mode === 1 ? (Math.random() * 0x7fffffff) | 0 : undefined);
-        }
+        session.room?.rematch();
         return;
       case C_LEAVE:
         this.close(session.conn, 'left');
@@ -190,12 +188,12 @@ export class Gateway {
         return;
       }
     } else if (hello.intent === INTENT_QUICKPLAY) {
-      room = this.lobby.findQuickplay(hello.mode);
+      room = this.lobby.findQuickplay(hello.mode, hello.seed);
       if (!room) {
-        room = this.lobby.create(hello.mode, seedFor(hello), clampTowerLength(hello.towerLength), true);
+        room = this.lobby.create(hello.mode, hello.seed, clampTowerLength(hello.towerLength), true);
       }
     } else {
-      room = this.lobby.create(hello.mode, seedFor(hello), clampTowerLength(hello.towerLength), false);
+      room = this.lobby.create(hello.mode, hello.seed, clampTowerLength(hello.towerLength), false);
     }
 
     if (!room) {
@@ -227,8 +225,4 @@ export class Gateway {
       }
     }
   }
-}
-
-function seedFor(hello: { seed: number }): number {
-  return hello.seed !== 0 ? hello.seed | 0 : (Math.random() * 0x7fffffff) | 0;
 }

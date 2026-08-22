@@ -11,13 +11,20 @@ export class Lobby {
   /** Ticks the loop had to skip because the process fell behind. */
   droppedTicks = 0;
 
+  /**
+   * Open a room. A `seed` of zero leaves the choice of tower to the server;
+   * anything else is a tower the lobby named — today's daily, so that two
+   * friends can agree on which one they are climbing — and the room holds onto
+   * it for as long as it lives.
+   */
   create(mode: number, seed: number, towerLength: number, isPublic: boolean): Room | null {
     if (this.rooms.size >= config.maxRooms) return null;
     const code = makeRoomCode((c) => this.rooms.has(c));
-    const room = new Room(code, mode, seed, clampTowerLength(towerLength));
+    const fixed = seed !== 0;
+    const room = new Room(code, mode, fixed ? seed | 0 : (Math.random() * 0x7fffffff) | 0, clampTowerLength(towerLength), fixed);
     room.isPublic = isPublic;
     this.rooms.set(code, room);
-    log.info(`room ${code}: created (mode=${mode} seed=${seed} public=${isPublic})`);
+    log.info(`room ${code}: created (mode=${mode} seed=${room.seed} public=${isPublic})`);
     return room;
   }
 
@@ -25,12 +32,21 @@ export class Lobby {
     return isValidRoomCode(code) ? this.rooms.get(code) : undefined;
   }
 
-  /** An open public room waiting for a partner, preferring the oldest. */
-  findQuickplay(mode: number): Room | undefined {
+  /**
+   * An open public room waiting for a partner, preferring the oldest.
+   *
+   * A `seed` of zero means any tower will do, and such a seeker is kept out of
+   * rooms opened on a named one: quick match has to hand back the mode that
+   * was asked for. A seeker who did name a tower — today's daily — is only
+   * ever matched into that exact one, because being dropped onto a random
+   * tower is the one outcome that makes the request pointless.
+   */
+  findQuickplay(mode: number, seed = 0): Room | undefined {
     let best: Room | undefined;
     for (const room of this.rooms.values()) {
       if (!room.isPublic) continue;
       if (room.mode !== mode) continue;
+      if (seed === 0 ? room.fixedSeed : room.seed !== (seed | 0)) continue;
       if (room.state !== 'lobby') continue;
       if (room.playerCount !== 1) continue;
       if (!best || room.createdAt < best.createdAt) best = room;

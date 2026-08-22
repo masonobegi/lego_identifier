@@ -19,7 +19,9 @@ export class AudioEngine {
   master: GainNode | null = null;
   sfxBus: GainNode | null = null;
   musicBus: GainNode | null = null;
-  private delay: DelayNode | null = null;
+  /** One reverb return per bus. See `buildReverb`. */
+  private sfxVerb: DelayNode | null = null;
+  private musicVerb: DelayNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
   private volumes = { master: 0.8, sfx: 0.9, music: 0.55 };
   private startedAt = 0;
@@ -59,10 +61,30 @@ export class AudioEngine {
     this.musicBus.gain.value = this.volumes.music;
     this.musicBus.connect(this.master);
 
-    // A short feedback delay stands in for a reverb: far cheaper, and the
-    // slap-back suits a game set inside a concrete shaft.
-    this.delay = ctx.createDelay(1);
-    this.delay.delayTime.value = 0.16;
+    this.sfxVerb = this.buildReverb(this.sfxBus);
+    this.musicVerb = this.buildReverb(this.musicBus);
+
+    const length = Math.floor(ctx.sampleRate * 2);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    this.noiseBuffer = buffer;
+  }
+
+  /**
+   * A short feedback delay standing in for a reverb: far cheaper than a
+   * convolver, and the slap-back suits a game set inside a concrete shaft.
+   *
+   * One per bus, returning into the bus that fed it, rather than one shared
+   * return into the master. A single return put the wet half of every impact,
+   * yank and break downstream of the SFX fader: dragging sound effects to zero
+   * left all of their tails ringing at full level, and a mute that still makes
+   * noise is not a mute. The cost of the split is four nodes.
+   */
+  private buildReverb(bus: GainNode): DelayNode {
+    const ctx = this.ctx!;
+    const delay = ctx.createDelay(1);
+    delay.delayTime.value = 0.16;
     const feedback = ctx.createGain();
     feedback.gain.value = 0.26;
     const wet = ctx.createGain();
@@ -70,17 +92,21 @@ export class AudioEngine {
     const damp = ctx.createBiquadFilter();
     damp.type = 'lowpass';
     damp.frequency.value = 2200;
-    this.delay.connect(feedback);
+    delay.connect(feedback);
     feedback.connect(damp);
-    damp.connect(this.delay);
-    this.delay.connect(wet);
-    wet.connect(this.master);
+    damp.connect(delay);
+    delay.connect(wet);
+    wet.connect(bus);
+    return delay;
+  }
 
-    const length = Math.floor(ctx.sampleRate * 2);
-    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
-    this.noiseBuffer = buffer;
+  /**
+   * The reverb return sitting behind the same fader as the voice being sent to
+   * it. Pan buses are children of the SFX bus, so anything that is not
+   * explicitly on the music bus belongs to the SFX return.
+   */
+  private verbFor(bus: GainNode): DelayNode | null {
+    return bus === this.musicBus ? this.musicVerb : this.sfxVerb;
   }
 
   setVolumes(master: number, sfx: number, music: number): void {
@@ -138,11 +164,14 @@ export class AudioEngine {
 
     osc.connect(gain);
     gain.connect(bus);
-    if (options.send && this.delay) {
-      const send = ctx.createGain();
-      send.gain.value = options.send;
-      gain.connect(send);
-      send.connect(this.delay);
+    if (options.send) {
+      const verb = this.verbFor(bus);
+      if (verb) {
+        const send = ctx.createGain();
+        send.gain.value = options.send;
+        gain.connect(send);
+        send.connect(verb);
+      }
     }
     osc.start(t);
     osc.stop(t + dur + 0.02);
@@ -189,11 +218,14 @@ export class AudioEngine {
     src.connect(filter);
     filter.connect(gain);
     gain.connect(bus);
-    if (options.send && this.delay) {
-      const send = ctx.createGain();
-      send.gain.value = options.send;
-      gain.connect(send);
-      send.connect(this.delay);
+    if (options.send) {
+      const verb = this.verbFor(bus);
+      if (verb) {
+        const send = ctx.createGain();
+        send.gain.value = options.send;
+        gain.connect(send);
+        send.connect(verb);
+      }
     }
     src.start(t);
     src.stop(t + dur + 0.02);

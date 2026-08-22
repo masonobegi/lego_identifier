@@ -230,6 +230,18 @@ button.btn:hover:not(:disabled), button.btn:focus-visible {
   padding-left: 34px;
 }
 
+/* Where you are, for anyone not holding a pointer.
+   A gamepad moves focus without the browser ever seeing a key, so
+   :focus-visible never matches and the selected control looked exactly like
+   the nine around it — which is the whole game, unusable from a sofa. Plain
+   :focus carries the ring instead. On a mouse that means the button you just
+   clicked wears it, which is true, and it goes the moment you click elsewhere.
+   Declared after the hover rule above, which clears the outline. */
+button.btn:focus, .swatch:focus, input:focus, select:focus, .screen a:focus {
+  outline: 3px solid var(--gold-ink);
+  outline-offset: 3px;
+}
+
 button.btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 2px 0 rgba(27, 23, 20, 0.85); }
 button.btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
 
@@ -372,6 +384,32 @@ input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--gold); }
   color: var(--gold-ink);
   margin: 6px 0 2px;
 }
+
+/* ----------------------------------------------------------------- records */
+
+/* The lifetime record is a delivery docket, so it is set like one: a ruled
+   line per entry with the figures in a column down the right. Tabular numerals
+   because a column of forty numbers that do not line up is a column nobody
+   reads. */
+.ledger { margin-bottom: 22px; }
+.ledger:last-child { margin-bottom: 0; }
+.ledger .head {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 3px solid var(--edge);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+.ledger .line { display: flex; align-items: baseline; gap: 14px; padding: 9px 0; border-bottom: 1px dashed var(--concrete); }
+.ledger .line:last-child { border-bottom: 0; }
+.ledger .what { font-size: 14px; font-weight: 700; }
+.ledger .n { margin-left: auto; font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ledger .line.gold .n { color: var(--gold-ink); }
+.ledger .line.bad .n { color: var(--bad); }
+.ledger .line.good .n { color: var(--good); }
 
 /* -------------------------------------------------------------------- misc */
 

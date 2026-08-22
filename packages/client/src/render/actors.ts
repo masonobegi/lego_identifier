@@ -110,6 +110,7 @@ export function drawCargo(
   prev: World,
   alpha: number,
   time: number,
+  reducedFlash: boolean,
 ): void {
   const c = world.cargo;
   const x = lerp(prev.cargo.x, c.x, alpha);
@@ -167,7 +168,12 @@ export function drawCargo(
   }
 
   if (health < 0.34) {
-    ctx.globalAlpha = 0.28 + 0.22 * Math.sin(time * (10 + (1 - health) * 24));
+    // A crate this hurt rarely climbs back above the threshold, so this is the
+    // longest-lived warning in the game: it runs from the landing that did the
+    // damage to the end of the run. Its pulse is 4.1 Hz at the threshold and
+    // 5.4 Hz at death's door — the middle of the 3-30 Hz band that provokes
+    // photosensitive seizures. Held steady it still says the same thing.
+    ctx.globalAlpha = reducedFlash ? 0.4 : 0.28 + 0.22 * Math.sin(time * (10 + (1 - health) * 24));
     ctx.fillStyle = CARGO_COLOURS.stencil;
     ctx.fillRect(-w / 2, -h / 2, w, h);
     ctx.globalAlpha = 1;
@@ -539,21 +545,30 @@ export function drawHat(
 
 /* --------------------------------------------------------- level entities */
 
-export function drawMovers(ctx: CanvasRenderingContext2D, level: Level, tick: number, alpha: number): void {
+export function drawMovers(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  tick: number,
+  alpha: number,
+  p: BiomePalette,
+): void {
   for (const m of level.movers) {
     const x = lerp(moverX(m, tick - 1), moverX(m, tick), alpha);
     const y = lerp(moverY(m, tick - 1), moverY(m, tick), alpha);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillStyle = p.shadowInk;
     ctx.fillRect(x + 2, y + 3, m.w, m.h);
     if (m.deadly) {
-      ctx.fillStyle = '#2b2f3d';
+      ctx.fillStyle = p.ink;
       ctx.fillRect(x, y, m.w, m.h);
-      // Hazard stripes: universal shorthand for "this will kill you".
+      // Hazard stripes: universal shorthand for "this will kill you". In the
+      // hazard colour rather than a fixed yellow, so a crusher, a saw and a
+      // lava pool are all the same colour as each other and none of them is
+      // the colour of the tape on the ledge you are standing on.
       ctx.save();
       ctx.beginPath();
       ctx.rect(x, y, m.w, m.h);
       ctx.clip();
-      ctx.fillStyle = '#ffd23d';
+      ctx.fillStyle = p.hazard;
       for (let s = -m.h; s < m.w; s += 16) {
         ctx.beginPath();
         ctx.moveTo(x + s, y + m.h);
@@ -564,9 +579,9 @@ export function drawMovers(ctx: CanvasRenderingContext2D, level: Level, tick: nu
         ctx.fill();
       }
       ctx.restore();
-      ctx.fillStyle = '#8c939f';
+      ctx.fillStyle = p.hazardDark;
       ctx.fillRect(x, y + m.h - 4, m.w, 4);
-      ctx.fillStyle = '#cfd6e8';
+      ctx.fillStyle = p.hazard;
       for (let s = 3; s < m.w - 4; s += 9) {
         ctx.beginPath();
         ctx.moveTo(x + s, y + m.h);
@@ -586,14 +601,25 @@ export function drawMovers(ctx: CanvasRenderingContext2D, level: Level, tick: nu
   }
 }
 
-export function drawSaws(ctx: CanvasRenderingContext2D, level: Level, tick: number, alpha: number, time: number): void {
+export function drawSaws(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  tick: number,
+  alpha: number,
+  time: number,
+  p: BiomePalette,
+): void {
   for (const s of level.saws) {
     const x = lerp(sawX(s, tick - 1), sawX(s, tick), alpha);
     const y = lerp(sawY(s, tick - 1), sawY(s, tick), alpha);
 
     // The track the blade rides, so its path is readable before it arrives.
+    // In ink at low alpha: white on a bone-white sky is a track nobody can see
+    // until the blade is on it.
     if (s.ax !== 0 || s.ay !== 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = p.ink;
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 6]);
       ctx.beginPath();
@@ -601,12 +627,20 @@ export function drawSaws(ctx: CanvasRenderingContext2D, level: Level, tick: numb
       ctx.lineTo(s.x + s.ax, s.y + s.ay);
       ctx.stroke();
       ctx.setLineDash([]);
+      ctx.restore();
     }
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(time * 9 * s.spin);
-    ctx.fillStyle = '#cfd6e8';
+    // A pale steel blade is the same failure the spikes had: on a bone-white
+    // ground the one object in the frame that dismembers you was the hardest
+    // thing in it to see. Hazard-coloured and boxed in ink instead, so the
+    // silhouette holds against the sky as well as against the tower.
+    ctx.fillStyle = p.hazard;
+    ctx.strokeStyle = p.ink;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     const teeth = 12;
     for (let i = 0; i < teeth; i++) {
@@ -617,11 +651,12 @@ export function drawSaws(ctx: CanvasRenderingContext2D, level: Level, tick: numb
     }
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#6d7590';
+    ctx.stroke();
+    ctx.fillStyle = p.hazardDark;
     ctx.beginPath();
     ctx.arc(0, 0, s.r * 0.42, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = '#2b3040';
+    ctx.fillStyle = p.ink;
     ctx.beginPath();
     ctx.arc(0, 0, s.r * 0.16, 0, Math.PI * 2);
     ctx.fill();

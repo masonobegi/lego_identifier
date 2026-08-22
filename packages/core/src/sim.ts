@@ -17,7 +17,7 @@ import { T_CHECKPOINT, T_GOAL, type Level, tileAt } from './level.js';
 import { MAX_RISE } from './route.js';
 import { applyRopeForces, clampRopeLength, solveRope, tightenRope } from './rope.js';
 import { applyRopeLoad, updateCargo } from './cargo.js';
-import { updatePlayer } from './player.js';
+import { resolveBoosts, updatePlayer } from './player.js';
 import { placeAtSpawn } from './state.js';
 import { pushEvent } from './events.js';
 import {
@@ -191,8 +191,9 @@ export function step(ctx: SimContext, world: World, inputs: number[]): void {
   const effective = world.finished ? [0, 0] : inputs;
 
   applyRopeForces(world, level, effective);
-  updatePlayer(level, world, 0, effective[0]);
-  updatePlayer(level, world, 1, effective[1]);
+  const boosts = resolveBoosts(world, effective);
+  updatePlayer(level, world, 0, effective[0], boosts[0]);
+  updatePlayer(level, world, 1, effective[1], boosts[1]);
   solveRope(world, level);
   clampRopeLength(world, level);
   applyRopeLoad(world);

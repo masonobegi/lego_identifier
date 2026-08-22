@@ -132,8 +132,42 @@ export const DEFAULT_PROFILE: Profile = {
   daily: { day: 0, bestTicks: 0, bestCheckpoints: 0, attempts: 0, streak: 0 },
 };
 
+/**
+ * Whether the machine has already been told that motion is a problem.
+ *
+ * A photosensitive player sets this once, in the OS, and every well-behaved
+ * piece of software on it obeys without being asked again. Shipping the
+ * accessibility switches off by default made them opt-in twice: once from the
+ * player's own settings screen and once from ours, buried three taps into a
+ * menu they have no reason to open before the first crumbling ledge strobes
+ * at them.
+ */
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * What a machine nobody has played on yet should start with: the shipped
+ * defaults, with the two motion settings deferring to the OS preference.
+ */
+export function defaultSettings(): Settings {
+  const s = { ...DEFAULT_SETTINGS };
+  if (prefersReducedMotion()) {
+    s.reducedFlash = true;
+    s.shake = 0;
+  }
+  return s;
+}
+
 export function loadSettings(): Settings {
-  const s = load<Settings>('settings', DEFAULT_SETTINGS);
+  // Merged over the defaults rather than loaded on top of them, which also
+  // keeps `load` from handing back DEFAULT_SETTINGS itself for the clamps
+  // below to write through. Anything the save holds outranks what the OS was
+  // asked, because "off" is a legitimate answer and a preference the player
+  // set by hand has to survive the one we inferred.
+  const saved = load<Partial<Settings>>('settings', {});
+  const s: Settings = { ...defaultSettings(), ...saved };
   s.master = clamp01(s.master);
   s.sfx = clamp01(s.sfx);
   s.music = clamp01(s.music);

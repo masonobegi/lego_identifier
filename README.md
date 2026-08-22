@@ -301,16 +301,21 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
 
 1. Buy the App ID, then `HAULMATES_APP_ID=<id> npm run steam:config`.
 2. Set the same ID in `packages/desktop/src/main.ts` (or the `HAULMATES_APP_ID` env var).
-3. `npm run dist:win` and `npm run dist:linux`; copy the output into `steam/content/`.
+3. `npm run dist:win` and `npm run dist:linux`; `npm run dist:mac` on a Mac, with a
+   Developer ID in the environment so the bundle is signed and notarized. Copy the output
+   into `steam/content/`.
 4. Upload with `steamcmd +run_app_build steam/app_build.vdf`.
-5. Enter the achievements from `steam/achievements.json` on the partner site.
-6. Replace the placeholder capsules in `steam/store/` with real art before launch.
+5. Enter the achievements from `steam/achievements.json` on the partner site; their icons
+   are generated into `steam/store/achievements/`.
+6. Switch on Steam Cloud with the quota from `steam/launch-options.json`, or every player
+   who reinstalls starts again.
+7. Replace the placeholder capsules in `steam/store/` with real art before launch.
 
 ## What is verified, and how
 
 Running `npm run verify` exercises, in order:
 
-- **90 unit and integration tests** — simulation determinism over thousands of ticks,
+- **122 unit and integration tests** — simulation determinism over thousands of ticks,
   rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
   and full online matches against the real server under 25–130 ms latency, jitter, and a
   simulated connection freeze.
@@ -318,7 +323,9 @@ Running `npm run verify` exercises, in order:
   movement envelope measured from the simulation, finds a route from the spawn to the
   goal; then every step of that route is re-attempted in the real simulation — both
   players, the rope, the crate, the moving hazards — by searching launch positions and
-  input timings. This is the check that caught a campaign which was, for its first five
+  input timings. The two-person steps get their own replay: one hauler braces, the other
+  goes up off their shoulders, then braces on the lip while the first hauls up the rope,
+  and it is run both ways round so neither of you is the only one who can do it. This is the check that caught a campaign which was, for its first five
   chunks, genuinely impossible. Read it for what it is: each step is attempted from a
   fresh world with the pair replaced on the ledge, so it certifies two hundred-odd
   isolated hops and a flood fill, not one continuous run with an accumulating crate.
@@ -339,10 +346,12 @@ Running `npm run verify` exercises, in order:
 
 What is **not** verified here, stated plainly:
 
-- **Steamworks itself.** Achievement delivery, rich presence and the friend-invite flow
-  need a Steam client and a real App ID. Every Steamworks call is wrapped and degrades to
-  a no-op, and the game has been confirmed to run with Steam entirely absent — but "does
-  not crash without Steam" is not "works with Steam". Test it first.
+- **Steamworks itself.** Achievement delivery, rich presence, cloud saves and the
+  friend-invite flow need a Steam client and a real App ID. Every call is made against the
+  surface the binding actually exposes and reports whether Steam took it, the STEAM badge
+  appears only once Steam has answered, and the game has been confirmed to run with Steam
+  entirely absent — but "does not crash without Steam" is not "works with Steam". Test it
+  first.
 - **How it feels.** The automated checks prove the tower can be climbed and that both
   players see the same world. They cannot tell you whether the jump arc is satisfying or
   whether the third biome drags. Play it with someone before you price it.

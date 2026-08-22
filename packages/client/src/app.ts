@@ -19,13 +19,15 @@ import {
   TILE,
   analyseLevel,
   buildCampaign,
+  levelFloors,
   modeName,
+  towerId,
   type MatchResult,
   type SimEvent,
   type World,
 } from '@haulmates/core';
 import { clear, h, toast } from './dom.js';
-import { InputManager } from './input.js';
+import { InputManager, isTextEntry, type MenuAction } from './input.js';
 import { AudioEngine } from './audio/synth.js';
 import { Music } from './audio/music.js';
 import { Sfx } from './audio/sfx.js';
@@ -34,7 +36,7 @@ import { PLAYER_COLOURS } from './render/palette.js';
 import type { HudState } from './render/hud.js';
 import { createWebSocketTransport, normaliseServerUrl } from './net/transport.js';
 import {
-  DEFAULT_SETTINGS,
+  defaultSettings,
   loadProfile,
   loadSettings,
   randomName,
@@ -174,6 +176,9 @@ export class App {
       }
     });
     window.addEventListener('beforeunload', () => {
+      // Quitting out of a daily is how most of them end, and it is still an
+      // attempt that got as far as it got.
+      this.endDailyAttempt();
       this.persist();
       this.net?.leave();
       this.stopHosting();
@@ -215,12 +220,16 @@ export class App {
     this.sfx.beginFrame();
     tickPreviews(this.clockSeconds);
 
+    // Polled every frame whatever is on screen, so that a button already held
+    // when a menu opens counts as spent rather than as a press of whatever the
+    // menu put under it.
+    const menu = this.input.menuEdges();
     if (this.input.pausePressed()) {
       if (this.screen === 'none') this.show('pause');
-      else if (this.screen === 'pause') this.resume();
-      // Escape is how everyone leaves a screen. On the results screen it used
-      // to do nothing at all, which is a bad note to end a run on.
-      else if (this.screen === 'results') this.leave();
+      else this.dismiss();
+    } else if (this.screen !== 'none') {
+      if (menu.cancel) this.dismiss();
+      else this.navigate(menu);
     }
 
     const session = this.net ?? this.local;
@@ -457,7 +466,7 @@ export class App {
       world,
       finished: this.finishedRun,
       mode: session?.ctx?.mode ?? MODE_HAUL,
-      towerFloors: this.lobbyTowerLength,
+      towerFloors: this.runFloors(),
       runDeaths: world ? world.players[0].deaths + world.players[1].deaths : 0,
       runCargoBreaks: world?.cargoBreaks ?? 0,
       runBetrayals: world?.betrayals ?? 0,
@@ -506,12 +515,89 @@ export class App {
     this.refresh();
   }
 
+  /**
+   * Escape, the pad's B button and the pad's Start button all mean the same
+   * thing: get me out of whatever this is.
+   *
+   * Wired to every screen rather than to a chosen few: a key that works on
+   * three of a dozen screens is a key nobody trusts, and on the rest the only
+   * way out is to find the Back button with a pointer.
+   */
+  private dismiss(): void {
+    if (this.screen === 'pause') {
+      this.resume();
+      return;
+    }
+    if (this.screen === 'title') return;
+    this.sfx.ui('back');
+    // Each of these does exactly what the screen's own back control does. A
+    // key that leaves by a different door than the button next to it is worse
+    // than a key that does nothing: leaving the lobby by popping the
+    // navigation stack, for instance, would walk out of the menu while still
+    // sitting in the room.
+    if (this.screen === 'results' || this.screen === 'lobby') this.leave();
+    else if (this.screen === 'error') this.show('title');
+    else if (this.screen === 'connecting') this.show('online');
+    else this.back();
+  }
+
+  /** Everything in the open screen a player can land on, in Tab order. */
+  private focusables(): HTMLElement[] {
+    const selector = 'button:not(:disabled), input:not(:disabled), select:not(:disabled), a[href]';
+    return [...this.overlay.querySelectorAll<HTMLElement>(selector)];
+  }
+
+  /**
+   * Drive the menus from a gamepad.
+   *
+   * The keyboard needs none of this — the controls are real buttons, so once
+   * the game stops swallowing Tab and Space the browser navigates them better
+   * than we would. A pad is invisible to the browser, so its d-pad and stick
+   * are translated into moves along that same Tab order and its bottom face
+   * button into a click on whatever is focused. This is the difference between
+   * a couch co-op game two people can start from the sofa and one that needs
+   * somebody to get up and find the mouse.
+   */
+  private navigate(menu: Record<MenuAction, boolean>): void {
+    if (this.input.capture) return;
+    const items = this.focusables();
+    if (items.length === 0) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (isTextEntry(active)) return;
+    // A focused slider owns left and right: they are how you set it.
+    const slider = active instanceof HTMLInputElement && active.type === 'range';
+    const forward = menu.down || (menu.right && !slider);
+    const back = menu.up || (menu.left && !slider);
+    if (forward || back) {
+      const at = active ? items.indexOf(active) : -1;
+      const delta = forward ? 1 : -1;
+      const to = at < 0 ? (forward ? 0 : items.length - 1) : (at + delta + items.length) % items.length;
+      items[to].focus();
+      this.sfx.ui('move');
+    } else if (menu.confirm && active && items.includes(active)) {
+      active.click();
+    }
+  }
+
   refresh(): void {
+    // Keys belong to the haulers only while the haulers are the thing on
+    // screen; a menu needs Tab and Space back.
+    this.input.swallowKeys = this.screen === 'none';
+    // Rebuilding a screen destroys whatever had focus, and a player on a pad
+    // has no other way of knowing where they are. A redraw that only changes a
+    // label — picking a mode, flipping a toggle — keeps its place in the
+    // control order; a screen that has just appeared starts on the button it
+    // is there for.
+    const previous = this.focusables().indexOf(document.activeElement as HTMLElement);
     clear(this.overlay);
     const el = buildScreen(this, this.screen);
     if (!el) return;
     this.overlay.appendChild(h('div', { class: 'backdrop' }));
     this.overlay.appendChild(el);
+    const items = this.focusables();
+    if (items.length === 0) return;
+    const primary = this.overlay.querySelector<HTMLElement>('button.btn.primary:not(:disabled)');
+    (previous >= 0 ? items[Math.min(previous, items.length - 1)] : (primary ?? items[0])).focus();
   }
 
   resume(): void {
@@ -526,7 +612,7 @@ export class App {
   }
 
   resetSettings(): void {
-    this.settings = { ...DEFAULT_SETTINGS, playerName: this.settings.playerName };
+    this.settings = { ...defaultSettings(), playerName: this.settings.playerName };
     this.applySettings();
     this.refresh();
   }
@@ -585,6 +671,7 @@ export class App {
           }
         : undefined,
       showNetgraph: this.settings.showNetgraph,
+      soloRestart: Boolean(this.local?.bots.some((bot) => bot !== null)),
       hint: this.hintText,
       hintStrength: Math.min(1, this.hintStrength),
     };
@@ -592,7 +679,11 @@ export class App {
 
   /* --------------------------------------------------------------- online */
 
-  connect(intent: number, code = ''): void {
+  /**
+   * Join or open a room. `seed` of zero leaves the tower to the server; a seed
+   * asks for one by name, which is how both ends of a daily agree on it.
+   */
+  connect(intent: number, code = '', seed = 0): void {
     this.audio.unlock();
     this.disposeSession();
     this.errorMessage = '';
@@ -623,6 +714,7 @@ export class App {
       room: code,
       mode: this.lobbyMode,
       towerLength: this.lobbyTowerLength,
+      seed,
       hat: this.settings.hat,
       colour: this.settings.colour,
     });
@@ -634,9 +726,14 @@ export class App {
     client.onResult = (result) => {
       this.lastResult = result;
       this.finishedRun = true;
-      this.targetTicks = client.mode === MODE_HAUL ? this.profile.bestCampaignTicks : 0;
+      this.targetTicks = client.mode === MODE_HAUL
+        ? this.profile.bestCampaignTicks
+        : this.dailyRun && this.profile.daily.day === this.today
+          ? this.profile.daily.bestTicks
+          : 0;
       this.profile.finishes++;
-      this.recordBest(result, client.mode, client.towerLength);
+      this.endDailyAttempt();
+      this.recordBest(result, client.mode);
       this.checkAchievements(client.world);
       this.persist();
       this.show('results');
@@ -657,6 +754,9 @@ export class App {
           if (!this.runCounted) {
             this.runCounted = true;
             this.profile.runs++;
+            // A room opened on today's seed is today's daily for both of them,
+            // and a rematch in it is another try at the same tower.
+            if (this.dailyRun) this.beginDailyAttempt();
             this.persist();
           }
           break;
@@ -733,15 +833,20 @@ export class App {
   /* ---------------------------------------------------------------- local */
 
   /**
-   * True while the current local run is today's daily tower.
+   * True while the tower on screen is today's daily.
    *
-   * The daily is a Gauntlet on a fixed seed, so nothing about the match itself
-   * distinguishes it — the flag is what lets the results screen know which
-   * record to write, and it is deliberately cleared by anything that reseeds
-   * the tower, because a restart on a fresh random seed is not the daily any
-   * more however you got there.
+   * Asked of the level rather than remembered from the button that started it.
+   * A daily is a Gauntlet of a particular height on a particular seed and
+   * nothing else, so the assembled tower's identity is the only answer that
+   * cannot go stale — a latch has to be cleared by every path that reseeds,
+   * and the path that got missed wrote daily records for a random tower. It
+   * also makes a room opened on today's seed count as the daily on both ends,
+   * which is the only way two people ever come to compare one.
    */
-  dailyRun = false;
+  get dailyRun(): boolean {
+    const level = (this.net ?? this.local)?.ctx?.level;
+    return level != null && level.id === towerId(dailySeed(this.today), DAILY_FLOORS);
+  }
 
   /** Today, by the game's reckoning. Exposed so the menus can name it. */
   get today(): number {
@@ -749,22 +854,15 @@ export class App {
   }
 
   startDaily(): void {
-    const day = this.today;
-    this.startCouch(MODE_GAUNTLET, dailySeed(day), DAILY_FLOORS);
-    this.dailyRun = true;
-    const d = this.profile.daily;
-    if (d.day !== day) {
-      // A streak survives one missed day being yesterday and nothing more.
-      this.profile.daily = {
-        day,
-        bestTicks: 0,
-        bestCheckpoints: 0,
-        attempts: 0,
-        streak: d.day === day - 1 ? d.streak + 1 : 1,
-      };
-    }
-    this.profile.daily.attempts++;
-    this.persist();
+    this.startCouch(MODE_GAUNTLET, dailySeed(this.today), DAILY_FLOORS);
+    this.beginDailyAttempt();
+  }
+
+  /** Open an online room on today's tower, so a friend can climb the same one. */
+  hostDaily(): void {
+    this.lobbyMode = MODE_GAUNTLET;
+    this.lobbyTowerLength = DAILY_FLOORS;
+    this.connect(INTENT_CREATE, '', dailySeed(this.today));
   }
 
   startCouch(mode = this.lobbyMode, seed = (Math.random() * 0x7fffffff) | 0, floors = this.lobbyTowerLength): void {
@@ -773,7 +871,6 @@ export class App {
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
-    this.dailyRun = false;
     this.local = new LocalMatch(mode, seed, floors);
     if (this.botPartner) this.local.setBot(1, new Bot(this.local.ctx.level));
     this.renderer.reset(this.local.world);
@@ -782,19 +879,48 @@ export class App {
     this.show('none');
   }
 
+  /**
+   * Go again, on the tower the mode promises rather than the one just climbed.
+   *
+   * The Gauntlet is a mode whose entire content is that the tower is different
+   * every time, so its "play again" has to reseed; the campaign and today's
+   * daily are each a specific tower on purpose, so theirs must not. Restarting
+   * everything on a fresh seed made the daily silently stop being the daily
+   * halfway through an evening, and restarting nothing made the Gauntlet a
+   * mode with one level in it.
+   */
   restartLocal(): void {
     if (!this.local) {
       this.startCouch();
       return;
     }
+    const daily = this.dailyRun;
+    this.endDailyAttempt();
     this.resetRunStats();
     this.finishedRun = false;
     this.lastResult = null;
-    // A restart reseeds the tower, so whatever this run is, it is not today's.
-    this.dailyRun = false;
-    this.local.restart((Math.random() * 0x7fffffff) | 0);
+    const reseed = !daily && this.local.ctx.mode === MODE_GAUNTLET;
+    this.local.restart(reseed ? (Math.random() * 0x7fffffff) | 0 : undefined);
+    if (daily) this.beginDailyAttempt();
     this.renderer.reset(this.local.world);
     this.show('none');
+  }
+
+  /**
+   * Go back to the last checkpoint without restarting the tower.
+   *
+   * The held vote is the intended way, and it is reachable from the pause menu
+   * as well because the things that make a player want it — a crate wedged
+   * somewhere it cannot be freed from, a partner who has stopped being any
+   * help — are also the things that make a player start looking through the
+   * menu for a way out. Online has no equivalent: one peer cannot wind the
+   * shared world back on its own.
+   */
+  restartAtCheckpoint(): void {
+    if (!this.local) return;
+    this.local.resetToCheckpoint();
+    this.show('none');
+    this.input.releaseAll();
   }
 
   private finishLocalRun(): void {
@@ -819,20 +945,13 @@ export class App {
       : this.local!.ctx.mode === MODE_HAUL
         ? this.profile.bestCampaignTicks
         : 0;
-    if (this.dailyRun) this.recordDaily(this.lastResult);
-    this.recordBest(this.lastResult, this.local!.ctx.mode, this.lobbyTowerLength);
+    this.endDailyAttempt();
+    this.recordBest(this.lastResult, this.local!.ctx.mode);
     this.checkAchievements(world);
     this.persist();
     this.show('results');
   }
 
-  /**
-   * Fold a finished daily run into today's record.
-   *
-   * Best time only counts a run that reached the top; a run that ended early
-   * has a `finishTick` too, and it is the tick it gave up on, which would
-   * otherwise post a world record for quitting.
-   */
   /**
    * Fold a finished run into the profile's personal bests.
    *
@@ -842,26 +961,77 @@ export class App {
    * whole return loop in a game like this, and it was the one thing the results
    * screen could not tell you.
    */
-  private recordBest(result: MatchResult, mode: number, floors: number): void {
+  private recordBest(result: MatchResult, mode: number): void {
     if (!this.finishedRun) return;
     if (mode === MODE_HAUL) {
       const best = this.profile.bestCampaignTicks;
       if (best === 0 || result.finishTick < best) this.profile.bestCampaignTicks = result.finishTick;
-    } else if (floors > this.profile.bestGauntletHeight) {
-      this.profile.bestGauntletHeight = floors;
+      return;
     }
+    const floors = this.runFloors();
+    if (floors > this.profile.bestGauntletHeight) this.profile.bestGauntletHeight = floors;
+  }
+
+  /**
+   * How tall the tower being played turned out to be.
+   *
+   * Counted off the assembled level, never off the menu slider. The slider is
+   * a request — clamped by the lobby, overruled by whoever hosts, and still
+   * sitting wherever it was last left long after the run it described ended —
+   * so a record or an achievement that reads it is a claim about a widget
+   * rather than about a climb, and Steam is told about those.
+   */
+  private runFloors(): number {
+    const level = (this.net ?? this.local)?.ctx?.level;
+    return level ? levelFloors(level) : 0;
   }
 
   /** The time to beat for the run just finished, in ticks, or 0 if there isn't one. */
   targetTicks = 0;
 
-  private recordDaily(result: MatchResult): void {
+  /** Open today's record if it is not open yet, and count one more try at it. */
+  private beginDailyAttempt(): void {
+    const day = this.today;
+    const d = this.profile.daily;
+    if (d.day !== day) {
+      // A streak survives one missed day being yesterday and nothing more.
+      this.profile.daily = {
+        day,
+        bestTicks: 0,
+        bestCheckpoints: 0,
+        attempts: 0,
+        streak: d.day === day - 1 ? d.streak + 1 : 1,
+      };
+    }
+    this.profile.daily.attempts++;
+    this.persist();
+  }
+
+  /**
+   * Fold however far a daily attempt got into today's record.
+   *
+   * Called from every way a run can end, not only from reaching the top, since
+   * most attempts at a twelve floor tower do not reach the top. Recording only
+   * finishes left the title screen's blurb reading "0 checkpoints" all evening
+   * for a player who had spent it climbing, which reads as a broken feature
+   * rather than as a hard tower.
+   *
+   * Best time still only counts a run that arrived: a run that was abandoned
+   * has a `finishTick` too, and it is the tick it gave up on, which would
+   * otherwise post a world record for quitting early.
+   */
+  private endDailyAttempt(): void {
+    if (!this.dailyRun) return;
     const d = this.profile.daily;
     if (d.day !== this.today) return;
-    d.bestCheckpoints = Math.max(d.bestCheckpoints, result.checkpoints);
-    if (this.finishedRun && (d.bestTicks === 0 || result.finishTick < d.bestTicks)) {
+    const world = (this.net ?? this.local)?.world;
+    const result = this.lastResult;
+    const reached = Math.max(result?.checkpoints ?? 0, world ? world.checkpoint + 1 : 0);
+    d.bestCheckpoints = Math.max(d.bestCheckpoints, reached);
+    if (this.finishedRun && result && (d.bestTicks === 0 || result.finishTick < d.bestTicks)) {
       d.bestTicks = result.finishTick;
     }
+    this.persist();
   }
 
   leave(): void {
@@ -876,6 +1046,9 @@ export class App {
   }
 
   private disposeSession(): void {
+    // Every way out of a run goes through here, which is the only place that
+    // catches the ones that end by walking away rather than by arriving.
+    this.endDailyAttempt();
     this.net?.dispose();
     this.net = null;
     this.local?.dispose();

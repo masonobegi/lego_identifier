@@ -49,6 +49,7 @@ import {
   ROPE_NODES,
   CARGO_H,
   ROPE_REST,
+  ROPE_MAX,
   IN_JUMP,
   IN_LEFT,
   IN_RIGHT,
@@ -220,6 +221,8 @@ export function makeFollower(level, phase = 0) {
   const spot = [0, 0];
   // Ticks left of a boost that is already under way.
   const lifting = [0, 0];
+  // ...and whether this hauler is part-way up a gate, hanging on the rope.
+  const hauling = [0, 0];
   const rnd = noise(phase * 2654435761 + 12345);
 
   /**
@@ -277,6 +280,28 @@ export function makeFollower(level, phase = 0) {
     const row = Math.floor((p.y + PLAYER_H / 2 + 1) / TILE) - 1;
     const grounded = p.grounded === 1;
 
+    // Keep holding a boost that is already under way, feet on the ground or
+    // not. `boosting` asks whether your partner is braced *beside* you, which
+    // stops being true the instant you leave the ground, so a follower that
+    // reads it every tick lets go two frames in and cuts its own jump short.
+    //
+    // The hold lived inside the gate branch below, which only runs while you
+    // are standing on something — so it decremented on the launch tick and
+    // then never again, and the button was released by whatever the ordinary
+    // walking cadence happened to be doing. Measured on the campaign's first
+    // gate: the boosted jump rose 131 pixels of the 144 it needed, apex
+    // thirteen pixels under the lip, every attempt, for as long as anybody
+    // cared to watch. A pair crossed a gate in 2% of forty-second attempts.
+    //
+    // Hold, then let go. A jump needs a *press*, so a follower that simply
+    // holds the button from the moment a boost is available never jumps twice:
+    // the first attempt fires and every one after it is swallowed, because
+    // there is no rising edge left to swallow.
+    if (lifting[i] > 0) {
+      lifting[i]--;
+      return lifting[i] > 8 ? IN_JUMP : 0;
+    }
+
     // Pick a target with your feet on the ground, and commit to it until you
     // land. Re-picking in mid-air is what an earlier version did, and it is not
     // a thing people do: rising past the row of the ledge you were aiming at
@@ -309,10 +334,32 @@ export function makeFollower(level, phase = 0) {
     // the rope. Modelled here because a person who has been shown the hint
     // will try it, and an instrument that has not been shown it would report
     // the gates as walls and every tuning above them as unreachable.
+    const mate = world.players[1 - i];
+
+    // Hauling yourself up a rope is a verb you hold, not one you tap.
+    //
+    // Both halves of this used to sit behind the same "feet on something" test
+    // as the rest of the gate, and both were wrong for the same reason: the
+    // hauler let go of the button on the tick it left the ledge, so it pulled
+    // for one frame at a time and never rose, and once it was dangling three
+    // rows under the landing the row test stopped calling the step a gate at
+    // all, so it went back to walking and jumping in mid-air. Measured over the
+    // campaign's seven gates: the climber got up every time and the pair got up
+    // 4% of the time, which is a two-person move only one of the two people can
+    // finish.
+    //
+    // A person hangs on until their feet are on something. What ends it if they
+    // cannot is the bar: reeling drains it, and an empty bar drops you.
+    if (hauling[i]) {
+      if (grounded || mate.y > p.y - TILE || p.grip <= 0) hauling[i] = 0;
+      else return IN_REEL | (rnd() < 0.3 ? IN_JUMP : 0);
+    }
+
     if (grounded && row - target.y > MAX_RISE) {
-      const mate = world.players[1 - i];
-      const mateUp = mate.y < p.y - (MAX_RISE + 1) * TILE;
-      if (mateUp) return IN_REEL | (rnd() < 0.3 ? IN_JUMP : 0);
+      if (mate.y < p.y - (MAX_RISE + 1) * TILE) {
+        hauling[i] = 1;
+        return IN_REEL | (rnd() < 0.3 ? IN_JUMP : 0);
+      }
 
       // One of them picks the place and the other comes to them.
       //
@@ -327,21 +374,6 @@ export function makeFollower(level, phase = 0) {
         const l = standable(col, row) ? ledge(col, row) : { x0: col, x1: col };
         const at = Math.max(l.x0, Math.min(l.x1, target.x));
         if (Math.abs(col - at) > 1) return at > col ? IN_RIGHT : IN_LEFT;
-        // Keep holding once it has started. `boosting` asks whether your
-        // partner is braced *beside* you, which stops being true the instant
-        // you leave the ground — so a follower that reads it every tick lets
-        // go two frames in and cuts its own jump short. Measured: four rows of
-        // a six-row gate, over and over, on a gate that a held jump clears
-        // from every column on the ledge.
-        // Hold, then let go. A jump needs a *press*, so a follower that holds
-        // the button from the moment a boost is available never jumps twice:
-        // the first attempt fires and every one after it is swallowed, because
-        // there is no rising edge left to swallow. Six boosts and then silence,
-        // with the brace stood there ready and the bar full.
-        if (lifting[i] > 0) {
-          lifting[i]--;
-          return lifting[i] > 8 ? IN_JUMP : 0;
-        }
         if (boosting(world, 0)) {
           lifting[i] = 34;
           return IN_JUMP;
@@ -388,7 +420,16 @@ const POLICIES = {
     const out = [follow(w, 0, t, 0), follow(w, 1, t, 17)];
     if (tautPathLength(w, level) > ROPE_REST * 1.35) {
       const low = w.players[0].y > w.players[1].y ? 0 : 1;
-      out[1 - low] = IN_GRIP;
+      // Only the one with their feet on something. There is nothing to hold on
+      // to in mid-air, so a reflex that fires there is not a brace, it is a
+      // cancelled input — and the input it cancelled most often was the held
+      // boost off a partner's shoulders, because a gate is precisely where the
+      // rope goes tight with one of the pair in the air. Measured over the
+      // campaign's seven gates: the pair crossed 71% of the time reflexing on
+      // every tick against 83% not reflexing at all, so the policy the rope is
+      // meant to reward was scoring worse than doing nothing, at the one step
+      // in the game that cannot be done alone.
+      if (w.players[1 - low].grounded === 1) out[1 - low] = IN_GRIP;
     }
     return out;
   },
@@ -418,7 +459,12 @@ const POLICIES = {
 function runPolicy(mode, seed, towerLength, seconds, make, bot) {
   const m = new LocalMatch(mode, seed, towerLength);
   if (bot) m.setBot(1, new Bot(m.ctx.level));
-  const follow = makeFollower(m.ctx.level, seed % 29);
+  // The seed is the pair of hands, whole and unfolded. It used to be taken
+  // modulo 29, which on the campaign — one authored tower, where the seed
+  // reaches the simulation nowhere else — made seeds 13, 42 and 71 the same
+  // two people playing the same level: byte-identical runs, averaged in three
+  // times each. A mean of twenty-four runs was a mean of sixteen.
+  const follow = makeFollower(m.ctx.level, seed);
   const policy = make ? make(follow, m.ctx.level) : (w, t) => [follow(w, 0, t, 0), 0];
   const w = m.world;
   const y0 = w.players[0].y;

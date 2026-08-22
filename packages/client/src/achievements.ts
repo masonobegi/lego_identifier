@@ -19,6 +19,7 @@ export interface AchievementContext {
   world: World | null;
   finished: boolean;
   mode: number;
+  /** Floors in the tower that was actually assembled, not the height asked for. */
   towerFloors: number;
   runDeaths: number;
   runCargoBreaks: number;
@@ -98,5 +99,6 @@ export class Achievements {
     setStat('total_metres', Math.round(profile.metres));
     setStat('crates_broken', profile.cargoBreaks);
     setStat('betrayals', profile.betrayals);
+    setStat('boosts', profile.boosts);
   }
 }

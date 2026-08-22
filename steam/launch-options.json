@@ -20,5 +20,10 @@
   "richPresenceTokens": {
     "#Status_Generic": "%status%"
   },
-  "note2": "The game writes a \"connect\" rich-presence key of the form \"+haulmates_join CODE\"; Steam passes it to the client as launch arguments when a friend clicks Join Game."
+  "cloud": {
+    "note": "Steamworks > Application > Cloud. Enable Steam Cloud, then set these.",
+    "quotaBytes": 1048576,
+    "maxFiles": 32
+  },
+  "note2": "The game writes a \"connect\" rich-presence key of the form \"+haulmates_join CODE\"; Steam passes it to the client as launch arguments when a friend clicks Join Game. Accepting an overlay invite instead launches it with \"+connect_lobby <id>\" and the room code is read off that lobby."
 }

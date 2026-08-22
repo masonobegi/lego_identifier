@@ -71,8 +71,12 @@ const api = {
   setRichPresence(key: string, value: string): void {
     ipcRenderer.send('haulmates:presence', key, value);
   },
-  inviteFriend(code: string): void {
-    ipcRenderer.send('haulmates:invite', code);
+  /**
+   * Resolves to whether Steam actually opened the dialog. The game says so out
+   * loud, and it can only be honest about it if the answer comes back.
+   */
+  inviteFriend(code: string): Promise<boolean> {
+    return ipcRenderer.invoke('haulmates:invite', code) as Promise<boolean>;
   },
   openUrl(url: string): void {
     ipcRenderer.send('haulmates:open-url', url);

@@ -6,7 +6,7 @@
  * 120 bytes plus a 7 byte header.
  */
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 
 /* client -> server */
 export const C_HELLO = 1;
@@ -30,6 +30,8 @@ export const S_ERROR = 134;
 export const S_PEER_LEFT = 135;
 export const S_DESYNC = 136;
 export const S_RESULT = 137;
+/** A rematch has reset the room, and names the tower the next run is on. */
+export const S_REMATCH = 138;
 
 export const ERR_VERSION = 1;
 export const ERR_NO_ROOM = 2;

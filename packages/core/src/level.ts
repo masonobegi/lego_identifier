@@ -325,6 +325,19 @@ export function assembleLevel(id: string, name: string, chunks: ChunkDef[]): Lev
 }
 
 /**
+ * How many floors a tower turned out to have.
+ *
+ * Every assembled tower is a start chunk, a run of floors and a goal chunk, so
+ * the floor count is the stack minus its two ends. Read from the level rather
+ * than from whatever number was asked for, because the two are not the same
+ * thing: the request is clamped, and the Gauntlet achievements are a claim
+ * about a tower somebody climbed, not about where a menu slider was left.
+ */
+export function levelFloors(level: Level): number {
+  return Math.max(0, level.chunkIds.length - 2);
+}
+
+/**
  * Endless mode. Picks a start chunk, then an escalating run of body chunks
  * drawn from the pool by difficulty, then the goal chunk. Purely a function of
  * the seed, so both players generate the same tower without sending it.

@@ -9,8 +9,10 @@ import {
   EV_EMOTE,
   EV_FINISH,
   EV_GRIP,
+  EV_GRIP_FAIL,
   EV_JUMP,
   EV_LAND,
+  EV_REEL,
   EV_RESPAWN,
   EV_RESTART,
   EV_BOOST,
@@ -18,6 +20,7 @@ import {
   EV_STEP,
   GROUND_ICE,
   GROUND_MOVER,
+  REEL_MAX_SPEED,
   type SimEvent,
 } from '@haulmates/core';
 import type { AudioEngine } from './synth.js';
@@ -89,6 +92,27 @@ export class Sfx {
         const anchor = event.b === 1;
         e.noise({ freq: anchor ? 700 : 1400, to: anchor ? 420 : 500, q: 2.4, dur: 0.16, gain: 0.09 * g, bus });
         if (anchor) e.tone({ freq: 220, to: 180, dur: 0.12, type: 'triangle', gain: 0.07 * g, bus });
+        return;
+      }
+      case EV_REEL: {
+        // Rope running through gloves, pitched and pushed by how fast it is
+        // actually coming in — hauling on a rope that is barely moving should
+        // not sound like hauling one that is flying.
+        //
+        // Emitted every ninth tick, so this fires nearly seven times a second
+        // for as long as somebody holds the button. That is the whole design
+        // constraint: quiet, short, and with no reverb send — a tail on a
+        // sound this frequent turns a long rescue into a wash of noise.
+        const speed = Math.min(1, Math.abs(event.b) / REEL_MAX_SPEED);
+        e.noise({ freq: 700 + speed * 1700, to: 420 + speed * 800, q: 3.4, dur: 0.08, gain: (0.028 + speed * 0.05) * g, bus });
+        return;
+      }
+      case EV_GRIP_FAIL: {
+        // The hands going. Deliberately the mirror of EV_GRIP: that one bites
+        // upward and stops, this one lets go and falls away, so a pair can
+        // tell "I let go" from "I could not hold it" without looking.
+        e.noise({ freq: 1500, to: 220, q: 1.5, dur: 0.3, gain: 0.11 * g, bus });
+        e.tone({ freq: 330, to: 110, dur: 0.26, type: 'sawtooth', gain: 0.09 * g, send: 0.2, bus });
         return;
       }
       case EV_ROPE_YANK: {

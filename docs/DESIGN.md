@@ -425,6 +425,38 @@ of them standing still in the right place at once. So they carry a stencil, and 
 that explains the move fires when somebody is standing under one rather than at fifteen
 seconds next to nothing.
 
+## What a death is worth
+
+Adding a co-op verb is only half of making a game need two people. The other half is
+making sure nothing cheaper already does the job — and something did.
+
+Respawn put the dead hauler next to their partner, unconditionally. Measured against the
+built core: with one player moved eight tiles up, killing the other returned them 8.48
+tiles higher on the next eligible tick, crate at full health, checkpoint unchanged,
+nothing debited. Set that beside what the game actually asks for:
+
+| | speed | cost | how far |
+| --- | --- | --- | --- |
+| Reel along the rope | 430 px/s | grip | one rope length, 232px |
+| Boost off a brace | one jump | a fifth of the brace's bar | six rows |
+| Walk into a spike | instant | nothing | wherever your partner has got |
+
+So the optimal play at a gate was for one hauler to go up and the other to die. Faster than
+the reel, free, unlimited, and it would have taken a pair about an hour to find. Every gate
+in the tower would have become scenery.
+
+The rule is now: **a rescue, not a lift.** If your partner is more than a jump above where
+you died, you go back to the checkpoint; level with them or below, you still come back
+beside them. That keeps the forgiving thing (falling into a pit is your partner's problem
+to solve, not a run-ender) and removes the exploit, without adding a punishment that would
+have started a death spiral — a per-death crate debit was the obvious alternative and, at
+the twenty to thirty deaths a sloppy pair racks up in three minutes, would have destroyed
+the crate faster than the spikes do.
+
+The general lesson, which cost a day: when you add a verb to make something required, go
+and look for what was already doing it for free. The reachability fill cannot see this
+class of bug at all, because respawning is not an edge in the graph.
+
 ## What the rope is actually doing
 
 Worth measuring, because "the rope is the game" is the sort of claim that is easy to make

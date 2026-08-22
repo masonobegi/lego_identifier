@@ -60,6 +60,7 @@ import {
   EV_BOUNCE,
   EV_EMOTE,
   EV_GRIP,
+  EV_GRIP_FAIL,
   EV_BOOST,
   EV_JUMP,
   EV_LAND,
@@ -133,7 +134,33 @@ export function boosting(world: World, index: number): boolean {
   return Math.abs(mate.x - p.x) <= BOOST_REACH && Math.abs(mate.y - p.y) <= BOOST_RISE;
 }
 
-export function updatePlayer(level: Level, world: World, index: number, input: number): void {
+/**
+ * Who gets a leg up this tick, decided for both climbers from the same world.
+ *
+ * `boosting` reads the partner's live state, and `step` updates slot 0 before
+ * slot 1 — so asking it inside the jump meant slot 0 saw its partner as they
+ * were last tick and slot 1 saw them as they already are this tick. The same
+ * two people in the same position got different heights depending on which
+ * half of the couch they were sitting on, which is not something a player can
+ * see, work around, or forgive. Resolving both before either moves makes the
+ * answer a property of the pair rather than of the slot.
+ *
+ * Nobody is a platform on the tick they shove off themselves. Without that,
+ * two people braced on the same ledge who both jumped on the same frame each
+ * launched off the other and the pair cleared a gate in one move, skipping
+ * the haul the gate exists to ask for.
+ */
+export function resolveBoosts(world: World, inputs: number[]): number[] {
+  const out = [0, 0];
+  for (let i = 0; i < 2; i++) {
+    const mate = world.players[1 - i];
+    if ((inputs[1 - i] & IN_JUMP) !== 0 || mate.jumpBuffer > 0) continue;
+    out[i] = boosting(world, i) ? 1 : 0;
+  }
+  return out;
+}
+
+export function updatePlayer(level: Level, world: World, index: number, input: number, boost = 0): void {
   const p = world.players[index];
 
   if (p.emoteTimer > 0) p.emoteTimer--;
@@ -214,6 +241,11 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       p.grip = 0;
       p.gripping = 0;
       p.gripCooldown = 40;
+      // The bar running out is the one way a brace ends that the player did
+      // not ask for, and it happens at the worst moment there is: mid-rescue,
+      // with somebody's whole weight on the rope. Nothing else in the frame
+      // says so — the ring simply stops being drawn — so it is announced.
+      pushEvent(world, EV_GRIP_FAIL, p.x, p.y, index, 0);
     }
   } else {
     if (p.gripping) p.gripCooldown = GRIP_REGEN_DELAY;
@@ -269,7 +301,7 @@ export function updatePlayer(level: Level, world: World, index: number, input: n
       // A leg up off a braced partner: the one thing in this game two people
       // can do that one cannot. See BOOST_SCALE for why it had to be invented
       // rather than found — the rope, on its own, only ever took things away.
-      const lift = boosting(world, index) ? BOOST_SCALE : 1;
+      const lift = boost === 1 ? BOOST_SCALE : 1;
       p.vy = JUMP_VELOCITY * lift;
       if (lift > 1) {
         const brace = world.players[1 - index];

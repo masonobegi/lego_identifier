@@ -9,6 +9,8 @@ import {
   MODE_GAUNTLET,
   MODE_HAUL,
   REACH_BY_RISE,
+  RESET_DELAY,
+  RESTART_HOLD,
   TILE,
   T_GOAL,
   analyseLevel,
@@ -241,6 +243,49 @@ describe('the bot partner', () => {
     }
     expect(restarts).toBe(0);
     expect(malformed).toBe(0);
+  });
+
+  /**
+   * The bot abstaining from the restart vote is the same thing as blocking it,
+   * unless its slot echoes the person holding the key. Without the echo the
+   * HUD asked a solo player to hold a key that could never be enough, and a
+   * wedged crate meant abandoning the run.
+   */
+  it('lets a solo player restart at the checkpoint on their own', () => {
+    const match = new LocalMatch(MODE_HAUL, 7, 10);
+    match.setBot(1, new Bot(match.ctx.level));
+    // Get off the spawn tile first, or arriving back at it proves nothing.
+    for (let t = 0; t < 120; t++) match.update(1000 / 60, [IN_RIGHT, 0]);
+    match.events.length = 0;
+    expect(Math.abs(match.world.players[0].x - match.world.spawnX) / TILE).toBeGreaterThan(1);
+
+    for (let t = 0; t < RESTART_HOLD; t++) match.update(1000 / 60, [IN_RESTART, 0]);
+    expect(match.world.restartTimer).toBeGreaterThan(0);
+
+    for (let t = 0; t < RESET_DELAY + 1; t++) match.update(1000 / 60, [0, 0]);
+    for (const p of match.world.players) {
+      expect(Math.abs(p.x - match.world.spawnX) / TILE).toBeLessThan(2);
+      expect(Math.abs(p.y - match.world.spawnY) / TILE).toBeLessThan(2);
+    }
+  });
+
+  it('never lets one person on the sofa cast the other one’s restart vote', () => {
+    const match = new LocalMatch(MODE_HAUL, 7, 10);
+    for (let t = 0; t < RESTART_HOLD * 2; t++) match.update(1000 / 60, [IN_RESTART, 0]);
+    expect(match.world.restartTimer).toBe(0);
+    expect(match.world.players[1].restartHeld).toBe(0);
+  });
+
+  it('restarts at the checkpoint when the pause menu asks, without a key held', () => {
+    const match = new LocalMatch(MODE_HAUL, 7, 10);
+    match.setBot(1, new Bot(match.ctx.level));
+    for (let t = 0; t < 120; t++) match.update(1000 / 60, [IN_RIGHT, 0]);
+    match.resetToCheckpoint();
+    for (let t = 0; t < RESTART_HOLD + RESET_DELAY + 1; t++) match.update(1000 / 60, [0, 0]);
+    for (const p of match.world.players) {
+      expect(Math.abs(p.x - match.world.spawnX) / TILE).toBeLessThan(2);
+      expect(Math.abs(p.y - match.world.spawnY) / TILE).toBeLessThan(2);
+    }
   });
 
   it('does not throw on a level whose goal cannot be reached', () => {

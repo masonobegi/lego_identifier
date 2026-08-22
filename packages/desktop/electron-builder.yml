@@ -36,7 +36,21 @@ linux:
   artifactName: HAULMATES-linux-x64.${ext}
 mac:
   target:
+    # Universal, because a Steam customer on Apple silicon and one on an Intel
+    # Mac download the same depot and there is nowhere to branch. An x64-only
+    # bundle runs under Rosetta at a cost the physics loop can feel.
     - target: dir
+      arch:
+        - universal
   icon: build/icon.icns
   category: public.app-category.action-games
   artifactName: HAULMATES-mac.${ext}
+  # Notarization refuses a bundle that is not hardened, and a hardened Electron
+  # app needs the entitlements back. scripts/package-desktop.mjs does the
+  # signing and the notarytool round trip.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # The bundle is stapled and assessed after notarization, not before it, when
+  # Gatekeeper has nothing to assess yet.
+  gatekeeperAssess: false
