@@ -77,6 +77,9 @@ REEL_CLIMB = 8
 # it plays rather than for what it survives. Four is a floor. The number that
 # actually matters is MIN_OVERLAP.
 MIN_LAUNCH_COLUMNS = 4
+# How much standing room a moving blade has to leave beside itself. Two haulers,
+# the rope between them, and the crate that swings under whichever moved last.
+MIN_REFUGE_COLUMNS = 6
 
 # Columns of a foothold that must sit directly under the next one up.
 #
@@ -572,7 +575,22 @@ class C:
                 continue
             r, c0, c1 = self.path[at]
             _, b0, b1 = self.path[at - 1]
-            painted = self._shrink_to_fit(c0, c1, set(range(b0, b1 + 1)), side, length)
+            # ...and never under the columns the pair launches the next step
+            # from, which is where the crate hangs longest.
+            #
+            # The teeth belong under the walk, not under the wait. A pair
+            # lining up a jump stands on the launch band for as long as it
+            # takes them to get it right, and the crate swings a rope's length
+            # underneath them the whole time — so an underhang there is not a
+            # hazard the load passes through, it is one it sits in. Measured on
+            # the campaign at rows 597-614, where one sat directly beneath the
+            # launch band of a three-row step: a solo pair took 20 deaths, 25
+            # respawns, 34 crate hits and 5 destroyed crates there, and made no
+            # progress for 107 seconds, in every run.
+            safe = set(range(b0, b1 + 1))
+            if at + 1 < len(self.path):
+                safe |= set(launch_columns(self.path[at], self.path[at + 1]))
+            painted = self._shrink_to_fit(c0, c1, safe, side, length)
             if painted:
                 for c in painted:
                     self.rows[r + 1][c] = ch
@@ -749,7 +767,24 @@ class C:
         # blades existed. Half a ledge is the entire mechanic: the far side is a
         # refuge, the near side is a timing problem, and two people on one rope
         # have to crowd onto the same half and then go together.
+        # ...and the refuge has to hold two people and a crate.
+        #
+        # Half a ledge sounds like enough and on a ten-column foothold it is
+        # four columns, which is not: two haulers stand about a column each,
+        # the rope between them wants a third, and the crate swings under
+        # whichever of them moved last. Measured on the campaign at rows
+        # 337-344, where a blade left exactly that — 73 deaths and 70 respawns
+        # in 522 seconds, a death every seven seconds, and the pair made no
+        # upward progress at all for nearly nine minutes.
+        #
+        # A blade that cannot leave a standable refuge is not placed. A foothold
+        # with no room for one is a foothold whose danger has to be static, and
+        # the caller is told rather than left to find out from a playtest.
         travel = reach if reach is not None else max(3, (span - 2) // 2)
+        travel = min(travel, span - 1 - MIN_REFUGE_COLUMNS)
+        if travel < 3:
+            self.skipped.append(f'sweep path[{index}] row {r}: no room for a refuge')
+            return self
         start = c0 + 1 if side > 0 else c1 - 1 - travel
         self.ents.append(dict(type='saw', x=start, y=r - 1, r=1,
                               ax=travel, ay=0, period=period, phase=phase))

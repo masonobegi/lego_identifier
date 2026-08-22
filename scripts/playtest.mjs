@@ -469,16 +469,32 @@ function runPolicy(mode, seed, towerLength, seconds, make, bot) {
   const w = m.world;
   const y0 = w.players[0].y;
   let best = y0;
+  // The longest the pair ever went without getting a row higher.
+  //
+  // Rows-per-three-minutes is a mean, and a mean hides the thing that actually
+  // ends a session: a wall. A solo pair on the campaign averaged a respectable
+  // 700 rows in twenty minutes while spending 107 unbroken seconds at row 601
+  // taking 20 deaths and losing 5 crates, every single run, and nothing here
+  // reported it. Somebody has to notice a minute and a half of nothing.
+  let stall = 0;
+  let since = 0;
   for (let t = 0; t < seconds * 60; t++) {
     m.update(1000 / 60, policy(w, t));
     m.events.length = 0;
-    best = Math.min(best, w.players[0].y, w.players[1].y);
+    const high = Math.min(w.players[0].y, w.players[1].y);
+    if (high < best - TILE) {
+      if (t - since > stall) stall = t - since;
+      best = high;
+      since = t;
+    }
   }
+  if (seconds * 60 - since > stall) stall = seconds * 60 - since;
   return {
     rows: (y0 - best) / TILE,
     checkpoints: w.checkpoint + 1,
     crates: w.cargoBreaks,
     deaths: w.players[0].deaths + w.players[1].deaths,
+    stall: stall / 60,
   };
 }
 
@@ -498,6 +514,7 @@ export function climbTest(mode, seeds, towerLength, seconds = 180) {
     rows.push({
       policy: name,
       rows: Math.round(mean(runs.map((r) => r.rows))),
+      stall: Math.max(...runs.map((r) => r.stall)),
       checkpoints: mean(runs.map((r) => r.checkpoints)),
       crates: mean(runs.map((r) => r.crates)),
       deaths: mean(runs.map((r) => r.deaths)),
@@ -508,6 +525,7 @@ export function climbTest(mode, seeds, towerLength, seconds = 180) {
   rows.push({
     policy: 'one player + the Autohauler',
     rows: Math.round(mean(solo.map((r) => r.rows))),
+    stall: Math.max(...solo.map((r) => r.stall)),
     checkpoints: mean(solo.map((r) => r.checkpoints)),
     crates: mean(solo.map((r) => r.crates)),
     deaths: mean(solo.map((r) => r.deaths)),
@@ -552,7 +570,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(
       `  ${row.policy.padEnd(36)} ${String(row.rows).padStart(3)} rows (${pct.padStart(4)}%)  ` +
         `checkpoints ${row.checkpoints.toFixed(1)}  crates lost ${row.crates.toFixed(1)}  ` +
-        `deaths ${row.deaths.toFixed(1)}`,
+        `deaths ${row.deaths.toFixed(1)}  worst stall ${row.stall.toFixed(0)}s`,
     );
   }
 }
