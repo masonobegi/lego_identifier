@@ -13,6 +13,7 @@ import {
   CARGO_TETHER,
   CARGO_W,
   DT,
+  BRACED_LOAD_SHARE,
   MAX_FALL_HEAVY,
   ROPE_LOAD,
   ROPE_MAX,
@@ -210,7 +211,8 @@ export function applyRopeLoad(world: World): void {
     const sy = other.y - p.y;
     const span = Math.sqrt(sx * sx + sy * sy);
     const tension = Math.min(1, Math.max(0, (span - ROPE_REST) / (ROPE_MAX - ROPE_REST)));
-    const load = ROPE_LOAD * (0.3 + 0.7 * tension) * (world.cargo.hp > 0 ? 1 : 0.4);
+    const anchored = other.gripping === 1 && !other.dead ? BRACED_LOAD_SHARE : 1;
+    const load = ROPE_LOAD * (0.3 + 0.7 * tension) * (world.cargo.hp > 0 ? 1 : 0.4) * anchored;
     p.vx += (dx / d) * load * DT;
     p.vy += (dy / d) * load * DT;
     // The rope may add to a fall but must not break terminal velocity.

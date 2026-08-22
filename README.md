@@ -40,8 +40,9 @@ together, and the build fails if a pair cannot replay every gate in the real sim
 > how often an *ordinary* attempt succeeds, and nothing here could ask it. Measured, once
 > something could: 23.4% of plausible casual jump attempts landed, and five different
 > two-player policies each climbed between three and nine rows of a 651-row tower in three
-> minutes, reaching none of the twenty checkpoints. It is 70% and roughly 380 rows now, and
-> the thing that changed is a single line in the level generator. See *Level design rules*.
+> minutes, reaching none of the twenty checkpoints. It is 74% and roughly 200 rows of a
+> tower three times longer now, and the thing that started it was a single line in the level
+> generator. See *Level design rules*.
 
 Online play for two people, couch co-op for two on one screen, a bot partner for when
 nobody is around, a hand-authored campaign of thirty-two floors and a kilometre of tower,
@@ -309,13 +310,12 @@ The full checklist is in [docs/STEAM-LAUNCH.md](docs/STEAM-LAUNCH.md). The short
    are generated into `steam/store/achievements/`.
 6. Switch on Steam Cloud with the quota from `steam/launch-options.json`, or every player
    who reinstalls starts again.
-7. Replace the placeholder capsules in `steam/store/` with real art before launch.
 
 ## What is verified, and how
 
 Running `npm run verify` exercises, in order:
 
-- **122 unit and integration tests** — simulation determinism over thousands of ticks,
+- **170 unit and integration tests** — simulation determinism over thousands of ticks,
   rollback convergence, snapshot round-tripping, physics invariants, protocol encoding,
   and full online matches against the real server under 25–130 ms latency, jitter, and a
   simulated connection freeze.

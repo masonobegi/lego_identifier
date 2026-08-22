@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BRACED_LOAD_SHARE,
   Bot,
   EV_GRIP,
   EV_GRIP_FAIL,
@@ -12,8 +13,11 @@ import {
   PLAYER_HALF_W,
   ROPE_MAX,
   ROPE_NODES,
+  ROPE_REST,
   TILE,
+  applyRopeLoad,
   assembleLevel,
+  buildCampaign,
   createWorld,
   ropeContactCount,
   step,
@@ -418,5 +422,46 @@ describe('the hands going', () => {
     expect(grabs, 'they did grab on').toBe(1);
     expect(world.players[0].gripping, 'and did let go').toBe(0);
     expect(failures, 'nobody failed at anything').toBe(0);
+  });
+});
+
+describe('an anchor holds the line', () => {
+  /**
+   * What a brace is for, from the other end of the rope.
+   *
+   * The elastic haul used to be applied at full strength whether the far end
+   * was dug in or being towed along the floor, so asking your partner to hold
+   * on did nothing for the person doing the asking. Sixteen simulated pairs
+   * given three minutes of the campaign each measured the reflex the game
+   * teaches as costing 20 rows and most of a checkpoint against never bracing
+   * at all.
+   */
+  it('pulls a runner back less hard than a partner who is being dragged', () => {
+    const pull = (braced: boolean): number => {
+      const level = buildCampaign();
+      const ctx = { level, seed: 1, mode: MODE_HAUL };
+      const world = createWorld(ctx);
+      const [a, b] = world.players;
+      // Far enough apart that the rope is genuinely loaded, and level, so the
+      // only thing separating the two runs is whether the far end is anchored.
+      a.x = b.x + ROPE_REST * 1.4;
+      a.y = b.y;
+      for (let i = 0; i < ROPE_NODES; i++) {
+        const t = i / (ROPE_NODES - 1);
+        world.ropeX[i] = b.x + (a.x - b.x) * t;
+        world.ropeY[i] = a.y;
+        world.ropePX[i] = world.ropeX[i];
+        world.ropePY[i] = world.ropeY[i];
+      }
+      b.gripping = braced ? 1 : 0;
+      b.grounded = 1;
+      a.vx = 0;
+      applyRopeLoad(world);
+      return -a.vx;
+    };
+    const towed = pull(false);
+    const anchored = pull(true);
+    expect(towed, 'a loaded rope hauls on you').toBeGreaterThan(0);
+    expect(anchored / towed).toBeCloseTo(BRACED_LOAD_SHARE, 5);
   });
 });

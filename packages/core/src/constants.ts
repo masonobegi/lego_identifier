@@ -262,7 +262,7 @@ export const EMOTE_TICKS = 70;
 
 /** Protocol/versioning. Bump when the simulation changes in a way that would
  *  make two different builds disagree — the server refuses mismatched peers. */
-export const SIM_VERSION = 19;
+export const SIM_VERSION = 20;
 
 /** Rope self-gravity — lower than player gravity so the rope drapes lazily. */
 export const ROPE_GRAVITY = 1500;
@@ -280,6 +280,28 @@ export const GROUND_HAUL_RESISTANCE = 0.35;
 
 /** How hard a taut, loaded rope drags on the player it is tied to. */
 export const ROPE_LOAD = 380;
+/**
+ * How much of that haul still reaches you while your partner is braced.
+ *
+ * An anchor holds the line; it does not tow you. The load term exists to stop a
+ * pair drifting apart, and it used to apply at full strength whether the far
+ * end was dug in or being dragged along the floor — so "hold on, I'm going for
+ * it", the one thing the rope teaches you to ask for, bought the person going
+ * for it nothing whatsoever.
+ *
+ * Worse than nothing, measured. Sixteen casual pairs, three minutes of the
+ * campaign each, once bracing every time the rope bit and once never bracing
+ * at all: the reflex the whole design points at cost 20 rows and most of a
+ * checkpoint. At three tenths it is worth three rows, which is a wash — and a
+ * wash is the honest target here. This does not pay you to anchor; it stops
+ * the game charging you for it, and leaves the paying to the gates, where
+ * standing on somebody is the only way up.
+ *
+ * The hard limit is untouched — the rope still refuses to exceed its own
+ * length — so a brace buys reach, not freedom. You can walk to the end of it
+ * without being hauled off your feet, and no further.
+ */
+export const BRACED_LOAD_SHARE = 0.3;
 /** Ticks after a checkpoint reset before control returns. */
 export const RESET_DELAY = 42;
 /** Both players must hold RESTART this long to force a checkpoint reset. */
