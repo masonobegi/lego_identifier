@@ -47,6 +47,51 @@ partner really is a ladder and climbing one is a resource decision.
 **Emote** exists because "sorry" and "that was your fault" need to be sayable without a
 microphone.
 
+## The two moves that need two people
+
+Everything above can be done alone with a passenger. These cannot, and the game is
+named after them.
+
+**The leg up.** A hauler braced on solid ground is a platform. Jumping off one multiplies
+your jump by 1.5 — 4.5 tiles becomes about 7.7 — and costs the brace a fifth of their grip
+bar, so it is a resource rather than a free verb. It is the only move in the game that
+gains height nobody could gain alone, and the levels are cut against it: a gate is the
+middle foothold of three simply removed, leaving six clear rows, which is one row past the
+highest shelf any single player can reach.
+
+**The hold.** A floor plate holds a shutter open only while something is standing on it.
+A shutter always has a plate on each side, because with one the holder can never get
+through themselves and the room is a wall with extra steps. With two, the pair leapfrog:
+you hold, they cross, they hold, you cross.
+
+What makes the hold a two-person problem rather than an errand is the rope. It is a fixed
+232 pixels, a shade under ten tiles, so a plate further than that from the far side of its
+shutter is somewhere one player cannot be while also being through the door. Below that
+threshold one hauler walks to the plate, walks back through the door, and the room is
+decoration; above it, somebody has to choose to stay. The test sweeps both sides of the
+threshold rather than asserting it.
+
+Two things fell out of building it that the design had assumed the other way round. The
+crate hangs off the middle of the rope and therefore always follows the pair — it cannot be
+parked on a plate and left, which killed the idea of crate-on-plate as the escape hatch for
+a fumbled room. And a shutter must never close on somebody standing inside it, so anyone
+inside holds it open regardless of the plate; a door that shuts on the person walking
+through it is not a puzzle, it is a player embedded in a wall.
+
+Neither of these is remembered between ticks. Which shutters stand open is recomputed at
+the top of every tick from where everybody is, before anything moves, which keeps it out of
+the rollback snapshot entirely: replaying a tick recomputes it, and both peers read the same
+doors for the whole tick.
+
+**Why a second one was needed at all.** With only the leg up, the co-operation in a
+forty-five minute campaign was seven moments — about two per cent of the climb. Every other
+weakness traced back to that one number: fifty-two authored rooms only yielded four to six
+hours because there was one verb to build them out of, the difficulty walls were ordinary
+platforming rather than problems two people solve, and there was no reason to open the game
+on a fourth evening. The hold also brings a shape the tower had none of: every room in the
+game was a vertical serpentine, and a door partway along a long run is horizontal and about
+timing.
+
 ## The rope as a mechanism
 
 The original design was a leash: the rope drew as a draping chain but its length limit was
